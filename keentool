@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.3.7 (ALPHA)
+# KEENTOOL MANAGER v0.4.1 (ALPHA)
 # Author: MatthewEli
-# Description: Package Manager with Per-Tool Dependency Resolution
+# Description: Package Manager with Consistent Self-Update Logic
 # Features:
-#   - REPO UPDATE: Traffic Manager now points to 'Traffic_manager' repo
-#   - CORE: Auto-Configures Lighttpd & Dependencies
-#   - CHECK: Global Update Check ('u')
+#   - FIX: Self-Update ('s') now checks version BEFORE asking to overwrite.
+#   - CORE: Auto-Configures Lighttpd & Dependencies.
+#   - REPO: Supports Traffic_manager, SMB_Backup_tool, etc.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -24,22 +24,21 @@ INIT_DIR="/opt/etc/init.d"
 WEB_ROOT="/opt/var/www"
 
 # --- DEPENDENCY LISTS ---
-DEPS_COMMON="lighttpd bash"
-DEPS_VNSTAT="$DEPS_COMMON vnstat2 grep awk"
-DEPS_PING="$DEPS_COMMON sqlite3-cli iputils-ping mtr grep awk"
-DEPS_FW="$DEPS_COMMON ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed"
+DEPS_CORE="lighttpd bash curl wget-ssl cron"
+DEPS_VNSTAT="vnstat2 grep awk"
+DEPS_PING="sqlite3-cli iputils-ping mtr grep awk"
+DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed"
 DEPS_SMB="bash tar samba4-client coreutils-date"
 
 # --- TOOL DEFINITIONS ---
 # Format: FriendlyName | LocalPath | RepoName | RemoteFile
 
-# UPDATED REPO: Traffic_manager
-T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|traffic_manager.sh"
+# SELF DEFINITION
+T_SELF="Keentool Manager|$BIN_DIR/keentool|keentool|keentool"
 
+T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|traffic_manager.sh"
 T_PING="Ping Monitor|$PING_DIR/pingtool_keenetic.sh|keenetic-pingtool|pingtool_keenetic.sh"
 T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|smb_backup_tool.sh"
-
-# Firewall is special, defined by core file
 FW_CORE="$BIN_DIR/update_blocklist.sh"
 
 # --- CRON STRINGS ---
@@ -58,7 +57,6 @@ BOLD="${ESC}[1m"
 RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CYAN="${ESC}[36m"; MAGENTA="${ESC}[35m"
 
 # GLOBAL STATE FOR UPDATE CHECK
-CHECK_PERFORMED=0
 UPD_VNSTAT=""
 UPD_PING=""
 UPD_FW=""
@@ -69,7 +67,7 @@ UPD_SMB=""
 header() {
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.3.7 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.1 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo ""
 }
@@ -84,7 +82,6 @@ get_version() {
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
 
 ver_compare() {
-    # Returns: 0 (Equal), 1 (Remote Newer), 2 (Local Newer)
     if [ "$1" = "$2" ]; then return 0; fi
     awk -v v1="$1" -v v2="$2" 'BEGIN {
         split(v1,a,"."); split(v2,b,".");
@@ -97,37 +94,127 @@ ver_compare() {
     return $?
 }
 
-# --- GLOBAL UPDATE CHECK LOGIC ---
+# --- SELF UPDATE LOGIC (Fixed) ---
+
+action_self_update() {
+    header
+    echo -e "${BOLD}Checking Keentool status...${RESET}"
+    
+    # Parse Self Definition
+    IFS='|' read -r N P R F <<EOF
+$T_SELF
+EOF
+    
+    TMP_FILE="/tmp/$F.tmp"
+    
+    # Download check
+    echo -n " -> Contacting GitHub ($R)... "
+    curl -s -L "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
+    
+    if [ ! -s "$TMP_FILE" ]; then
+        echo -e "${RED}Failed.${RESET}"
+        rm -f "$TMP_FILE"
+        pause
+        return
+    fi
+    
+    L_VER=$(get_version "$P")
+    R_VER=$(get_version "$TMP_FILE")
+    
+    ver_compare "$R_VER" "$L_VER"
+    RES=$?
+    
+    echo -e " ${GREEN}OK${RESET}"
+    echo ""
+    
+    # Logic similar to smart_process but with exit/exec handling
+    if [ $RES -eq 1 ]; then
+        echo -e "${MAGENTA}Update Available: v$L_VER -> v$R_VER${RESET}"
+        echo -n " -> Apply Update & Restart? (y/n): "
+        read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+            mv "$TMP_FILE" "$P"
+            chmod +x "$P"
+            echo -e "${GREEN}Updated successfully.${RESET}"
+            echo "Restarting Keentool..."
+            sleep 1
+            exec "$P" # Restart self
+        else
+            echo "Cancelled."
+            rm -f "$TMP_FILE"
+            pause
+        fi
+    elif [ $RES -eq 2 ]; then
+        echo -e "${YELLOW}Local is Newer (Dev Mode). v$L_VER > v$R_VER${RESET}"
+        echo "Skipping update."
+        rm -f "$TMP_FILE"
+        pause
+    else
+        # Equal versions
+        if [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; then
+            echo -e "${CYAN}Version match (v$L_VER) but MD5 differs.${RESET}"
+            echo -n " -> Force Reinstall? (y/n): "
+            read -r ans
+            if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                mv "$TMP_FILE" "$P"
+                chmod +x "$P"
+                echo "Reinstalled. Restarting..."
+                sleep 1
+                exec "$P"
+            else
+                rm -f "$TMP_FILE"
+                pause
+            fi
+        else
+            echo -e "${GREEN}Keentool is up to date (v$L_VER).${RESET}"
+            rm -f "$TMP_FILE"
+            pause
+        fi
+    fi
+}
+
+# --- SYSTEM SETUP LOGIC ---
+
+setup_system() {
+    header
+    echo -e "${BOLD}System Pre-Flight Check${RESET}"
+    echo "---------------------------------------"
+    echo -e "Checking Core Packages: ${DIM}$DEPS_CORE${RESET}"
+    check_and_install_deps "$DEPS_CORE"
+    echo -e "Checking Web Server Config..."
+    check_webserver_config
+    echo -n "Checking Cron Service... "
+    if pidof cron >/dev/null; then
+        echo -e "${GREEN}Running${RESET}"
+    else
+        echo -e "${RED}Stopped${RESET}"
+        echo -n " -> Start Cron? (y/n): "
+        read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+            /opt/etc/init.d/S10cron start
+            echo -e "    ${GREEN}Started.${RESET}"
+        fi
+    fi
+    echo ""
+    echo -e "${BOLD}System Ready.${RESET}"
+    pause
+}
+
+# --- GLOBAL SCAN LOGIC ---
 
 perform_global_scan() {
     echo -e "${BOLD}Checking for updates...${RESET}"
-    
-    # Helper to check one tool
-    # $1=VarNamePrefix, $2=LocalPath, $3=Repo, $4=File
     check_tool_status() {
-        local VNAME=$1
-        local LPATH=$2
-        local REPO=$3
-        local RFILE=$4
-        
+        local VNAME=$1; local LPATH=$2; local REPO=$3; local RFILE=$4
         echo -n "."
-        
         if [ -f "$LPATH" ]; then
             local L_VER=$(get_version "$LPATH")
             local TMP="/tmp/check_${RFILE}.tmp"
-            
-            # Fetch remote
             curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP"
-            
             if [ -s "$TMP" ]; then
                 local R_VER=$(get_version "$TMP")
                 ver_compare "$R_VER" "$L_VER"
-                if [ $? -eq 1 ]; then
-                    # Remote is newer
-                    eval "${VNAME}=' -> ${MAGENTA}v${R_VER}${RESET}'"
-                else
-                    eval "${VNAME}=''"
-                fi
+                [ $? -eq 1 ] && eval "${VNAME}=' -> ${MAGENTA}v${R_VER}${RESET}'" || eval "${VNAME}=''"
                 rm -f "$TMP"
             else
                 eval "${VNAME}=''"
@@ -136,39 +223,28 @@ perform_global_scan() {
             eval "${VNAME}=''"
         fi
     }
-
-    # 1. VNSTAT
     IFS='|' read -r N P R F <<EOF
 $T_VNSTAT
 EOF
     check_tool_status "UPD_VNSTAT" "$P" "$R" "$F"
-
-    # 2. PING
     IFS='|' read -r N P R F <<EOF
 $T_PING
 EOF
     check_tool_status "UPD_PING" "$P" "$R" "$F"
-
-    # 3. FIREWALL (Check Core)
     check_tool_status "UPD_FW" "$FW_CORE" "keenetic-firewall" "update_blocklist.sh"
-
-    # 4. SMB
     IFS='|' read -r N P R F <<EOF
 $T_SMB
 EOF
     check_tool_status "UPD_SMB" "$P" "$R" "$F"
-
-    CHECK_PERFORMED=1
     echo " Done."
     sleep 0.5
 }
 
-# --- DEPENDENCY & INSTALL LOGIC ---
+# --- DEPENDENCY & INSTALL ---
 
 check_and_install_deps() {
     PKG_LIST="$1"
     MISSING=""
-    echo -e "${BOLD}Checking Dependencies...${RESET}"
     for PKG in $PKG_LIST; do
         if ! opkg list-installed | grep -q "^$PKG"; then MISSING="$MISSING $PKG"; fi
     done
@@ -188,7 +264,6 @@ check_and_install_deps() {
         echo -e " -> ${GREEN}OK${RESET}"
     fi
     if echo "$PKG_LIST" | grep -q "lighttpd"; then check_webserver_config; fi
-    echo ""
     return 0
 }
 
@@ -197,7 +272,29 @@ check_webserver_config() {
     if [ -f "$CONF" ]; then
         if grep -q "server.port.*=.*81" "$CONF" && grep -q "$WEB_ROOT" "$CONF"; then return 0; fi
     fi
-    # Silent check
+    echo -n " -> ${YELLOW}Configure Lighttpd (Port 81)? (y/n): ${RESET}"
+    read -r ans
+    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+        mkdir -p "$WEB_ROOT"
+        mkdir -p /opt/etc/lighttpd
+        cat > "$CONF" <<EOF
+server.modules = ( )
+server.document-root = "$WEB_ROOT"
+server.upload-dirs = ( "/opt/tmp" )
+server.errorlog = "/opt/var/log/lighttpd.error.log"
+server.pid-file = "/opt/var/run/lighttpd.pid"
+server.username = "http"
+server.groupname = "www-data"
+server.port = 81
+index-file.names = ( "index.html" )
+mimetype.assign = (
+  ".png"  => "image/png", ".jpg"  => "image/jpeg", ".jpeg" => "image/jpeg",
+  ".html" => "text/html", ".txt"  => "text/plain", ".css"  => "text/css", ".js"   => "text/javascript"
+)
+EOF
+        [ ! -f "$WEB_ROOT/index.html" ] && echo "<h1>Keenetic Dashboard</h1><p>Apps installed via Keentool.</p>" > "$WEB_ROOT/index.html"
+        [ -x /opt/etc/init.d/S80lighttpd ] && { /opt/etc/init.d/S80lighttpd restart >/dev/null 2>&1; echo -e "    ${GREEN}Lighttpd Configured.${RESET}"; }
+    fi
 }
 
 install_file() {
@@ -210,7 +307,6 @@ install_file() {
 
 smart_process() {
     NAME=$1; LPATH=$2; REPO=$3; RFILE=$4
-    
     if [ ! -f "$LPATH" ]; then
         echo -e "${BOLD}Installing: $NAME${RESET}"
         echo -n " -> Confirm? (y/n): "
@@ -218,17 +314,13 @@ smart_process() {
         [ "$ans" = "y" ] || [ "$ans" = "Y" ] && install_file "$REPO" "$RFILE" "$LPATH"
         return
     fi
-
     echo -n "Checking $NAME... "
     TMP_FILE="/tmp/$RFILE.tmp"
     curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP_FILE"
-    
     if [ ! -s "$TMP_FILE" ]; then echo -e "${RED}Net Error${RESET}"; rm -f "$TMP_FILE"; return; fi
-
     L_VER=$(get_version "$LPATH"); R_VER=$(get_version "$TMP_FILE")
     ver_compare "$R_VER" "$L_VER"
     RES=$?
-
     if [ $RES -eq 1 ]; then
         echo -e "${MAGENTA}Update Available (v$L_VER -> v$R_VER)${RESET}"
         echo -n "    Apply? (y/n): "; read -r ans
@@ -246,11 +338,10 @@ smart_process() {
     fi
 }
 
-# --- CRON ---
+# --- CRON UTILS ---
 cron_exists() { grep -Fq "$1" "$CRON_FILE"; }
 add_cron() { if ! cron_exists "$1"; then echo "$1" >> "$CRON_FILE"; echo -e "    ${GREEN}Added.${RESET}"; else echo -e "    ${YELLOW}Exists.${RESET}"; fi; }
 remove_cron() { if cron_exists "$1"; then grep -Fv "$1" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; echo -e "    ${RED}Removed.${RESET}"; fi; }
-
 manage_cron_menu() {
     echo -e "${BOLD}Cron Jobs:${RESET}"
     MISSING=0
@@ -268,7 +359,6 @@ manage_cron_menu() {
 }
 
 # --- ACTIONS ---
-
 action_generic() {
     header; IFS='|' read -r N P R F <<EOF
 $1
@@ -304,28 +394,25 @@ action_firewall() {
 
 # --- MAIN MENU LOOP ---
 while true; do
-    # 1. VNSTAT
+    # Versions
     IFS='|' read -r N P R F <<EOF
 $T_VNSTAT
 EOF
     if [ -f "$P" ]; then V=$(get_version "$P"); L1="${GREEN}v$V${RESET}"; else L1="${DIM}Missing${RESET}"; fi
-    
-    # 2. PING
     IFS='|' read -r N P R F <<EOF
 $T_PING
 EOF
     if [ -f "$P" ]; then V=$(get_version "$P"); L2="${GREEN}v$V${RESET}"; else L2="${DIM}Missing${RESET}"; fi
-    
-    # 3. FW
     if [ -f "$FW_CORE" ]; then V=$(get_version "$FW_CORE"); L3="${GREEN}v$V${RESET}"; else L3="${DIM}Missing${RESET}"; fi
-
-    # 4. SMB
     IFS='|' read -r N P R F <<EOF
 $T_SMB
 EOF
     if [ -f "$P" ]; then V=$(get_version "$P"); [ "$V" = "0.0.0" ] && L4="${GREEN}Installed${RESET}" || L4="${GREEN}v$V${RESET}"; else L4="${DIM}Missing${RESET}"; fi
 
     header
+    echo -e " ${BOLD}System:${RESET}"
+    echo -e " 0. ${CYAN}System Setup${RESET} (Deps & WebServer)"
+    echo ""
     echo -e " ${BOLD}Tools:${RESET}"
     echo -e " 1. Traffic Manager      [$L1]$UPD_VNSTAT"
     echo -e " 2. Ping Monitor         [$L2]$UPD_PING"
@@ -333,17 +420,20 @@ EOF
     echo -e " 4. SMB Backup Tool      [$L4]$UPD_SMB"
     echo ""
     echo -e " ${BOLD}Global:${RESET}"
-    echo -e " u. Check for Updates"
+    echo -e " u. Check for Updates (Tools)"
+    echo -e " s. ${MAGENTA}Update Keentool (Self)${RESET}"
     echo -e " c. View Crontab"
     echo -e " q. Quit"
     echo ""
     echo -n "Select: "; read choice
     case $choice in
+        0) setup_system ;;
         1) action_generic "$T_VNSTAT" "$C_VNSTAT" "$C_VNSTAT_GEN" ;;
         2) action_generic "$T_PING" "$C_PING" ;;
         3) action_firewall ;;
         4) action_generic "$T_SMB" "$C_SMB" ;;
         u) perform_global_scan ;;
+        s) action_self_update ;;
         c) header; cat $CRON_FILE; pause ;;
         q) exit 0 ;;
     esac
