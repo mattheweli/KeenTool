@@ -30,7 +30,7 @@ You can install Keentool with a single command.
 2.  Copy and paste the following line:
 
 ```bash
-opkg update && opkg install curl && curl -L [https://raw.githubusercontent.com/mattheweli/keentool/main/keentool](https://raw.githubusercontent.com/mattheweli/keentool/main/keentool) -o /opt/bin/keentool && chmod +x /opt/bin/keentool
+opkg update && opkg install curl && curl -L https://raw.githubusercontent.com/mattheweli/keentool/main/keentool -o /opt/bin/keentool && chmod +x /opt/bin/keentool
 ```
 
 (This command installs curl if missing, downloads the script to /opt/bin, and makes it executable).
