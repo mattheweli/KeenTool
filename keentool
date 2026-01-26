@@ -1,0 +1,350 @@
+#!/bin/sh
+
+# ==============================================================================
+# KEENTOOL MANAGER v0.3.7 (ALPHA)
+# Author: MatthewEli
+# Description: Package Manager with Per-Tool Dependency Resolution
+# Features:
+#   - REPO UPDATE: Traffic Manager now points to 'Traffic_manager' repo
+#   - CORE: Auto-Configures Lighttpd & Dependencies
+#   - CHECK: Global Update Check ('u')
+# ==============================================================================
+
+export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+
+# --- CONFIGURATION ---
+REPO_USER="mattheweli"
+BASE_URL="https://raw.githubusercontent.com/$REPO_USER"
+
+# DIRECTORIES
+BIN_DIR="/opt/bin"
+PING_DIR="/opt/etc/pingtool"
+NDM_DIR="/opt/etc/ndm/netfilter.d"
+INIT_DIR="/opt/etc/init.d"
+WEB_ROOT="/opt/var/www"
+
+# --- DEPENDENCY LISTS ---
+DEPS_COMMON="lighttpd bash"
+DEPS_VNSTAT="$DEPS_COMMON vnstat2 grep awk"
+DEPS_PING="$DEPS_COMMON sqlite3-cli iputils-ping mtr grep awk"
+DEPS_FW="$DEPS_COMMON ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed"
+DEPS_SMB="bash tar samba4-client coreutils-date"
+
+# --- TOOL DEFINITIONS ---
+# Format: FriendlyName | LocalPath | RepoName | RemoteFile
+
+# UPDATED REPO: Traffic_manager
+T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|traffic_manager.sh"
+
+T_PING="Ping Monitor|$PING_DIR/pingtool_keenetic.sh|keenetic-pingtool|pingtool_keenetic.sh"
+T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|smb_backup_tool.sh"
+
+# Firewall is special, defined by core file
+FW_CORE="$BIN_DIR/update_blocklist.sh"
+
+# --- CRON STRINGS ---
+CRON_FILE="/opt/etc/crontab"
+C_VNSTAT="*/10 * * * * root /opt/bin/traffic_manager.sh ppp0 >/opt/var/log/t_manager.log 2>&1"
+C_PING="12,42 * * * * root /opt/etc/pingtool/pingtool_keenetic.sh >> /opt/var/log/connmon.log 2>&1"
+C_FW_STAT="59 * * * * root /opt/bin/firewall_stats.sh > /dev/null 2>&1"
+C_FW_UPD="0 4 * * * root /opt/bin/update_blocklist.sh > /dev/null 2>&1"
+C_FW_VPN="12 */3 * * * root /opt/bin/vpn_scan.sh > /dev/null 2>&1"
+C_SMB="00 03 */15 * * /opt/bin/smb_backup_tool.sh -run"
+
+# COLORS
+ESC=$(printf '\033')
+RESET="${ESC}[0m"
+BOLD="${ESC}[1m"
+RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CYAN="${ESC}[36m"; MAGENTA="${ESC}[35m"
+
+# GLOBAL STATE FOR UPDATE CHECK
+CHECK_PERFORMED=0
+UPD_VNSTAT=""
+UPD_PING=""
+UPD_FW=""
+UPD_SMB=""
+
+# --- CORE UTILS ---
+
+header() {
+    clear
+    echo -e "${BOLD}${BLUE}======================================================${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.3.7 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================${RESET}"
+    echo ""
+}
+
+pause() { echo ""; read -p "Press [Enter] to return..." fack; }
+
+get_version() {
+    [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1)
+    [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"
+}
+
+get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
+
+ver_compare() {
+    # Returns: 0 (Equal), 1 (Remote Newer), 2 (Local Newer)
+    if [ "$1" = "$2" ]; then return 0; fi
+    awk -v v1="$1" -v v2="$2" 'BEGIN {
+        split(v1,a,"."); split(v2,b,".");
+        for(i=1;i<=3;i++) {
+            if(a[i]+0 > b[i]+0) exit 1;
+            if(a[i]+0 < b[i]+0) exit 2;
+        }
+        exit 0;
+    }'
+    return $?
+}
+
+# --- GLOBAL UPDATE CHECK LOGIC ---
+
+perform_global_scan() {
+    echo -e "${BOLD}Checking for updates...${RESET}"
+    
+    # Helper to check one tool
+    # $1=VarNamePrefix, $2=LocalPath, $3=Repo, $4=File
+    check_tool_status() {
+        local VNAME=$1
+        local LPATH=$2
+        local REPO=$3
+        local RFILE=$4
+        
+        echo -n "."
+        
+        if [ -f "$LPATH" ]; then
+            local L_VER=$(get_version "$LPATH")
+            local TMP="/tmp/check_${RFILE}.tmp"
+            
+            # Fetch remote
+            curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP"
+            
+            if [ -s "$TMP" ]; then
+                local R_VER=$(get_version "$TMP")
+                ver_compare "$R_VER" "$L_VER"
+                if [ $? -eq 1 ]; then
+                    # Remote is newer
+                    eval "${VNAME}=' -> ${MAGENTA}v${R_VER}${RESET}'"
+                else
+                    eval "${VNAME}=''"
+                fi
+                rm -f "$TMP"
+            else
+                eval "${VNAME}=''"
+            fi
+        else
+            eval "${VNAME}=''"
+        fi
+    }
+
+    # 1. VNSTAT
+    IFS='|' read -r N P R F <<EOF
+$T_VNSTAT
+EOF
+    check_tool_status "UPD_VNSTAT" "$P" "$R" "$F"
+
+    # 2. PING
+    IFS='|' read -r N P R F <<EOF
+$T_PING
+EOF
+    check_tool_status "UPD_PING" "$P" "$R" "$F"
+
+    # 3. FIREWALL (Check Core)
+    check_tool_status "UPD_FW" "$FW_CORE" "keenetic-firewall" "update_blocklist.sh"
+
+    # 4. SMB
+    IFS='|' read -r N P R F <<EOF
+$T_SMB
+EOF
+    check_tool_status "UPD_SMB" "$P" "$R" "$F"
+
+    CHECK_PERFORMED=1
+    echo " Done."
+    sleep 0.5
+}
+
+# --- DEPENDENCY & INSTALL LOGIC ---
+
+check_and_install_deps() {
+    PKG_LIST="$1"
+    MISSING=""
+    echo -e "${BOLD}Checking Dependencies...${RESET}"
+    for PKG in $PKG_LIST; do
+        if ! opkg list-installed | grep -q "^$PKG"; then MISSING="$MISSING $PKG"; fi
+    done
+    if [ -n "$MISSING" ]; then
+        echo -e " -> ${YELLOW}Missing:${RESET} $MISSING"
+        echo -n " -> Install? (y/n): "
+        read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+            echo "    Installing..."
+            opkg update >/dev/null 2>&1
+            opkg install $MISSING
+            if echo "$PKG_LIST" | grep -q "lighttpd"; then check_webserver_config; fi
+        else
+            return 1
+        fi
+    else
+        echo -e " -> ${GREEN}OK${RESET}"
+    fi
+    if echo "$PKG_LIST" | grep -q "lighttpd"; then check_webserver_config; fi
+    echo ""
+    return 0
+}
+
+check_webserver_config() {
+    CONF="/opt/etc/lighttpd/lighttpd.conf"
+    if [ -f "$CONF" ]; then
+        if grep -q "server.port.*=.*81" "$CONF" && grep -q "$WEB_ROOT" "$CONF"; then return 0; fi
+    fi
+    # Silent check
+}
+
+install_file() {
+    REPO=$1; RFILE=$2; LPATH=$3
+    DIR=$(dirname "$LPATH"); mkdir -p "$DIR"
+    echo -n " -> Downloading ${CYAN}$RFILE${RESET}... "
+    curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$LPATH"
+    if [ -s "$LPATH" ]; then chmod +x "$LPATH"; echo -e "${GREEN}OK${RESET}"; return 0; else echo -e "${RED}Failed${RESET}"; rm -f "$LPATH"; return 1; fi
+}
+
+smart_process() {
+    NAME=$1; LPATH=$2; REPO=$3; RFILE=$4
+    
+    if [ ! -f "$LPATH" ]; then
+        echo -e "${BOLD}Installing: $NAME${RESET}"
+        echo -n " -> Confirm? (y/n): "
+        read -r ans
+        [ "$ans" = "y" ] || [ "$ans" = "Y" ] && install_file "$REPO" "$RFILE" "$LPATH"
+        return
+    fi
+
+    echo -n "Checking $NAME... "
+    TMP_FILE="/tmp/$RFILE.tmp"
+    curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP_FILE"
+    
+    if [ ! -s "$TMP_FILE" ]; then echo -e "${RED}Net Error${RESET}"; rm -f "$TMP_FILE"; return; fi
+
+    L_VER=$(get_version "$LPATH"); R_VER=$(get_version "$TMP_FILE")
+    ver_compare "$R_VER" "$L_VER"
+    RES=$?
+
+    if [ $RES -eq 1 ]; then
+        echo -e "${MAGENTA}Update Available (v$L_VER -> v$R_VER)${RESET}"
+        echo -n "    Apply? (y/n): "; read -r ans
+        [ "$ans" = "y" ] && { mv "$TMP_FILE" "$LPATH"; chmod +x "$LPATH"; echo -e "    ${GREEN}Updated.${RESET}"; } || rm -f "$TMP_FILE"
+    elif [ $RES -eq 2 ]; then
+        echo -e "${YELLOW}Local Newer (v$L_VER). Skipped.${RESET}"; rm -f "$TMP_FILE"
+    else
+        if [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then
+            echo -e "${CYAN}MD5 differs.${RESET}"
+            echo -n "    Overwrite local? (y/n): "; read -r ans
+            [ "$ans" = "y" ] && { mv "$TMP_FILE" "$LPATH"; chmod +x "$LPATH"; echo -e "    ${GREEN}Replaced.${RESET}"; } || rm -f "$TMP_FILE"
+        else
+            echo -e "${GREEN}Up to date.${RESET}"; rm -f "$TMP_FILE"
+        fi
+    fi
+}
+
+# --- CRON ---
+cron_exists() { grep -Fq "$1" "$CRON_FILE"; }
+add_cron() { if ! cron_exists "$1"; then echo "$1" >> "$CRON_FILE"; echo -e "    ${GREEN}Added.${RESET}"; else echo -e "    ${YELLOW}Exists.${RESET}"; fi; }
+remove_cron() { if cron_exists "$1"; then grep -Fv "$1" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; echo -e "    ${RED}Removed.${RESET}"; fi; }
+
+manage_cron_menu() {
+    echo -e "${BOLD}Cron Jobs:${RESET}"
+    MISSING=0
+    for L in "$@"; do
+        if cron_exists "$L"; then echo -e "  [${GREEN}ON${RESET}] ${DIM}${L:0:50}...${RESET}"; else echo -e "  [${RED}OFF${RESET}] ${DIM}${L:0:50}...${RESET}"; MISSING=1; fi
+    done
+    echo ""
+    if [ $MISSING -eq 1 ]; then
+        echo -n " -> Enable missing? (y/n): "; read -r ans
+        [ "$ans" = "y" ] && for L in "$@"; do add_cron "$L"; done
+    else
+        echo -n " -> Disable jobs? (y/n): "; read -r ans
+        [ "$ans" = "y" ] && for L in "$@"; do remove_cron "$L"; done
+    fi
+}
+
+# --- ACTIONS ---
+
+action_generic() {
+    header; IFS='|' read -r N P R F <<EOF
+$1
+EOF
+    [ "$N" = "SMB Backup" ] && check_and_install_deps "$DEPS_SMB" 
+    [ "$N" = "Traffic Manager" ] && check_and_install_deps "$DEPS_VNSTAT"
+    [ "$N" = "Ping Monitor" ] && check_and_install_deps "$DEPS_PING"
+    smart_process "$N" "$P" "$R" "$F"; shift; [ -n "$1" ] && manage_cron_menu "$@"; pause;
+}
+
+action_firewall() {
+    while true; do
+        header; if [ -f "$FW_CORE" ]; then V_CORE=$(get_version "$FW_CORE"); S_MAIN="${GREEN}Installed (v$V_CORE)${RESET}"; else S_MAIN="${DIM}Missing${RESET}"; fi
+        echo -e "Firewall Suite Status: $S_MAIN"
+        echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Run Manager"; echo " 4. Run Monitor"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
+        case $op in
+            1) header; check_and_install_deps "$DEPS_FW" || { pause; break; }; REPO="keenetic-firewall"
+               smart_process "Manager" "$BIN_DIR/firewall_manager.sh" $REPO "firewall_manager.sh"
+               smart_process "Monitor" "$BIN_DIR/firewall_monitor" $REPO "firewall_monitor"
+               smart_process "Stats" "$BIN_DIR/firewall_stats.sh" $REPO "firewall_stats.sh"
+               smart_process "Updater" "$BIN_DIR/update_blocklist.sh" $REPO "update_blocklist.sh"
+               smart_process "VPN Scan" "$BIN_DIR/vpn_scan.sh" $REPO "vpn_scan.sh"
+               smart_process "Netfilter" "$NDM_DIR/100-firewall.sh" $REPO "100-firewall.sh"
+               smart_process "Init" "$INIT_DIR/S00ipset-load" $REPO "S00ipset-load"
+               pause ;;
+            2) header; manage_cron_menu "$C_FW_STAT" "$C_FW_UPD" "$C_FW_VPN"; pause ;;
+            3) [ -f "$BIN_DIR/firewall_manager.sh" ] && $BIN_DIR/firewall_manager.sh || { echo "Missing"; sleep 1; };;
+            4) [ -f "$BIN_DIR/firewall_monitor" ] && $BIN_DIR/firewall_monitor || { echo "Missing"; sleep 1; };;
+            0) return ;;
+        esac
+    done
+}
+
+# --- MAIN MENU LOOP ---
+while true; do
+    # 1. VNSTAT
+    IFS='|' read -r N P R F <<EOF
+$T_VNSTAT
+EOF
+    if [ -f "$P" ]; then V=$(get_version "$P"); L1="${GREEN}v$V${RESET}"; else L1="${DIM}Missing${RESET}"; fi
+    
+    # 2. PING
+    IFS='|' read -r N P R F <<EOF
+$T_PING
+EOF
+    if [ -f "$P" ]; then V=$(get_version "$P"); L2="${GREEN}v$V${RESET}"; else L2="${DIM}Missing${RESET}"; fi
+    
+    # 3. FW
+    if [ -f "$FW_CORE" ]; then V=$(get_version "$FW_CORE"); L3="${GREEN}v$V${RESET}"; else L3="${DIM}Missing${RESET}"; fi
+
+    # 4. SMB
+    IFS='|' read -r N P R F <<EOF
+$T_SMB
+EOF
+    if [ -f "$P" ]; then V=$(get_version "$P"); [ "$V" = "0.0.0" ] && L4="${GREEN}Installed${RESET}" || L4="${GREEN}v$V${RESET}"; else L4="${DIM}Missing${RESET}"; fi
+
+    header
+    echo -e " ${BOLD}Tools:${RESET}"
+    echo -e " 1. Traffic Manager      [$L1]$UPD_VNSTAT"
+    echo -e " 2. Ping Monitor         [$L2]$UPD_PING"
+    echo -e " 3. Firewall Suite       [$L3]$UPD_FW"
+    echo -e " 4. SMB Backup Tool      [$L4]$UPD_SMB"
+    echo ""
+    echo -e " ${BOLD}Global:${RESET}"
+    echo -e " u. Check for Updates"
+    echo -e " c. View Crontab"
+    echo -e " q. Quit"
+    echo ""
+    echo -n "Select: "; read choice
+    case $choice in
+        1) action_generic "$T_VNSTAT" "$C_VNSTAT" "$C_VNSTAT_GEN" ;;
+        2) action_generic "$T_PING" "$C_PING" ;;
+        3) action_firewall ;;
+        4) action_generic "$T_SMB" "$C_SMB" ;;
+        u) perform_global_scan ;;
+        c) header; cat $CRON_FILE; pause ;;
+        q) exit 0 ;;
+    esac
+done
