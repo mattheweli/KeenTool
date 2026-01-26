@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keenetic Home Monitor</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏠</text></svg>">
+    <style>
+        :root { 
+            --bg: #f4f7f6; --card: #ffffff; --text: #333; --muted: #6c757d; 
+            --border: #e9ecef; 
+            --blue: #0d6efd; --green: #198754; --red: #dc3545; --orange: #fd7e14; --purple: #6f42c1;
+            --shadow: rgba(0,0,0,0.05); --hover: #f8f9fa;
+        }
+        @media (prefers-color-scheme: dark) { 
+            :root { --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --muted: #a0a0a0; --border: #2c2c2c; --shadow: rgba(0,0,0,0.5); --hover: #2a2a2a; } 
+        }
+
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 20px; max-width: 1200px; margin: 0 auto; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding: 0 10px; }
+        .header h1 { font-size: 1.8rem; margin: 0; font-weight: 800; letter-spacing: -0.5px; }
+        .header span { font-size: 0.9rem; color: var(--muted); background: var(--card); padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border); }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 25px; }
+
+        .card { 
+            background: var(--card); border-radius: 16px; padding: 25px; 
+            box-shadow: 0 4px 20px var(--shadow); border: 1px solid var(--border); 
+            transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;
+            display: flex; flex-direction: column; justify-content: space-between; min-height: 180px;
+        }
+        .card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px var(--shadow); border-color: var(--blue); }
+
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+        .card-header h3 { margin: 0; font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+        
+        /* FIX: Coloured Bar Lock */
+        .card-header h3::before { 
+            content: ''; display: block; 
+            width: 4px !important; min-width: 4px !important; max-width: 4px !important;
+            height: 18px; margin-right: 10px; border-radius: 2px; 
+            flex-shrink: 0;
+        }
+        .card-fw h3::before { background: var(--red); }
+        .card-tr h3::before { background: var(--blue); }
+        .card-ping h3::before { background: var(--green); }
+
+        .status-dot { height: 10px; width: 10px; border-radius: 50%; background-color: var(--muted); display: inline-block; box-shadow: 0 0 5px currentColor; }
+        .status-dot.online { background-color: var(--green); color: var(--green); }
+        .status-dot.offline { background-color: var(--red); color: var(--red); }
+
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .stat-item { background: var(--hover); padding: 12px; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; }
+        .stat-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+        .stat-value { font-size: 1.3rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sub-text { font-size: 0.8rem; color: var(--muted); margin-top: 5px; font-weight: 500; }
+
+        .txt-red { color: var(--red); } .txt-blue { color: var(--blue); } .txt-green { color: var(--green); }
+        .txt-orange { color: var(--orange); } .txt-purple { color: var(--purple); }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🏠 Keenetic Dashboard</h1>
+        <span id="global_clock">Loading...</span>
+    </div>
+
+    <div class="grid">
+        
+        <div class="card card-fw" onclick="location.href='firewall/index.html'">
+            <div class="card-header"><h3>Firewall Shield</h3><span class="status-dot" id="fw_status"></span></div>
+            <div class="stat-grid">
+                <div class="stat-item"><span class="stat-label">IPv4 Entries</span><span class="stat-value txt-red" id="fw_v4">-</span></div>
+                <div class="stat-item"><span class="stat-label">IPv6 Entries</span><span class="stat-value txt-purple" id="fw_v6">-</span></div>
+                <div class="stat-item"><span class="stat-label">VPN Entries</span><span class="stat-value txt-orange" id="fw_vpn">-</span></div>
+                <div class="stat-item"><span class="stat-label">Total Drops</span><span class="stat-value txt-blue" id="fw_drops">-</span></div>
+            </div>
+            <div class="sub-text" id="fw_update">Updated: -</div>
+        </div>
+
+        <div class="card card-tr" onclick="location.href='vnstat/ppp0-vnstat.html'">
+            <div class="card-header"><h3>Traffic Usage</h3><span class="status-dot" id="tr_status"></span></div>
+            <div class="stat-grid">
+                <div class="stat-item" style="grid-column: 1 / -1;"><span class="stat-label">Interface</span><span class="stat-value" id="tr_iface">-</span></div>
+                <div class="stat-item"><span class="stat-label">Today</span><span class="stat-value txt-green" id="tr_today">-</span></div>
+                <div class="stat-item"><span class="stat-label">Month</span><span class="stat-value txt-blue" id="tr_month">-</span></div>
+            </div>
+            <div class="sub-text" id="tr_meta">Source: vnStat</div>
+        </div>
+
+        <div class="card card-ping" onclick="location.href='ping/index.html'">
+            <div class="card-header"><h3>Latency Monitor</h3><span class="status-dot" id="ping_status"></span></div>
+            <div class="stat-grid">
+                <div class="stat-item"><span class="stat-label">Ping IPv4</span><span class="stat-value txt-green" id="ping_v4">-</span></div>
+                <div class="stat-item"><span class="stat-label">Ping IPv6</span><span class="stat-value txt-purple" id="ping_v6">-</span></div>
+                <div class="stat-item" style="grid-column: 1 / -1;"><span class="stat-label">Targets</span><span class="stat-value" style="font-size: 0.85rem; font-weight:500;" id="ping_target">-</span></div>
+            </div>
+            <div class="sub-text" id="ping_update">Updated: -</div>
+        </div>
+
+    </div>
+
+    <script src="firewall/firewall_data.js" onerror="console.log('FW missing')"></script>
+    <script src="vnstat/vnstat_data.js" onerror="console.log('VnStat missing')"></script>
+    <script src="ping/data.js" onerror="console.log('Ping missing')"></script>
+
+    <script>
+        const fmtBytes = (b) => { if (!b) return "0 B"; const u = ['B','KB','MB','GB','TB']; let i = 0; while(b >= 1024 && i < u.length-1){ b/=1024; i++; } return b.toFixed(2) + ' ' + u[i]; };
+        const updateClock = () => { document.getElementById('global_clock').innerText = new Date().toLocaleTimeString(); };
+        setInterval(updateClock, 1000); updateClock();
+
+        window.onload = function() {
+            
+            // 1. FIREWALL
+            if (typeof window.FW_DATA !== 'undefined') {
+                const d = window.FW_DATA;
+                document.getElementById('fw_v4').innerText = d.lists.main || "0";
+                document.getElementById('fw_v6').innerText = d.lists.main6 || "0";
+                document.getElementById('fw_vpn').innerText = d.lists.vpn || "0";
+                document.getElementById('fw_drops').innerText = d.lifetime || "0";
+                document.getElementById('fw_update').innerText = "Last Update: " + d.updated;
+                document.getElementById('fw_status').classList.add('online');
+            } else { document.getElementById('fw_status').classList.add('offline'); }
+
+            // 2. TRAFFIC (Mapped to TRAFFIC_RAW)
+            if (typeof window.TRAFFIC_RAW !== 'undefined') {
+                try {
+                    const iface = window.TRAFFIC_RAW.interfaces[0];
+                    const tr = iface.traffic;
+                    
+                    // Prendi l'ultimo elemento degli array (Dati più recenti)
+                    const dayData = tr.day[tr.day.length - 1] || {rx:0, tx:0};
+                    const monthData = tr.month[tr.month.length - 1] || {rx:0, tx:0};
+
+                    document.getElementById('tr_iface').innerText = iface.name || iface.id;
+                    document.getElementById('tr_today').innerText = fmtBytes(dayData.rx + dayData.tx);
+                    document.getElementById('tr_month').innerText = fmtBytes(monthData.rx + monthData.tx);
+                    
+                    // Formatta la data dell'ultimo aggiornamento vnstat
+                    const u = iface.updated;
+                    const dateStr = `${u.time.hour}:${u.time.minute.toString().padStart(2,'0')}`;
+                    document.getElementById('tr_meta').innerText = "VnStat Update: " + dateStr;
+                    document.getElementById('tr_status').classList.add('online');
+                } catch(e) { console.error("VnStat Logic Error", e); }
+            } else { document.getElementById('tr_status').classList.add('offline'); }
+
+            // 3. PING (Mapped to PING_DATA)
+            if (typeof window.PING_DATA !== 'undefined') {
+                try {
+                    const d = window.PING_DATA;
+                    const cur = d.current;
+                    
+                    document.getElementById('ping_v4').innerText = cur.v4.ping + " ms";
+                    document.getElementById('ping_v6').innerText = cur.v6.ping + " ms";
+                    
+                    // Formatta i target
+                    document.getElementById('ping_target').innerHTML = `<span style='opacity:0.6'>v4:</span> ${d.targets.v4} &nbsp; <span style='opacity:0.6'>v6:</span> ${d.targets.v6}`;
+                    document.getElementById('ping_update').innerText = "Updated: " + d.updated;
+
+                    if(cur.v4.loss < 100) document.getElementById('ping_status').classList.add('online');
+                    else document.getElementById('ping_status').classList.add('offline');
+                } catch(e) { console.error("Ping Logic Error", e); }
+            } else { document.getElementById('ping_status').classList.add('offline'); }
+        };
+    </script>
+</body>
+</html>
