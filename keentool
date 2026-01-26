@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.3 (Alpha)
+# KEENTOOL MANAGER v0.4.4 (ALPHA)
 # Author: MatthewEli
 # Features:
-#   - WEB: Auto-downloads Dashboard (index.html) to /opt/var/www/
-#   - FIX: Ensures correct permissions (644) for web files
-#   - CORE: Self-Update & Dependency Management
+#   - CONFIG: Updated Lighttpd configuration structure.
+#   - REPO: Fixed remote paths for all tools (Script/ or scripts/ subfolders).
+#   - CORE: Self-Update & Dependency Management.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -30,11 +30,22 @@ DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk se
 DEPS_SMB="bash tar samba4-client coreutils-date"
 
 # --- TOOL DEFINITIONS ---
+# Format: FriendlyName | LocalPath | RepoName | RemoteFilePath
+
 T_SELF="Keentool Manager|$BIN_DIR/keentool|keentool|keentool"
-T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|traffic_manager.sh"
-T_PING="Ping Monitor|$PING_DIR/pingtool_keenetic.sh|keenetic-pingtool|pingtool_keenetic.sh"
-T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|smb_backup_tool.sh"
-FW_CORE="$BIN_DIR/update_blocklist.sh"
+
+# Note: Added 'Script/' prefix based on new repo structure
+T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|Script/traffic_manager.sh"
+
+# Note: Added 'scripts/' prefix
+T_PING="Ping Monitor|$PING_DIR/pingtool_keenetic.sh|keenetic-pingtool|scripts/pingtool.sh"
+
+# Note: Added 'Script/' prefix
+T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|Script/smb_backup_tool.sh"
+
+# Firewall Core check file (remote path needs 'scripts/' prefix logic below)
+FW_CORE_LOCAL="$BIN_DIR/update_blocklist.sh"
+FW_REPO="keenetic-firewall"
 
 # --- CRON STRINGS ---
 CRON_FILE="/opt/etc/crontab"
@@ -55,7 +66,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.3 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.4 ${RESET}${YELLOW}(Alpha)${RESET}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -67,7 +78,7 @@ action_self_update() {
     IFS='|' read -r N P R F <<EOF
 $T_SELF
 EOF
-    TMP_FILE="/tmp/$F.tmp"
+    TMP_FILE="/tmp/keentool.tmp"
     echo -n " -> Contacting GitHub ($R)... "; curl -s -L "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
     if [ ! -s "$TMP_FILE" ]; then echo -e "${RED}Failed.${RESET}"; rm -f "$TMP_FILE"; pause; return; fi
     L_VER=$(get_version "$P"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
@@ -91,7 +102,6 @@ setup_system() {
     echo -e "${BOLD}System Pre-Flight Check${RESET}"; echo "---------------------------------------"
     echo -e "Checking Core Packages: ${DIM}$DEPS_CORE${RESET}"; check_and_install_deps "$DEPS_CORE"
     
-    # Force check of web config AND dashboard file
     echo -e "Checking Web Environment..."
     check_webserver_config "force"
     
@@ -110,7 +120,7 @@ perform_global_scan() {
         local VNAME=$1; local LPATH=$2; local REPO=$3; local RFILE=$4
         echo -n "."
         if [ -f "$LPATH" ]; then
-            local L_VER=$(get_version "$LPATH"); local TMP="/tmp/check_${RFILE}.tmp"
+            local L_VER=$(get_version "$LPATH"); local TMP="/tmp/check_${RFILE##*/}.tmp"
             curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP"
             if [ -s "$TMP" ]; then
                 local R_VER=$(get_version "$TMP"); ver_compare "$R_VER" "$L_VER"
@@ -127,7 +137,10 @@ EOF
 $T_PING
 EOF
     check_tool_status "UPD_PING" "$P" "$R" "$F"
-    check_tool_status "UPD_FW" "$FW_CORE" "keenetic-firewall" "update_blocklist.sh"
+    
+    # Firewall (prefix scripts/)
+    check_tool_status "UPD_FW" "$FW_CORE_LOCAL" "$FW_REPO" "scripts/update_blocklist.sh"
+    
     IFS='|' read -r N P R F <<EOF
 $T_SMB
 EOF
@@ -154,18 +167,14 @@ check_webserver_config() {
     MODE=$1
     CONF="/opt/etc/lighttpd/lighttpd.conf"
     
-    # Make sure WWW root exists
     if [ ! -d "$WEB_ROOT" ]; then mkdir -p "$WEB_ROOT"; fi
 
     # Check/Download index.html
-    # Downloads if missing OR if MODE=force (System Setup)
     if [ ! -f "$WEB_ROOT/index.html" ] || [ "$MODE" = "force" ]; then
          echo -n " -> Downloading Dashboard to $WEB_ROOT... "
          curl -s -L "$BASE_URL/keentool/main/index.html" -o "$WEB_ROOT/index.html"
-         
          if [ -s "$WEB_ROOT/index.html" ]; then
-            echo -e "${GREEN}OK${RESET}"
-            chmod 644 "$WEB_ROOT/index.html"
+            echo -e "${GREEN}OK${RESET}"; chmod 644 "$WEB_ROOT/index.html"
          else
             echo -e "${RED}Failed download! Creating Stub.${RESET}"
             echo "<h1>Keenetic Dashboard</h1><p>Apps installed via Keentool.</p>" > "$WEB_ROOT/index.html"
@@ -174,33 +183,69 @@ check_webserver_config() {
     fi
 
     if [ -f "$CONF" ]; then
-        if grep -q "server.port.*=.*81" "$CONF" && grep -q "$WEB_ROOT" "$CONF"; then return 0; fi
+        # Simple check if port 81 matches
+        if grep -q "server.port.*=.*81" "$CONF" && [ "$MODE" != "force" ]; then return 0; fi
     fi
-    echo -n " -> ${YELLOW}Configure Lighttpd (Port 81)? (y/n): ${RESET}"; read -r ans
-    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-        mkdir -p /opt/etc/lighttpd
-        cat > "$CONF" <<EOF
-server.modules = ( )
-server.document-root = "$WEB_ROOT"
-server.upload-dirs = ( "/opt/tmp" )
-server.errorlog = "/opt/var/log/lighttpd.error.log"
-server.pid-file = "/opt/var/run/lighttpd.pid"
-server.username = "http"
-server.groupname = "www-data"
+    
+    if [ "$MODE" != "force" ]; then
+        echo -n " -> ${YELLOW}Configure Lighttpd (Port 81)? (y/n): ${RESET}"; read -r ans
+        [ "$ans" != "y" ] && [ "$ans" != "Y" ] && return 0
+    fi
+
+    mkdir -p /opt/etc/lighttpd
+    
+    # NEW CONFIGURATION BLOCK
+    cat > "$CONF" <<EOF
+### Documentation
+# https://wiki.lighttpd.net/
+#
+### Configuration Syntax
+# https://wiki.lighttpd.net/Docs_Configuration
+#
+### Configuration Options
+# https://wiki.lighttpd.net/Docs_ConfigurationOptions
+#
+### Configuration Variables (potentially used in /opt/etc/lighttpd/conf.d/*.conf)
+var.log_root    = "/opt/var/log/lighttpd/"
+var.server_root = "/opt/var/www/"
+var.state_dir   = "/opt/var/run/"
+var.home_dir    = "/opt/var/lib/lighttpd/"
+var.conf_dir    = "/opt/etc/lighttpd"
+var.vhosts_dir  = server_root + "/vhosts"
+var.cache_dir   = "/opt/var/cache/lighttpd"
+var.socket_dir  = home_dir + "/sockets"
+
+### OpenWRT lighttpd base configuration
+server.document-root        = server_root
+server.upload-dirs          = ( "/opt/tmp" )
+server.errorlog             = log_root + "error.log"
+server.pid-file             = state_dir + "lighttpd.pid"
+#server.username             = "http"
+#server.groupname            = "www-data"
 server.port = 81
-index-file.names = ( "index.html" )
-mimetype.assign = (
-  ".png"  => "image/png", ".jpg"  => "image/jpeg", ".jpeg" => "image/jpeg",
-  ".html" => "text/html", ".txt"  => "text/plain", ".css"  => "text/css", ".js"   => "text/javascript"
-)
+
+# historical; preserved for compatibility; should have been disabled by default
+index-file.names            = ( "index.php", "index.html",
+                                "index.htm", "default.htm",
+                                "index.html.htm" )
+
+static-file.exclude-extensions = ( ".php", ".pl", ".fcgi" )
+
+include "/opt/etc/lighttpd/mime.conf"
+include "/opt/etc/lighttpd/conf.d/*.conf"
+
+### Customizations
+# customizations should generally be placed in separate files such as
+#   /opt/etc/lighttpd/conf.d/00_vars.conf    # override variables for conf.d/*.conf
+#   /opt/etc/lighttpd/conf.d/zz_custom.conf  # override other conf.d/*.conf settings
 EOF
-        [ -x /opt/etc/init.d/S80lighttpd ] && { /opt/etc/init.d/S80lighttpd restart >/dev/null 2>&1; echo -e "    ${GREEN}Configured & Restarted.${RESET}"; }
-    fi
+    
+    [ -x /opt/etc/init.d/S80lighttpd ] && { /opt/etc/init.d/S80lighttpd restart >/dev/null 2>&1; echo -e "    ${GREEN}Configured & Restarted.${RESET}"; }
 }
 
 install_file() {
     REPO=$1; RFILE=$2; LPATH=$3; DIR=$(dirname "$LPATH"); mkdir -p "$DIR"
-    echo -n " -> Downloading ${CYAN}$RFILE${RESET}... "; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$LPATH"
+    echo -n " -> Downloading ${CYAN}${RFILE##*/}${RESET}... "; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$LPATH"
     if [ -s "$LPATH" ]; then chmod +x "$LPATH"; echo -e "${GREEN}OK${RESET}"; return 0; else echo -e "${RED}Failed${RESET}"; rm -f "$LPATH"; return 1; fi
 }
 
@@ -211,7 +256,7 @@ smart_process() {
         [ "$ans" = "y" ] || [ "$ans" = "Y" ] && install_file "$REPO" "$RFILE" "$LPATH"
         return
     fi
-    echo -n "Checking $NAME... "; TMP_FILE="/tmp/$RFILE.tmp"; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP_FILE"
+    echo -n "Checking $NAME... "; TMP_FILE="/tmp/${RFILE##*/}.tmp"; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP_FILE"
     if [ ! -s "$TMP_FILE" ]; then echo -e "${RED}Net Error${RESET}"; rm -f "$TMP_FILE"; return; fi
     L_VER=$(get_version "$LPATH"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
     if [ $RES -eq 1 ]; then
@@ -251,17 +296,18 @@ EOF
 
 action_firewall() {
     while true; do
-        header; if [ -f "$FW_CORE" ]; then V_CORE=$(get_version "$FW_CORE"); S_MAIN="${GREEN}Installed (v$V_CORE)${RESET}"; else S_MAIN="${DIM}Missing${RESET}"; fi
+        header; if [ -f "$FW_CORE_LOCAL" ]; then V_CORE=$(get_version "$FW_CORE_LOCAL"); S_MAIN="${GREEN}Installed (v$V_CORE)${RESET}"; else S_MAIN="${DIM}Missing${RESET}"; fi
         echo -e "Firewall Suite Status: $S_MAIN"; echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Run Manager"; echo " 4. Run Monitor"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
         case $op in
-            1) header; check_and_install_deps "$DEPS_FW" || { pause; break; }; REPO="keenetic-firewall"
-               smart_process "Manager" "$BIN_DIR/firewall_manager.sh" $REPO "firewall_manager.sh"
-               smart_process "Monitor" "$BIN_DIR/firewall_monitor" $REPO "firewall_monitor"
-               smart_process "Stats" "$BIN_DIR/firewall_stats.sh" $REPO "firewall_stats.sh"
-               smart_process "Updater" "$BIN_DIR/update_blocklist.sh" $REPO "update_blocklist.sh"
-               smart_process "VPN Scan" "$BIN_DIR/vpn_scan.sh" $REPO "vpn_scan.sh"
-               smart_process "Netfilter" "$NDM_DIR/100-firewall.sh" $REPO "100-firewall.sh"
-               smart_process "Init" "$INIT_DIR/S00ipset-load" $REPO "S00ipset-load"
+            1) header; check_and_install_deps "$DEPS_FW" || { pause; break; }; REPO="$FW_REPO"
+               # Added 'scripts/' prefix to all firewall files
+               smart_process "Manager" "$BIN_DIR/firewall_manager.sh" $REPO "scripts/firewall_manager.sh"
+               smart_process "Monitor" "$BIN_DIR/firewall_monitor" $REPO "scripts/firewall_monitor"
+               smart_process "Stats" "$BIN_DIR/firewall_stats.sh" $REPO "scripts/firewall_stats.sh"
+               smart_process "Updater" "$BIN_DIR/update_blocklist.sh" $REPO "scripts/update_blocklist.sh"
+               smart_process "VPN Scan" "$BIN_DIR/vpn_scan.sh" $REPO "scripts/vpn_scan.sh"
+               smart_process "Netfilter" "$NDM_DIR/100-firewall.sh" $REPO "scripts/100-firewall.sh"
+               smart_process "Init" "$INIT_DIR/S00ipset-load" $REPO "scripts/S00ipset-load"
                pause ;;
             2) header; manage_cron_menu "$C_FW_STAT" "$C_FW_UPD" "$C_FW_VPN"; pause ;;
             3) [ -f "$BIN_DIR/firewall_manager.sh" ] && $BIN_DIR/firewall_manager.sh || { echo "Missing"; sleep 1; };;
@@ -281,7 +327,7 @@ EOF
 $T_PING
 EOF
     if [ -f "$P" ]; then V=$(get_version "$P"); L2="${GREEN}v$V${RESET}"; else L2="${DIM}Missing${RESET}"; fi
-    if [ -f "$FW_CORE" ]; then V=$(get_version "$FW_CORE"); L3="${GREEN}v$V${RESET}"; else L3="${DIM}Missing${RESET}"; fi
+    if [ -f "$FW_CORE_LOCAL" ]; then V=$(get_version "$FW_CORE_LOCAL"); L3="${GREEN}v$V${RESET}"; else L3="${DIM}Missing${RESET}"; fi
     IFS='|' read -r N P R F <<EOF
 $T_SMB
 EOF
