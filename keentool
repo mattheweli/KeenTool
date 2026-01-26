@@ -4,8 +4,8 @@
 # KEENTOOL MANAGER v0.4.5 (ALPHA)
 # Author: MatthewEli
 # Features:
-#   - CONFIG: Updated Lighttpd configuration structure.
-#   - REPO: Fixed remote paths for all tools (Script/ or scripts/ subfolders).
+#   - CONFIG: Custom Lighttpd & VnStat configurations.
+#   - REPO: Fixed remote paths (Script/ vs scripts/).
 #   - CORE: Self-Update & Dependency Management.
 # ==============================================================================
 
@@ -32,15 +32,15 @@ DEPS_SMB="bash tar samba4-client coreutils-date"
 # --- TOOL DEFINITIONS ---
 # Format: FriendlyName | LocalPath | RepoName | RemoteFilePath
 
-T_SELF="Keentool Manager|$BIN_DIR/keentool|keentool|keentool"
+T_SELF="Keentool Manager|$BIN_DIR/keentool|KeenTool|keentool"
 
-# Note: Added 'Script/' prefix based on new repo structure
+# Traffic Manager: Script/ folder
 T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|Script/traffic_manager.sh"
 
-# Note: Added 'scripts/' prefix
+# Ping Monitor: scripts/ folder
 T_PING="Ping Monitor|$PING_DIR/pingtool_keenetic.sh|keenetic-pingtool|scripts/pingtool.sh"
 
-# Note: Added 'Script/' prefix
+# SMB Backup: Script/ folder
 T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|Script/smb_backup_tool.sh"
 
 # Firewall Core check file (remote path needs 'scripts/' prefix logic below)
@@ -157,10 +157,71 @@ check_and_install_deps() {
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
             echo "    Installing..."; opkg update >/dev/null 2>&1; opkg install $MISSING
             if echo "$PKG_LIST" | grep -q "lighttpd"; then check_webserver_config "check"; fi
+            if echo "$PKG_LIST" | grep -q "vnstat2"; then check_vnstat_config; fi
         else return 1; fi
     else echo -e " -> ${GREEN}OK${RESET}"; fi
+    
+    # Config checks even if deps are present
     if echo "$PKG_LIST" | grep -q "lighttpd"; then check_webserver_config "check"; fi
+    if echo "$PKG_LIST" | grep -q "vnstat2"; then check_vnstat_config; fi
     return 0
+}
+
+check_vnstat_config() {
+    CONF="/opt/etc/vnstat.conf"
+    # Only ask if config doesn't exist or we want to ensure it matches
+    if [ ! -f "$CONF" ]; then
+        echo -n " -> ${YELLOW}Configure vnStat (Recommended)? (y/n): ${RESET}"; read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+            cat > "$CONF" <<EOF
+# vnStat 2.x Configuration for Keenetic/Entware
+DatabaseDir "/opt/var/lib/vnstat"
+Locale "-"
+DayFormat    "%d/%m/%Y"
+MonthFormat  "%b '%y"
+TopFormat    "%d/%m/%Y"
+UnitMode 0
+RateUnitMode 1
+RateUnit 1
+DefaultDecimals 2
+HourlyDecimals 1
+Interface "ppp0"
+
+# --- Daemon Settings ---
+UpdateInterval 60
+PollInterval 30
+SaveInterval 5
+OfflineSaveInterval 30
+SaveOnStatusChange 1
+UseLogging 1
+LogFile "/opt/var/log/vnstat.log"
+PidFile "/opt/var/run/vnstat.pid"
+
+# --- vnstati (Graphics) ---
+HeaderFormat "%d/%m/%Y %H:%M"
+DayFormat    "%d/%m/%y"
+MonthFormat  "%b '%y"
+TopFormat    "%d/%m/%y"
+HourlyRate 1
+SummaryRate 1
+SummaryLayout 1
+TransparentBg 0
+CBackground     "FFFFFF"
+CEdge           "AEAEAE"
+CHeader         "606060"
+CHeaderTitle    "FFFFFF"
+CHeaderDate     "FFFFFF"
+CText           "000000"
+CLine           "B0B0B0"
+CLineL          "-"
+CRx             "92CF00"
+CTx             "606060"
+CRxD            "-"
+CTxD            "-"
+EOF
+            [ -x /opt/etc/init.d/S26vnstatd ] && { /opt/etc/init.d/S26vnstatd restart >/dev/null 2>&1; echo -e "    ${GREEN}vnStat Configured & Restarted.${RESET}"; }
+        fi
+    fi
 }
 
 check_webserver_config() {
@@ -172,7 +233,7 @@ check_webserver_config() {
     # Check/Download index.html
     if [ ! -f "$WEB_ROOT/index.html" ] || [ "$MODE" = "force" ]; then
          echo -n " -> Downloading Dashboard to $WEB_ROOT... "
-         curl -s -L "$BASE_URL/keentool/main/index.html" -o "$WEB_ROOT/index.html"
+         curl -s -L "$BASE_URL/KeenTool/main/index.html" -o "$WEB_ROOT/index.html"
          if [ -s "$WEB_ROOT/index.html" ]; then
             echo -e "${GREEN}OK${RESET}"; chmod 644 "$WEB_ROOT/index.html"
          else
@@ -183,7 +244,6 @@ check_webserver_config() {
     fi
 
     if [ -f "$CONF" ]; then
-        # Simple check if port 81 matches
         if grep -q "server.port.*=.*81" "$CONF" && [ "$MODE" != "force" ]; then return 0; fi
     fi
     
@@ -194,7 +254,6 @@ check_webserver_config() {
 
     mkdir -p /opt/etc/lighttpd
     
-    # NEW CONFIGURATION BLOCK
     cat > "$CONF" <<EOF
 ### Documentation
 # https://wiki.lighttpd.net/
