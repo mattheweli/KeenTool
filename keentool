@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.4 (ALPHA)
+# KEENTOOL MANAGER v0.4.5 (ALPHA)
 # Author: MatthewEli
 # Features:
 #   - CONFIG: Updated Lighttpd configuration structure.
