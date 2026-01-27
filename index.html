@@ -20,28 +20,34 @@
 
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 20px; max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; min-height: 95vh; }
         
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding: 0 5px; }
+        /* HEADER LAYOUT */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding: 0 5px; flex-wrap: wrap; gap: 15px; }
         .header h1 { font-size: 1.6rem; margin: 0; font-weight: 800; letter-spacing: -0.5px; }
-        .header span { font-size: 0.85rem; color: var(--muted); background: var(--card); padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border); font-weight: 500; }
+        
+        .header-controls { display: flex; align-items: center; gap: 10px; }
+        .clock-badge { font-size: 0.85rem; color: var(--muted); background: var(--card); padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); font-weight: 600; min-width: 80px; text-align: center; }
+        
+        /* REFRESH SELECTOR */
+        .refresh-select {
+            background: var(--card); color: var(--text); border: 1px solid var(--border);
+            padding: 6px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+            cursor: pointer; outline: none; transition: border-color 0.2s;
+        }
+        .refresh-select:hover { border-color: var(--blue); }
 
         /* GRID SYSTEM FOR EQUAL HEIGHTS */
         .grid { 
             display: grid; 
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
             gap: 20px; 
-            align-items: stretch; /* Forces all cards in a row to be equal height */
+            align-items: stretch; 
         }
 
         .card { 
             background: var(--card); border-radius: 12px; padding: 20px; 
             box-shadow: 0 4px 15px var(--shadow); border: 1px solid var(--border); 
             transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; cursor: pointer;
-            
-            /* Flex layout to stick footer to bottom */
-            display: flex; 
-            flex-direction: column; 
-            height: 100%; /* Fills the grid cell height */
-            box-sizing: border-box;
+            display: flex; flex-direction: column; height: 100%; box-sizing: border-box;
         }
         .card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px var(--shadow); border-color: var(--blue); }
 
@@ -49,10 +55,7 @@
         .card-header h3 { margin: 0; font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
         
         /* Colored Bars */
-        .card-header h3::before { 
-            content: ''; display: block; 
-            width: 4px; height: 16px; border-radius: 2px; flex-shrink: 0;
-        }
+        .card-header h3::before { content: ''; display: block; width: 4px; height: 16px; border-radius: 2px; flex-shrink: 0; }
         .card-fw h3::before { background: var(--red); }
         .card-tr h3::before { background: var(--blue); }
         .card-ping h3::before { background: var(--green); }
@@ -61,12 +64,8 @@
         .status-dot.online { background-color: var(--green); color: var(--green); opacity: 1; }
         .status-dot.offline { background-color: var(--red); color: var(--red); opacity: 1; }
 
-        /* CONTENT AREA - GROWS TO PUSH FOOTER DOWN */
-        .stat-grid { 
-            display: grid; grid-template-columns: 1fr 1fr; gap: 12px; 
-            flex-grow: 1; /* Key for alignment: Pushes footer down */
-            margin-bottom: 15px;
-        }
+        /* CONTENT AREA */
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex-grow: 1; margin-bottom: 15px; }
         
         .stat-item { background: var(--hover); padding: 10px 12px; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
         .stat-label { font-size: 0.7rem; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -84,7 +83,16 @@
 
     <div class="header">
         <h1>🏠 Keenetic Dashboard</h1>
-        <span id="global_clock">Loading...</span>
+        <div class="header-controls">
+            <select id="refresh_timer" class="refresh-select" onchange="updateRefresh(this.value)">
+                <option value="0">Auto-Refresh: OFF</option>
+                <option value="10000">10 Seconds</option>
+                <option value="30000">30 Seconds</option>
+                <option value="60000">1 Minute</option>
+                <option value="300000">5 Minutes</option>
+            </select>
+            <span id="global_clock" class="clock-badge">Loading...</span>
+        </div>
     </div>
 
     <div class="grid">
@@ -129,12 +137,38 @@
     <script src="ping/data.js" onerror="console.log('Ping missing')"></script>
 
     <script>
+        // --- HELPERS ---
         const fmtBytes = (b) => { if (!b) return "0 B"; const u = ['B','KB','MB','GB','TB']; let i = 0; while(b >= 1024 && i < u.length-1){ b/=1024; i++; } return b.toFixed(2) + ' ' + u[i]; };
         const updateClock = () => { document.getElementById('global_clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}); };
+        
+        // --- AUTO REFRESH LOGIC ---
+        let refreshInterval = null;
+        
+        function updateRefresh(val) {
+            // Save preference
+            localStorage.setItem('dash_refresh_rate', val);
+            
+            // Clear existing
+            if (refreshInterval) clearInterval(refreshInterval);
+            
+            // Set new if not 0
+            if (val > 0) {
+                refreshInterval = setInterval(() => {
+                    // Force reload from server, bypassing cache
+                    location.reload(true);
+                }, parseInt(val));
+            }
+        }
+
+        // --- INIT ---
         setInterval(updateClock, 1000); updateClock();
 
         window.onload = function() {
-            
+            // Restore refresh preference
+            const savedRate = localStorage.getItem('dash_refresh_rate') || "0";
+            document.getElementById('refresh_timer').value = savedRate;
+            updateRefresh(savedRate);
+
             // 1. FIREWALL
             if (typeof window.FW_DATA !== 'undefined') {
                 const d = window.FW_DATA;
@@ -151,7 +185,6 @@
                 try {
                     const iface = window.TRAFFIC_RAW.interfaces[0];
                     const tr = iface.traffic;
-                    
                     const dayData = tr.day[tr.day.length - 1] || {rx:0, tx:0};
                     const monthData = tr.month[tr.month.length - 1] || {rx:0, tx:0};
 
@@ -159,7 +192,6 @@
                     document.getElementById('tr_today').innerText = fmtBytes(dayData.rx + dayData.tx);
                     document.getElementById('tr_month').innerText = fmtBytes(monthData.rx + monthData.tx);
                     
-                    // Format Date
                     const u = iface.updated;
                     const pad = (n) => n.toString().padStart(2, '0');
                     const ts = `${pad(u.date.day)}-${pad(u.date.month)}-${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}`;
@@ -174,13 +206,10 @@
                 try {
                     const d = window.PING_DATA;
                     const cur = d.current;
-                    
                     document.getElementById('ping_v4').innerText = cur.v4.ping + " ms";
                     document.getElementById('ping_v6').innerText = cur.v6.ping + " ms";
                     
-                    // Render Targets
                     let tHtml = `<span style='opacity:0.6'>v4:</span> ${d.targets.v4}`;
-                    // Only show v6 if enabled/present
                     if (d.config && d.config.ipv6) {
                         tHtml += ` &nbsp; <span style='opacity:0.6'>v6:</span> ${d.targets.v6}`;
                     } else if (d.targets.v6 && d.targets.v6.length > 5) {
