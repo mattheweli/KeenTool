@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.7 (ALPHA)
+# KEENTOOL MANAGER v0.4.8 (ALPHA)
 # Author: MatthewEli
 # Features:
+#   - FIREWALL: Added 'iprange' dependency for blocklist optimization.
 #   - CONFIG: Updated vnStat 2.13 configuration template.
 #   - FIX: Correct vnStat service restart path (S32vnstat2).
-#   - REPO: Fixed remote paths.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -26,7 +26,8 @@ WEB_ROOT="/opt/var/www"
 DEPS_CORE="lighttpd bash curl wget-ssl cron"
 DEPS_VNSTAT="vnstat2 grep awk"
 DEPS_PING="sqlite3-cli iputils-ping mtr grep awk"
-DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed"
+# Added 'iprange' to DEPS_FW for IPv4 optimization
+DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed iprange"
 DEPS_SMB="bash tar samba4-client coreutils-date"
 
 # --- TOOL DEFINITIONS ---
@@ -56,7 +57,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.7 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.8 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
