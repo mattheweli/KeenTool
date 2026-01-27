@@ -1,13 +1,14 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.19 (ALPHA)
+# KEENTOOL MANAGER v0.4.20 (ALPHA)
 # Author: MatthewEli
 # Features:
+#   - UPDATE: Added tracking for Main Dashboard (index.html).
+#   - UPDATE: Global scan now detects file changes (MD5) even without version bump.
 #   - CRON: Conflict detection matches script path (ignores args/logs).
-#   - CRON: User choice to replace existing jobs or cancel (no auto-duplication).
-#   - PINGTOOL: Installation wizard asks for IPv4-only mode (-ipv4 flag).
-#   - FIX: Auto-sanitize files & strict permissions (600).
+#   - CRON: User choice to replace existing jobs or cancel.
+#   - PINGTOOL: Installation wizard asks for IPv4-only mode.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -31,6 +32,7 @@ DEPS_SMB="bash tar samba4-client coreutils-date"
 
 # --- TOOL DEFINITIONS ---
 T_SELF="Keentool Manager|$BIN_DIR/keentool|KeenTool|keentool"
+T_DASH="Main Dashboard|$WEB_ROOT/index.html|KeenTool|index.html"
 T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|Script/traffic_manager.sh"
 T_PING="Ping Monitor|$BIN_DIR/pingtool.sh|keenetic-pingtool|scripts/pingtool.sh"
 T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|Script/smb_backup_tool.sh"
@@ -43,7 +45,6 @@ CRON_SPOOL_DIR="/opt/var/spool/cron/crontabs"
 CRON_SPOOL_FILE="$CRON_SPOOL_DIR/root"
 
 CMD_VNSTAT="root /opt/bin/traffic_manager.sh ppp0 >/opt/var/log/t_manager.log 2>&1"
-# Pingtool command is dynamic, defined in action_generic
 CMD_PING_BASE="root /opt/bin/pingtool.sh"
 CMD_PING_ARGS=">> /opt/var/log/connmon.log 2>&1"
 CMD_FW_STAT="root /opt/bin/firewall_stats.sh > /dev/null 2>&1"
@@ -58,10 +59,10 @@ BOLD="${ESC}[1m"
 RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CYAN="${ESC}[36m"; MAGENTA="${ESC}[35m"
 
 # GLOBAL STATE
-UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
+UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.19 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.20 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -125,21 +126,42 @@ perform_global_scan() {
             local L_VER=$(get_version "$LPATH"); local TMP="/tmp/check_${RFILE##*/}.tmp"
             curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP"
             if [ -s "$TMP" ]; then
-                local R_VER=$(get_version "$TMP"); ver_compare "$R_VER" "$L_VER"
-                [ $? -eq 1 ] && eval "${VNAME}=' -> ${MAGENTA}v${R_VER}${RESET}'" || eval "${VNAME}=''"
+                local R_VER=$(get_version "$TMP"); ver_compare "$R_VER" "$L_VER"; local RES=$?
+                
+                if [ $RES -eq 1 ]; then
+                    eval "${VNAME}=' -> ${MAGENTA}v${R_VER}${RESET}'"
+                else
+                    # Fallback: MD5 Check if version is same or unknown (e.g. HTML files)
+                    if [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP")" ]; then
+                        eval "${VNAME}=' -> ${CYAN}Changed${RESET}'"
+                    else
+                        eval "${VNAME}=''"
+                    fi
+                fi
                 rm -f "$TMP"
             else eval "${VNAME}=''"; fi
         else eval "${VNAME}=''"; fi
     }
     
+    # 0. Dashboard
+    IFS='|' read -r N P R F <<EOF
+$T_DASH
+EOF
+    check_tool_status "UPD_DASH" "$P" "$R" "$F"
+
+    # 1. VNStat
     IFS='|' read -r N P R F <<EOF
 $T_VNSTAT
 EOF
     check_tool_status "UPD_VNSTAT" "$P" "$R" "$F"
+    
+    # 2. Ping
     IFS='|' read -r N P R F <<EOF
 $T_PING
 EOF
     check_tool_status "UPD_PING" "$P" "$R" "$F"
+    
+    # 3. Firewall
     check_tool_status "UPD_FW" "$FW_CORE_LOCAL" "$FW_REPO" "scripts/update_blocklist.sh"
     
     if [ -z "$UPD_FW" ] && [ -f "$FW_CORE_LOCAL" ]; then
@@ -157,11 +179,17 @@ $INIT_DIR/S00ipset-load|scripts/S00ipset-load"
                 if [ -s "$STMP" ]; then
                     local SR_VER=$(get_version "$STMP"); ver_compare "$SR_VER" "$SL_VER"
                     if [ $? -eq 1 ]; then UPD_FW=" -> ${MAGENTA}Patch${RESET}"; rm -f "$STMP"; break; fi
+                    # MD5 check for sub-scripts too
+                    if [ "$(get_md5 "$SUB_L")" != "$(get_md5 "$STMP")" ]; then
+                         UPD_FW=" -> ${CYAN}Patch${RESET}"; rm -f "$STMP"; break
+                    fi
                 fi
                 rm -f "$STMP"
             fi
         done; unset IFS
     fi
+    
+    # 4. SMB
     IFS='|' read -r N P R F <<EOF
 $T_SMB
 EOF
@@ -251,7 +279,9 @@ install_file() {
     echo -n " -> Downloading ${CYAN}${RFILE##*/}${RESET}... "; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$LPATH"
     if [ -s "$LPATH" ]; then 
         sed -i 's/\r$//' "$LPATH"
-        chmod +x "$LPATH"; echo -e "${GREEN}OK${RESET}"; return 0
+        [ "${LPATH##*.}" = "sh" ] && chmod +x "$LPATH" # Make scripts executable
+        [ "${LPATH##*.}" = "html" ] && chmod 644 "$LPATH" # Make html readable
+        echo -e "${GREEN}OK${RESET}"; return 0
     else 
         echo -e "${RED}Failed${RESET}"; rm -f "$LPATH"; return 1
     fi
@@ -267,21 +297,28 @@ smart_process() {
     echo -n "Checking $NAME... "; TMP_FILE="/tmp/${RFILE##*/}.tmp"; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP_FILE"
     if [ ! -s "$TMP_FILE" ]; then echo -e "${RED}Net Error${RESET}"; rm -f "$TMP_FILE"; return; fi
     L_VER=$(get_version "$LPATH"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
-    if [ $RES -eq 1 ]; then
-        echo -e "${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"; echo -n "    Apply? (y/n): "; read -r ans
+    
+    # Logic: 1=Newer Version, 2=Local Newer, 0=Same Version (Check MD5)
+    UPDATE_NEEDED=0
+    MSG=""
+    
+    if [ $RES -eq 1 ]; then 
+        UPDATE_NEEDED=1; MSG="${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
+    elif [ $RES -eq 0 ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then
+        UPDATE_NEEDED=1; MSG="${CYAN}Content Changed (Patch)${RESET}"
+    fi
+
+    if [ $UPDATE_NEEDED -eq 1 ]; then
+        echo -e "$MSG"; echo -n "    Apply? (y/n): "; read -r ans
         [ "$ans" = "y" ] && { 
             sed -i 's/\r$//' "$TMP_FILE"
-            mv "$TMP_FILE" "$LPATH"; chmod +x "$LPATH"; echo -e "    ${GREEN}Updated.${RESET}"; 
+            mv "$TMP_FILE" "$LPATH"
+            [ "${LPATH##*.}" = "sh" ] && chmod +x "$LPATH"
+            [ "${LPATH##*.}" = "html" ] && chmod 644 "$LPATH"
+            echo -e "    ${GREEN}Updated.${RESET}"
         } || rm -f "$TMP_FILE"
-    elif [ $RES -eq 2 ]; then echo -e "${YELLOW}Local Newer.${RESET}"; rm -f "$TMP_FILE"
     else
-        if [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then
-            echo -e "${CYAN}MD5 Differs.${RESET}"; echo -n "    Overwrite local? (y/n): "; read -r ans
-            [ "$ans" = "y" ] && { 
-                sed -i 's/\r$//' "$TMP_FILE"
-                mv "$TMP_FILE" "$LPATH"; chmod +x "$LPATH"; echo -e "    ${GREEN}Replaced.${RESET}"; 
-            } || rm -f "$TMP_FILE"
-        else echo -e "${GREEN}Up to date.${RESET}"; rm -f "$TMP_FILE"; fi
+        rm -f "$TMP_FILE"; echo -e "${GREEN}Up to date.${RESET}"
     fi
 }
 
@@ -302,9 +339,7 @@ action_verify_cron() {
     CRON_PATH="/opt/etc/crontab"
     if [ ! -f "$CRON_PATH" ]; then echo -n " -> File missing. Creating... "; touch "$CRON_PATH"; echo -e "${GREEN}Created.${RESET}"; else echo -e " -> File exists."; fi
     echo -n " -> Enforcing permissions (root:root 600)... "
-    chown root:root "$CRON_PATH"
-    chmod 600 "$CRON_PATH"
-    echo -e "${GREEN}Done.${RESET}"
+    chown root:root "$CRON_PATH"; chmod 600 "$CRON_PATH"; echo -e "${GREEN}Done.${RESET}"
     echo -n " -> Cleaning (Dedup/Format)... "
     L1=$(wc -l < "$CRON_PATH"); sanitize_cron; L2=$(wc -l < "$CRON_PATH")
     if [ "$L1" -ne "$L2" ]; then echo -e "${YELLOW}Cleaned ($((L1-L2)) lines).${RESET}"; else echo -e "${GREEN}OK.${RESET}"; fi
@@ -316,8 +351,6 @@ action_verify_cron() {
 }
 
 cron_cmd_active() {
-    # Searches for the script PATH (ignoring flags)
-    # E.g., if checking "/opt/bin/pingtool.sh", will find "*/3 ... /opt/bin/pingtool.sh -ipv4 ..."
     SCRIPT_NAME=$(echo "$1" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
     grep -q "$SCRIPT_NAME" "$CRON_FILE"
 }
@@ -332,27 +365,19 @@ interactive_cron_builder() {
     SCRIPT_NAME=$(echo "$CMD_TO_ADD" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh')
     BASE_NAME=$(basename "$SCRIPT_NAME")
 
-    # CONFLICT CHECK: Look for ANY existing job for this script
     if grep -qF "$BASE_NAME" "$CRON_FILE"; then
         echo -e "${YELLOW}Warning: Existing jobs found for $BASE_NAME:${RESET}"
         grep -F "$BASE_NAME" "$CRON_FILE"
         echo ""
         echo -n "Do you want to REPLACE them with the new schedule? (y/n): "
         read -r confirm
-        if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-            echo "Operation cancelled."; return
-        fi
-        # Remove old entries
+        if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then echo "Operation cancelled."; return; fi
         grep -vF "$BASE_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
         echo -e "${RED}Old entries removed.${RESET}"
     fi
 
     echo -e "${CYAN}Configure Schedule ($BASE_NAME):${RESET}"
-    echo " 1. Every X Minutes"
-    echo " 2. Every X Hours"
-    echo " 3. Daily at specific time"
-    echo -n "Select [1-3]: "
-    read -r opt
+    echo " 1. Every X Minutes"; echo " 2. Every X Hours"; echo " 3. Daily at specific time"; echo -n "Select [1-3]: "; read -r opt
     SCHED=""
     case $opt in
         1) echo -n "Minutes (e.g. 10): "; read -r mins; [ -z "$mins" ] && mins="10"; SCHED="*/$mins * * * *" ;;
@@ -360,11 +385,7 @@ interactive_cron_builder() {
         3) echo -n "Hour (0-23): "; read -r hh; echo -n "Minute (0-59): "; read -r mm; [ -z "$hh" ] && hh="03"; [ -z "$mm" ] && mm="00"; SCHED="$mm $hh * * *" ;;
         *) echo "Invalid. Defaulting to daily 04:00."; SCHED="0 4 * * *" ;;
     esac
-    FINAL_LINE="$SCHED $CMD_TO_ADD"
-    echo -e " -> Adding: ${BOLD}$FINAL_LINE${RESET}"
-    echo "$FINAL_LINE" >> "$CRON_FILE"
-    sanitize_cron
-    echo -e "    ${GREEN}Scheduled.${RESET}"
+    echo -e " -> Adding: ${BOLD}$SCHED $CMD_TO_ADD${RESET}"; echo "$SCHED $CMD_TO_ADD" >> "$CRON_FILE"; sanitize_cron; echo -e "    ${GREEN}Scheduled.${RESET}"
 }
 
 remove_cron_cmd() {
@@ -384,8 +405,7 @@ manage_cron_menu() {
             SCHED_PART=$(echo "$EXISTING" | cut -d'/' -f1-5 | cut -c 1-20)
             echo -e "  [${GREEN}ON${RESET}] $SCRIPT_NAME (${DIM}$SCHED_PART...${RESET})"
         else
-            echo -e "  [${RED}OFF${RESET}] $SCRIPT_NAME"
-            MISSING_COUNT=$((MISSING_COUNT+1))
+            echo -e "  [${RED}OFF${RESET}] $SCRIPT_NAME"; MISSING_COUNT=$((MISSING_COUNT+1))
         fi
     done
     echo ""
@@ -395,8 +415,7 @@ manage_cron_menu() {
             for CMD in "$@"; do
                 if ! cron_cmd_active "$CMD"; then
                     SCRIPT_NAME=$(echo "$CMD" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
-                    echo -e "\n[Setup] $SCRIPT_NAME"
-                    interactive_cron_builder "$CMD"
+                    echo -e "\n[Setup] $SCRIPT_NAME"; interactive_cron_builder "$CMD"
                 fi
             done
         fi
@@ -480,6 +499,10 @@ EOF
 $T_SMB
 EOF
     if [ -f "$P" ]; then V=$(get_version "$P"); [ "$V" = "0.0.0" ] && L4="${GREEN}Installed${RESET}" || L4="${GREEN}v$V${RESET}"; else L4="${DIM}Missing${RESET}"; fi
+    IFS='|' read -r N P R F <<EOF
+$T_DASH
+EOF
+    if [ -f "$P" ]; then L5="${GREEN}Installed${RESET}"; else L5="${DIM}Missing${RESET}"; fi
 
     header
     echo -e " ${BOLD}System:${RESET}"; echo -e " 0. ${CYAN}System Setup${RESET} (Deps & WebServer)"
@@ -488,6 +511,7 @@ EOF
     echo -e " 2. Ping Monitor         [$L2]$UPD_PING"
     echo -e " 3. Firewall Suite       [$L3]$UPD_FW"
     echo -e " 4. SMB Backup Tool      [$L4]$UPD_SMB"
+    echo -e " 5. Main Dashboard       [$L5]$UPD_DASH"
     echo ""; echo -e " ${BOLD}Global:${RESET}"
     echo -e " u. Check for Updates (Tools)"
     echo -e " s. ${MAGENTA}Update Keentool (Self)${RESET}"
@@ -498,9 +522,10 @@ EOF
     case $choice in
         0) setup_system ;;
         1) action_generic "$T_VNSTAT" "$CMD_VNSTAT" ;;
-        2) action_generic "$T_PING" "" ;; # Pingtool cmd is built dynamically inside action_generic
+        2) action_generic "$T_PING" "" ;; 
         3) action_firewall ;;
         4) action_generic "$T_SMB" "$CMD_SMB" ;;
+        5) action_generic "$T_DASH" "" ;;
         u) perform_global_scan ;;
         s) action_self_update ;;
         c) header; cat $CRON_FILE; pause ;;
