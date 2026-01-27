@@ -1,11 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.11 (ALPHA)
+# KEENTOOL MANAGER v0.4.13 (ALPHA)
 # Author: MatthewEli
 # Features:
-#   - PATH: Updated Ping Monitor path to /opt/bin/pingtool.sh.
-#   - CRON: Updated Ping Monitor cron job to match new path.
+#   - CONFIG: vnstat.conf is now downloaded from repo root instead of inline.
+#   - CRON: Interactive "Human" Scheduler. No more hardcoded timings.
+#   - CRON: Smart detection of active jobs regardless of their schedule.
 #   - CORE: Smart Dependency Check & Soft Fail.
 # ==============================================================================
 
@@ -25,32 +26,27 @@ WEB_ROOT="/opt/var/www"
 DEPS_CORE="lighttpd bash curl wget-ssl cron"
 DEPS_VNSTAT="vnstat2 grep awk"
 DEPS_PING="sqlite3-cli iputils-ping mtr grep awk"
-# Added 'iprange' to DEPS_FW for IPv4 optimization
 DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed iprange"
 DEPS_SMB="bash tar samba4-client coreutils-date"
 
 # --- TOOL DEFINITIONS ---
 T_SELF="Keentool Manager|$BIN_DIR/keentool|KeenTool|keentool"
 T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|Script/traffic_manager.sh"
-
-# UPDATED: Ping Monitor now in /opt/bin/pingtool.sh
 T_PING="Ping Monitor|$BIN_DIR/pingtool.sh|keenetic-pingtool|scripts/pingtool.sh"
-
 T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|Script/smb_backup_tool.sh"
 FW_CORE_LOCAL="$BIN_DIR/update_blocklist.sh"
 FW_REPO="keenetic-firewall"
 
-# --- CRON STRINGS ---
+# --- CRON COMMANDS (DEFINITIONS ONLY - NO SCHEDULE) ---
 CRON_FILE="/opt/etc/crontab"
-C_VNSTAT="*/10 * * * * root /opt/bin/traffic_manager.sh ppp0 >/opt/var/log/t_manager.log 2>&1"
 
-# UPDATED: Cron for Ping Monitor
-C_PING="12,42 * * * * root /opt/bin/pingtool.sh >> /opt/var/log/connmon.log 2>&1"
-
-C_FW_STAT="59 * * * * root /opt/bin/firewall_stats.sh > /dev/null 2>&1"
-C_FW_UPD="0 4 * * * root /opt/bin/update_blocklist.sh > /dev/null 2>&1"
-C_FW_VPN="12 */3 * * * root /opt/bin/vpn_scan.sh > /dev/null 2>&1"
-C_SMB="00 03 */15 * * /opt/bin/smb_backup_tool.sh -run"
+# Commands
+CMD_VNSTAT="root /opt/bin/traffic_manager.sh ppp0 >/opt/var/log/t_manager.log 2>&1"
+CMD_PING="root /opt/bin/pingtool.sh >> /opt/var/log/connmon.log 2>&1"
+CMD_FW_STAT="root /opt/bin/firewall_stats.sh > /dev/null 2>&1"
+CMD_FW_UPD="root /opt/bin/update_blocklist.sh > /dev/null 2>&1"
+CMD_FW_VPN="root /opt/bin/vpn_scan.sh > /dev/null 2>&1"
+CMD_SMB="/opt/bin/smb_backup_tool.sh -run"
 
 # COLORS
 ESC=$(printf '\033')
@@ -62,7 +58,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.11 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.13 ${RESET}${YELLOW}(Alpha)${RESET}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -104,6 +100,7 @@ setup_system() {
         echo -e "${RED}Stopped${RESET}"; echo -n " -> Start Cron? (y/n): "; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then /opt/etc/init.d/S10cron start; echo -e "    ${GREEN}Started.${RESET}"; fi
     fi
+    sanitize_cron
     echo ""; echo -e "${BOLD}System Ready.${RESET}"; pause
 }
 
@@ -124,22 +121,18 @@ perform_global_scan() {
         else eval "${VNAME}=''"; fi
     }
     
-    # 1. Traffic Manager
     IFS='|' read -r N P R F <<EOF
 $T_VNSTAT
 EOF
     check_tool_status "UPD_VNSTAT" "$P" "$R" "$F"
     
-    # 2. Ping Monitor
     IFS='|' read -r N P R F <<EOF
 $T_PING
 EOF
     check_tool_status "UPD_PING" "$P" "$R" "$F"
     
-    # 3. Firewall Suite (Advanced Check)
     check_tool_status "UPD_FW" "$FW_CORE_LOCAL" "$FW_REPO" "scripts/update_blocklist.sh"
     
-    # If Core is up to date, check all components
     if [ -z "$UPD_FW" ] && [ -f "$FW_CORE_LOCAL" ]; then
         FW_SUBS="$BIN_DIR/firewall_manager.sh|scripts/firewall_manager.sh
 $BIN_DIR/firewall_monitor|scripts/firewall_monitor
@@ -147,32 +140,20 @@ $BIN_DIR/firewall_stats.sh|scripts/firewall_stats.sh
 $BIN_DIR/vpn_scan.sh|scripts/vpn_scan.sh
 $NDM_DIR/100-firewall.sh|scripts/100-firewall.sh
 $INIT_DIR/S00ipset-load|scripts/S00ipset-load"
-        
-        IFS=$'\n'
-        for ROW in $FW_SUBS; do
-            local SUB_L=$(echo "$ROW" | cut -d'|' -f1)
-            local SUB_R=$(echo "$ROW" | cut -d'|' -f2)
+        IFS=$'\n'; for ROW in $FW_SUBS; do
+            local SUB_L=$(echo "$ROW" | cut -d'|' -f1); local SUB_R=$(echo "$ROW" | cut -d'|' -f2)
             if [ -f "$SUB_L" ]; then
-                echo -n "."
-                local SL_VER=$(get_version "$SUB_L")
-                local STMP="/tmp/chk_fw_sub.tmp"
+                echo -n "."; local SL_VER=$(get_version "$SUB_L"); local STMP="/tmp/chk_fw_sub.tmp"
                 curl -s -L "$BASE_URL/$FW_REPO/main/$SUB_R" -o "$STMP"
                 if [ -s "$STMP" ]; then
-                    local SR_VER=$(get_version "$STMP")
-                    ver_compare "$SR_VER" "$SL_VER"
-                    if [ $? -eq 1 ]; then
-                        UPD_FW=" -> ${MAGENTA}Patch${RESET}"
-                        rm -f "$STMP"
-                        break
-                    fi
+                    local SR_VER=$(get_version "$STMP"); ver_compare "$SR_VER" "$SL_VER"
+                    if [ $? -eq 1 ]; then UPD_FW=" -> ${MAGENTA}Patch${RESET}"; rm -f "$STMP"; break; fi
                 fi
                 rm -f "$STMP"
             fi
-        done
-        unset IFS
+        done; unset IFS
     fi
     
-    # 4. SMB Backup
     IFS='|' read -r N P R F <<EOF
 $T_SMB
 EOF
@@ -184,27 +165,18 @@ EOF
 check_and_install_deps() {
     PKG_LIST="$1"; MISSING=""
     for PKG in $PKG_LIST; do 
-        # 1. Check if package is installed via opkg
         if opkg list-installed | grep -q "^$PKG"; then continue; fi
-        
-        # 2. Check if binary exists (for built-in tools like awk, sed, grep)
         if command -v "$PKG" >/dev/null 2>&1; then continue; fi
-        
-        # 3. If neither, it's missing
         MISSING="$MISSING $PKG"
     done
-    
     if [ -n "$MISSING" ]; then
         echo -e " -> ${YELLOW}Missing:${RESET} $MISSING"; echo -n " -> Install? (y/n): "; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
             echo "    Installing..."; opkg update >/dev/null 2>&1; opkg install $MISSING
             if echo "$PKG_LIST" | grep -q "lighttpd"; then check_webserver_config "check"; fi
             if echo "$PKG_LIST" | grep -q "vnstat2"; then check_vnstat_config; fi
-        else 
-            return 1 # Failed/Skipped
-        fi
+        else return 1; fi
     else echo -e " -> ${GREEN}OK${RESET}"; fi
-    
     if echo "$PKG_LIST" | grep -q "lighttpd"; then check_webserver_config "check"; fi
     if echo "$PKG_LIST" | grep -q "vnstat2"; then check_vnstat_config; fi
     return 0
@@ -213,263 +185,20 @@ check_and_install_deps() {
 check_vnstat_config() {
     CONF="/opt/etc/vnstat.conf"
     if [ ! -f "$CONF" ]; then
-        echo -n " -> ${YELLOW}Configure vnStat (Recommended)? (y/n): ${RESET}"; read -r ans
+        echo -n " -> ${YELLOW}Configure vnStat (Download Config)? (y/n): ${RESET}"; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-            cat > "$CONF" <<EOF
-# vnStat 2.13 configuration file
-#
-# lines starting with # or ; are comments, everything has default
-# values, remove ; before each option to change its value
-
-# default interface (leave empty for automatic selection)
-;Interface ""
-
-# location of the database directory
-;DatabaseDir "/opt/var/lib/vnstat"
-
-# locale (LC_ALL) ("-" = use system locale)
-;Locale "-"
-
-# date output formats for -d, -m, -t and -w
-;DayFormat    "%Y-%m-%d"
-;MonthFormat  "%Y-%m"
-;TopFormat    "%Y-%m-%d"
-
-# characters used for visuals
-;RXCharacter       "%"
-;TXCharacter       ":"
-;RXHourCharacter   "r"
-;TXHourCharacter   "t"
-
-# how units are prefixed when traffic is shown
-# 0 = IEC standard prefixes (KiB/MiB/GiB...)
-# 1 = old style binary prefixes (KB/MB/GB...)
-# 2 = SI decimal prefixes (kB/MB/GB...)
-;UnitMode 0
-
-# used rate unit (0 = bytes, 1 = bits)
-;RateUnit 1
-
-# how units are prefixed when traffic rate is shown in bits
-# 0 = IEC binary prefixes (Kibit/s...)
-# 1 = SI decimal prefixes (kbit/s...)
-;RateUnitMode 1
-
-# output style
-# 0 = minimal & narrow, 1 = bar column visible
-# 2 = same as 1 except rate in summary
-# 3 = rate column visible
-;OutputStyle 3
-;EstimateBarVisible 1
-
-# number of decimals to use in outputs
-;DefaultDecimals 2
-;HourlyDecimals 1
-
-# spacer for separating hourly sections (0 = none, 1 = '|', 2 = '][', 3 = '[ ]')
-;HourlySectionStyle 2
-
-# how many seconds should sampling for -tr take by default
-;Sampletime 5
-
-# show animation at the beginning of -l / --live line (1 = enabled, 0 = disabled)
-;LiveSpinner 1
-
-# default query mode
-# 0 = summary, 1 = days, 2 = months, 3 = top, 4 = single summary, 5 = short
-# 7 = hours graph, 8 = xml, 9 = one line, 10 = json, 11 = hours, 12 = 5 minute
-;QueryMode 0
-
-# default list output entry limits (0 = all)
-;List5Mins       24
-;ListHours       24
-;ListDays        30
-;ListMonths      12
-;ListYears       0
-;ListTop         10
-
-# how to match interface given for query to interface in database
-# 0 = case sensitive exact match to interface name
-# 1 = method 0 followed by case sensitive exact match of alias
-# 2 = method 1 followed by case insensitive exact match of alias
-# 3 = method 2 followed by case insensitive beginning match of alias
-;InterfaceMatchMethod 3
-
-# visibility of estimate line and text used in it
-;EstimateVisible 1
-;EstimateText "estimated"
-
-# interface order (0 = alphabetical by name, 1 = alphabetical by alias)
-;InterfaceOrder 0
-
-# vnstatd
-##
-
-# switch to given user when started as root (leave empty to disable)
-;DaemonUser ""
-
-# switch to given group when started as root (leave empty to disable)
-;DaemonGroup ""
-
-# try to detect interface maximum bandwidth, 0 = disable feature
-# MaxBandwidth will be used as fallback value when enabled
-;BandwidthDetection 1
-
-# maximum bandwidth (Mbit) for all interfaces, 0 = disable feature
-# (unless interface specific limit is given)
-;MaxBandwidth 1000
-
-# interface specific limits
-#  example 8Mbit limit for eth0 (remove # to activate):
-#MaxBWeth0 8
-
-# data retention durations (-1 = unlimited, 0 = feature disabled)
-;5MinuteHours   48
-;HourlyDays       4
-;DailyDays       62
-;MonthlyMonths  25
-;YearlyYears     -1
-;TopDayEntries  20
-
-# how often (in seconds) interface data is updated
-;UpdateInterval 60
-
-# how often (in seconds) interface status changes are checked
-;PollInterval 30
-
-# how often (in minutes) data is saved to database
-;SaveInterval 5
-
-# how often (in minutes) data is saved when all interface are offline
-;OfflineSaveInterval 30
-
-# rescan database after save for new interfaces to be monitored (1 = enabled, 0 = disabled)
-;RescanDatabaseOnSave 1
-
-# automatically start monitoring all interfaces not found in the database
-# (1 = enabled, 0 = disabled)
-;AlwaysAddNewInterfaces 0
-
-# on which day should months change
-;MonthRotate 1
-;MonthRotateAffectsYears 0
-
-# filesystem disk space check (1 = enabled, 0 = disabled)
-;CheckDiskSpace 1
-
-# how much the boot time can variate between updates (seconds)
-;BootVariation 15
-
-# create database entries even when there is no traffic (1 = enabled, 0 = disabled)
-;TrafficlessEntries 1
-
-# how many minutes to wait during daemon startup for system clock to
-# sync time if most recent database update appears to be in the future
-;TimeSyncWait 5
-
-# how often (in minutes) bandwidth detection is done when
-# BandwidthDetection is enabled (0 = disabled)
-;BandwidthDetectionInterval 5
-
-# force data save when interface status changes (1 = enabled, 0 = disabled)
-;SaveOnStatusChange 1
-
-# enable / disable logging (0 = disabled, 1 = logfile, 2 = syslog)
-;UseLogging 2
-
-# create dirs if needed (1 = enabled, 0 = disabled)
-;CreateDirs 1
-
-# update ownership of files if needed (1 = enabled, 0 = disabled)
-;UpdateFileOwner 1
-
-# file used for logging if UseLogging is set to 1
-;LogFile "/opt/var/log/vnstat/vnstat.log"
-
-# file used as daemon pid / lock file
-;PidFile "/opt/var/run/vnstat/vnstat.pid"
-
-# 1 = 64-bit, 0 = 32-bit, -1 = old style logic, -2 = automatic detection
-;64bitInterfaceCounters -2
-
-# use SQLite Write-Ahead Logging mode (1 = enabled, 0 = disabled)
-;DatabaseWriteAheadLogging 0
-
-# change the setting of the SQLite "synchronous" flag
-# (-1 = auto, 0 = off, 1, = normal, 2 = full, 3 = extra)
-;DatabaseSynchronous -1
-
-# database uses UTC instead of local timezone (1 = enabled, 0 = disabled)
-;UseUTC 0
-
-# database maintenance (1 = enabled, 0 = disabled)
-;VacuumOnStartup 1
-;VacuumOnHUPSignal 1
-
-# vnstati
-##
-
-# title timestamp format
-;HeaderFormat "%Y-%m-%d %H:%M"
-
-# show hours with rate (1 = enabled, 0 = disabled)
-;HourlyRate 1
-
-# show rate in summary (1 = enabled, 0 = disabled)
-;SummaryRate 1
-
-# transparent background (1 = enabled, 0 = disabled)
-;TransparentBg 0
-
-# image size control
-;LargeFonts 0
-;LineSpacingAdjustment 0
-;ImageScale 100
-
-# 5 minutes graph size control
-;5MinuteGraphResultCount 576
-;5MinuteGraphHeight 300
-
-# hourly graph mode (0 = 24 hour sliding window, 1 = begins from midnight)
-;HourlyGraphMode 0
-
-# horizontal/vertical summary graph (0 = hours, 1 = 5 minutes)
-;SummaryGraph 0
-
-# traffic estimate bar style
-# (0 = not shown, 1 = continuation of existing bar, 2 = separate bar)
-;EstimateStyle 1
-
-# bar column in list outputs shows rate if OutputStyle is 3
-# (1 = enabled, 0 = disabled)
-;BarColumnShowsRate 0
-
-# image colors
-;CBackground      "FFFFFF"
-;CEdge            "AEAEAE"
-;CHeader          "606060"
-;CHeaderTitle     "FFFFFF"
-;CHeaderDate      "FFFFFF"
-;CText            "000000"
-;CLine            "B0B0B0"
-;CLineL           "-"
-;CPercentileLine "CF0045"
-;CRx              "92CF00"
-;CTx              "606060"
-;CRxD             "-"
-;CTxD             "-"
-;CTotal           "0098CF"
-EOF
-            # Try S32vnstat2 first
-            if [ -x /opt/etc/init.d/S32vnstat2 ]; then
-                /opt/etc/init.d/S32vnstat2 restart >/dev/null 2>&1
-                echo -e "    ${GREEN}vnStat Configured & Restarted (S32vnstat2).${RESET}"
-            elif [ -x /opt/etc/init.d/S26vnstatd ]; then
-                /opt/etc/init.d/S26vnstatd restart >/dev/null 2>&1
-                echo -e "    ${GREEN}vnStat Configured & Restarted (S26vnstatd).${RESET}"
+            echo -n "    Downloading vnstat.conf from KeenTool repo... "
+            # Download from KeenTool repo root
+            curl -s -L "$BASE_URL/KeenTool/main/vnstat.conf" -o "$CONF"
+            if [ -s "$CONF" ]; then
+                echo -e "${GREEN}OK${RESET}"
+                chmod 644 "$CONF"
             else
-                echo -e "    ${YELLOW}vnStat Configured but init script not found.${RESET}"
+                echo -e "${RED}Failed (Using Minimal Fallback)${RESET}"
+                echo 'Interface ""' > "$CONF"; echo 'DatabaseDir "/opt/var/lib/vnstat"' >> "$CONF"
             fi
+            # Restart service
+            if [ -x /opt/etc/init.d/S32vnstat2 ]; then /opt/etc/init.d/S32vnstat2 restart >/dev/null 2>&1; fi
         fi
     fi
 }
@@ -477,43 +206,21 @@ EOF
 check_webserver_config() {
     MODE=$1
     CONF="/opt/etc/lighttpd/lighttpd.conf"
-    
     if [ ! -d "$WEB_ROOT" ]; then mkdir -p "$WEB_ROOT"; fi
-
     if [ ! -f "$WEB_ROOT/index.html" ] || [ "$MODE" = "force" ]; then
          echo -n " -> Downloading Dashboard to $WEB_ROOT... "
          curl -s -L "$BASE_URL/KeenTool/main/index.html" -o "$WEB_ROOT/index.html"
-         if [ -s "$WEB_ROOT/index.html" ]; then
-            echo -e "${GREEN}OK${RESET}"; chmod 644 "$WEB_ROOT/index.html"
-         else
-            echo -e "${RED}Failed download! Creating Stub.${RESET}"
-            echo "<h1>Keenetic Dashboard</h1><p>Apps installed via Keentool.</p>" > "$WEB_ROOT/index.html"
-            chmod 644 "$WEB_ROOT/index.html"
-         fi
+         [ -s "$WEB_ROOT/index.html" ] && chmod 644 "$WEB_ROOT/index.html"
     fi
-
     if [ -f "$CONF" ]; then
         if grep -q "server.port.*=.*81" "$CONF" && [ "$MODE" != "force" ]; then return 0; fi
     fi
-    
     if [ "$MODE" != "force" ]; then
         echo -n " -> ${YELLOW}Configure Lighttpd (Port 81)? (y/n): ${RESET}"; read -r ans
         [ "$ans" != "y" ] && [ "$ans" != "Y" ] && return 0
     fi
-
     mkdir -p /opt/etc/lighttpd
-    
     cat > "$CONF" <<EOF
-### Documentation
-# https://wiki.lighttpd.net/
-#
-### Configuration Syntax
-# https://wiki.lighttpd.net/Docs_Configuration
-#
-### Configuration Options
-# https://wiki.lighttpd.net/Docs_ConfigurationOptions
-#
-### Configuration Variables (potentially used in /opt/etc/lighttpd/conf.d/*.conf)
 var.log_root    = "/opt/var/log/lighttpd/"
 var.server_root = "/opt/var/www/"
 var.state_dir   = "/opt/var/run/"
@@ -522,32 +229,16 @@ var.conf_dir    = "/opt/etc/lighttpd"
 var.vhosts_dir  = server_root + "/vhosts"
 var.cache_dir   = "/opt/var/cache/lighttpd"
 var.socket_dir  = home_dir + "/sockets"
-
-### OpenWRT lighttpd base configuration
-server.document-root        = server_root
-server.upload-dirs          = ( "/opt/tmp" )
-server.errorlog             = log_root + "error.log"
-server.pid-file             = state_dir + "lighttpd.pid"
-#server.username             = "http"
-#server.groupname            = "www-data"
+server.document-root = server_root
+server.upload-dirs = ( "/opt/tmp" )
+server.errorlog = log_root + "error.log"
+server.pid-file = state_dir + "lighttpd.pid"
 server.port = 81
-
-# historical; preserved for compatibility; should have been disabled by default
-index-file.names            = ( "index.php", "index.html",
-                                "index.htm", "default.htm",
-                                "index.html.htm" )
-
+index-file.names = ( "index.php", "index.html", "index.htm" )
 static-file.exclude-extensions = ( ".php", ".pl", ".fcgi" )
-
 include "/opt/etc/lighttpd/mime.conf"
 include "/opt/etc/lighttpd/conf.d/*.conf"
-
-### Customizations
-# customizations should generally be placed in separate files such as
-#   /opt/etc/lighttpd/conf.d/00_vars.conf    # override variables for conf.d/*.conf
-#   /opt/etc/lighttpd/conf.d/zz_custom.conf  # override other conf.d/*.conf settings
 EOF
-    
     [ -x /opt/etc/init.d/S80lighttpd ] && { /opt/etc/init.d/S80lighttpd restart >/dev/null 2>&1; echo -e "    ${GREEN}Configured & Restarted.${RESET}"; }
 }
 
@@ -579,16 +270,120 @@ smart_process() {
     fi
 }
 
-# --- CRON ---
-cron_exists() { grep -Fq "$1" "$CRON_FILE"; }
-add_cron() { if ! cron_exists "$1"; then echo "$1" >> "$CRON_FILE"; echo -e "    ${GREEN}Added.${RESET}"; else echo -e "    ${YELLOW}Exists.${RESET}"; fi; }
-remove_cron() { if cron_exists "$1"; then grep -Fv "$1" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; echo -e "    ${RED}Removed.${RESET}"; fi; }
+# --- CRON MANAGEMENT (INTERACTIVE) ---
+
+sanitize_cron() {
+    [ ! -f "$CRON_FILE" ] && touch "$CRON_FILE"
+    chmod 644 "$CRON_FILE"
+    grep -v "^[[:space:]]*$" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
+    if [ -s "$CRON_FILE" ] && [ "$(tail -c 1 "$CRON_FILE")" != "" ]; then echo "" >> "$CRON_FILE"; fi
+}
+
+# Checks if a COMMAND string exists in cron (ignores schedule part)
+cron_cmd_active() {
+    grep -Fq "$1" "$CRON_FILE"
+}
+
+# Gets the existing cron line for display
+get_cron_line() {
+    grep -F "$1" "$CRON_FILE" | head -n 1
+}
+
+interactive_cron_builder() {
+    CMD_TO_ADD="$1"
+    echo -e "${CYAN}Configure Schedule:${RESET}"
+    echo " 1. Every X Minutes"
+    echo " 2. Every X Hours"
+    echo " 3. Daily at specific time"
+    echo -n "Select [1-3]: "
+    read -r opt
+    
+    SCHED=""
+    case $opt in
+        1)
+            echo -n "Run every how many minutes? (e.g. 10): "
+            read -r mins
+            [ -z "$mins" ] && mins="10"
+            SCHED="*/$mins * * * *"
+            ;;
+        2)
+            echo -n "Run every how many hours? (e.g. 1): "
+            read -r hrs
+            [ -z "$hrs" ] && hrs="1"
+            SCHED="0 */$hrs * * *"
+            ;;
+        3)
+            echo -n "At what hour? (0-23): "
+            read -r hh
+            echo -n "At what minute? (0-59): "
+            read -r mm
+            [ -z "$hh" ] && hh="03"
+            [ -z "$mm" ] && mm="00"
+            SCHED="$mm $hh * * *"
+            ;;
+        *)
+            echo "Invalid selection. Defaulting to daily 04:00."
+            SCHED="0 4 * * *"
+            ;;
+    esac
+    
+    FINAL_LINE="$SCHED $CMD_TO_ADD"
+    echo -e " -> Adding: ${BOLD}$FINAL_LINE${RESET}"
+    echo "$FINAL_LINE" >> "$CRON_FILE"
+    sanitize_cron
+    echo -e "    ${GREEN}Scheduled.${RESET}"
+}
+
+remove_cron_cmd() {
+    CMD_TO_REM="$1"
+    grep -Fv "$CMD_TO_REM" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
+    sanitize_cron
+    echo -e "    ${RED}Removed.${RESET}"
+}
+
 manage_cron_menu() {
-    echo -e "${BOLD}Cron Jobs:${RESET}"; MISSING=0
-    for L in "$@"; do if cron_exists "$L"; then echo -e "  [${GREEN}ON${RESET}] ${DIM}${L:0:50}...${RESET}"; else echo -e "  [${RED}OFF${RESET}] ${DIM}${L:0:50}...${RESET}"; MISSING=1; fi; done
+    # Expects list of full command strings (without schedule)
+    # Passed as separate arguments
+    
+    echo -e "${BOLD}Cron Jobs:${RESET}"
+    MISSING_COUNT=0
+    
+    # First pass: Status
+    for CMD in "$@"; do
+        # Extract script name for display (e.g. "traffic_manager.sh")
+        SCRIPT_NAME=$(echo "$CMD" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
+        
+        if cron_cmd_active "$CMD"; then
+            EXISTING=$(get_cron_line "$CMD")
+            # Show just the schedule part mostly
+            SCHED_PART=$(echo "$EXISTING" | cut -d'/' -f1-5 | cut -c 1-20)
+            echo -e "  [${GREEN}ON${RESET}] $SCRIPT_NAME (${DIM}$SCHED_PART...${RESET})"
+        else
+            echo -e "  [${RED}OFF${RESET}] $SCRIPT_NAME"
+            MISSING_COUNT=$((MISSING_COUNT+1))
+        fi
+    done
     echo ""
-    if [ $MISSING -eq 1 ]; then echo -n " -> Enable missing? (y/n): "; read -r ans; [ "$ans" = "y" ] && for L in "$@"; do add_cron "$L"; done
-    else echo -n " -> Disable jobs? (y/n): "; read -r ans; [ "$ans" = "y" ] && for L in "$@"; do remove_cron "$L"; done; fi
+    
+    if [ $MISSING_COUNT -gt 0 ]; then
+        echo -n " -> Configure missing jobs? (y/n): "; read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+            for CMD in "$@"; do
+                if ! cron_cmd_active "$CMD"; then
+                    SCRIPT_NAME=$(echo "$CMD" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
+                    echo -e "\n[Setup] $SCRIPT_NAME"
+                    interactive_cron_builder "$CMD"
+                fi
+            done
+        fi
+    else
+        echo -n " -> Disable/Remove jobs? (y/n): "; read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+            for CMD in "$@"; do
+                remove_cron_cmd "$CMD"
+            done
+        fi
+    fi
 }
 
 # --- ACTIONS ---
@@ -608,7 +403,6 @@ action_firewall() {
         echo -e "Firewall Suite Status: $S_MAIN"; echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Run Manager"; echo " 4. Run Monitor"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
         case $op in
             1) header;
-               # Smart check logic:
                check_and_install_deps "$DEPS_FW"
                RES_DEPS=$?
                if [ $RES_DEPS -ne 0 ]; then
@@ -616,9 +410,7 @@ action_firewall() {
                    read -r ans
                    if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then pause; break; fi
                fi
-               
                REPO="$FW_REPO"
-               # Added 'scripts/' prefix to all firewall files
                smart_process "Manager" "$BIN_DIR/firewall_manager.sh" $REPO "scripts/firewall_manager.sh"
                smart_process "Monitor" "$BIN_DIR/firewall_monitor" $REPO "scripts/firewall_monitor"
                smart_process "Stats" "$BIN_DIR/firewall_stats.sh" $REPO "scripts/firewall_stats.sh"
@@ -627,7 +419,7 @@ action_firewall() {
                smart_process "Netfilter" "$NDM_DIR/100-firewall.sh" $REPO "scripts/100-firewall.sh"
                smart_process "Init" "$INIT_DIR/S00ipset-load" $REPO "scripts/S00ipset-load"
                pause ;;
-            2) header; manage_cron_menu "$C_FW_STAT" "$C_FW_UPD" "$C_FW_VPN"; pause ;;
+            2) header; manage_cron_menu "$CMD_FW_STAT" "$CMD_FW_UPD" "$CMD_FW_VPN"; pause ;;
             3) [ -f "$BIN_DIR/firewall_manager.sh" ] && $BIN_DIR/firewall_manager.sh || { echo "Missing"; sleep 1; };;
             4) [ -f "$BIN_DIR/firewall_monitor" ] && $BIN_DIR/firewall_monitor || { echo "Missing"; sleep 1; };;
             0) return ;;
@@ -665,10 +457,10 @@ EOF
     echo ""; echo -n "Select: "; read choice
     case $choice in
         0) setup_system ;;
-        1) action_generic "$T_VNSTAT" "$C_VNSTAT" "$C_VNSTAT_GEN" ;;
-        2) action_generic "$T_PING" "$C_PING" ;;
+        1) action_generic "$T_VNSTAT" "$CMD_VNSTAT" ;;
+        2) action_generic "$T_PING" "$CMD_PING" ;;
         3) action_firewall ;;
-        4) action_generic "$T_SMB" "$C_SMB" ;;
+        4) action_generic "$T_SMB" "$CMD_SMB" ;;
         u) perform_global_scan ;;
         s) action_self_update ;;
         c) header; cat $CRON_FILE; pause ;;
