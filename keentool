@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.9 (ALPHA)
+# KEENTOOL MANAGER v0.4.10 (ALPHA)
 # Author: MatthewEli
 # Features:
-#   - UPDATE: Firewall Scan now checks ALL suite files (Manager, Monitor, etc.).
-#   - FIREWALL: Added 'iprange' dependency for blocklist optimization.
-#   - CONFIG: Updated vnStat 2.13 configuration template.
+#   - CORE: Smart Dependency Check (checks binary existence before opkg).
+#   - UX: Allows continuing update process even if dependency install is skipped.
+#   - UPDATE: Firewall Scan checks ALL suite files.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -57,7 +57,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.9 ${RESET}${YELLOW}(Alpha)${RESET}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.10 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -132,12 +132,10 @@ EOF
     check_tool_status "UPD_PING" "$P" "$R" "$F"
     
     # 3. Firewall Suite (Advanced Check)
-    # First check main core (update_blocklist.sh)
     check_tool_status "UPD_FW" "$FW_CORE_LOCAL" "$FW_REPO" "scripts/update_blocklist.sh"
     
     # If Core is up to date, check all components
     if [ -z "$UPD_FW" ] && [ -f "$FW_CORE_LOCAL" ]; then
-        # List of sub-components to check
         FW_SUBS="$BIN_DIR/firewall_manager.sh|scripts/firewall_manager.sh
 $BIN_DIR/firewall_monitor|scripts/firewall_monitor
 $BIN_DIR/firewall_stats.sh|scripts/firewall_stats.sh
@@ -160,7 +158,7 @@ $INIT_DIR/S00ipset-load|scripts/S00ipset-load"
                     if [ $? -eq 1 ]; then
                         UPD_FW=" -> ${MAGENTA}Patch${RESET}"
                         rm -f "$STMP"
-                        break # Found update, exit loop
+                        break
                     fi
                 fi
                 rm -f "$STMP"
@@ -180,14 +178,26 @@ EOF
 # --- DEPENDENCY & INSTALL ---
 check_and_install_deps() {
     PKG_LIST="$1"; MISSING=""
-    for PKG in $PKG_LIST; do if ! opkg list-installed | grep -q "^$PKG"; then MISSING="$MISSING $PKG"; fi; done
+    for PKG in $PKG_LIST; do 
+        # 1. Check if package is installed via opkg
+        if opkg list-installed | grep -q "^$PKG"; then continue; fi
+        
+        # 2. Check if binary exists (for built-in tools like awk, sed, grep)
+        if command -v "$PKG" >/dev/null 2>&1; then continue; fi
+        
+        # 3. If neither, it's missing
+        MISSING="$MISSING $PKG"
+    done
+    
     if [ -n "$MISSING" ]; then
         echo -e " -> ${YELLOW}Missing:${RESET} $MISSING"; echo -n " -> Install? (y/n): "; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
             echo "    Installing..."; opkg update >/dev/null 2>&1; opkg install $MISSING
             if echo "$PKG_LIST" | grep -q "lighttpd"; then check_webserver_config "check"; fi
             if echo "$PKG_LIST" | grep -q "vnstat2"; then check_vnstat_config; fi
-        else return 1; fi
+        else 
+            return 1 # Failed/Skipped
+        fi
     else echo -e " -> ${GREEN}OK${RESET}"; fi
     
     if echo "$PKG_LIST" | grep -q "lighttpd"; then check_webserver_config "check"; fi
@@ -592,7 +602,17 @@ action_firewall() {
         header; if [ -f "$FW_CORE_LOCAL" ]; then V_CORE=$(get_version "$FW_CORE_LOCAL"); S_MAIN="${GREEN}Installed (v$V_CORE)${RESET}"; else S_MAIN="${DIM}Missing${RESET}"; fi
         echo -e "Firewall Suite Status: $S_MAIN"; echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Run Manager"; echo " 4. Run Monitor"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
         case $op in
-            1) header; check_and_install_deps "$DEPS_FW" || { pause; break; }; REPO="$FW_REPO"
+            1) header;
+               # Smart check logic:
+               check_and_install_deps "$DEPS_FW"
+               RES_DEPS=$?
+               if [ $RES_DEPS -ne 0 ]; then
+                   echo -n " -> Dependencies missing. Continue anyway? (y/n): "
+                   read -r ans
+                   if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then pause; break; fi
+               fi
+               
+               REPO="$FW_REPO"
                # Added 'scripts/' prefix to all firewall files
                smart_process "Manager" "$BIN_DIR/firewall_manager.sh" $REPO "scripts/firewall_manager.sh"
                smart_process "Monitor" "$BIN_DIR/firewall_monitor" $REPO "scripts/firewall_monitor"
