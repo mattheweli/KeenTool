@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.10 (ALPHA)
+# KEENTOOL MANAGER v0.4.11 (ALPHA)
 # Author: MatthewEli
 # Features:
-#   - CORE: Smart Dependency Check (checks binary existence before opkg).
-#   - UX: Allows continuing update process even if dependency install is skipped.
-#   - UPDATE: Firewall Scan checks ALL suite files.
+#   - PATH: Updated Ping Monitor path to /opt/bin/pingtool.sh.
+#   - CRON: Updated Ping Monitor cron job to match new path.
+#   - CORE: Smart Dependency Check & Soft Fail.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -17,7 +17,6 @@ BASE_URL="https://raw.githubusercontent.com/$REPO_USER"
 
 # DIRECTORIES
 BIN_DIR="/opt/bin"
-PING_DIR="/opt/etc/pingtool"
 NDM_DIR="/opt/etc/ndm/netfilter.d"
 INIT_DIR="/opt/etc/init.d"
 WEB_ROOT="/opt/var/www"
@@ -33,7 +32,10 @@ DEPS_SMB="bash tar samba4-client coreutils-date"
 # --- TOOL DEFINITIONS ---
 T_SELF="Keentool Manager|$BIN_DIR/keentool|KeenTool|keentool"
 T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|Script/traffic_manager.sh"
-T_PING="Ping Monitor|$PING_DIR/pingtool_keenetic.sh|keenetic-pingtool|scripts/pingtool.sh"
+
+# UPDATED: Ping Monitor now in /opt/bin/pingtool.sh
+T_PING="Ping Monitor|$BIN_DIR/pingtool.sh|keenetic-pingtool|scripts/pingtool.sh"
+
 T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|Script/smb_backup_tool.sh"
 FW_CORE_LOCAL="$BIN_DIR/update_blocklist.sh"
 FW_REPO="keenetic-firewall"
@@ -41,7 +43,10 @@ FW_REPO="keenetic-firewall"
 # --- CRON STRINGS ---
 CRON_FILE="/opt/etc/crontab"
 C_VNSTAT="*/10 * * * * root /opt/bin/traffic_manager.sh ppp0 >/opt/var/log/t_manager.log 2>&1"
-C_PING="12,42 * * * * root /opt/etc/pingtool/pingtool_keenetic.sh >> /opt/var/log/connmon.log 2>&1"
+
+# UPDATED: Cron for Ping Monitor
+C_PING="12,42 * * * * root /opt/bin/pingtool.sh >> /opt/var/log/connmon.log 2>&1"
+
 C_FW_STAT="59 * * * * root /opt/bin/firewall_stats.sh > /dev/null 2>&1"
 C_FW_UPD="0 4 * * * root /opt/bin/update_blocklist.sh > /dev/null 2>&1"
 C_FW_VPN="12 */3 * * * root /opt/bin/vpn_scan.sh > /dev/null 2>&1"
@@ -57,7 +62,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.10 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.11 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
