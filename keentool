@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.17 (ALPHA)
+# KEENTOOL MANAGER v0.4.18 (ALPHA)
 # Author: MatthewEli
 # Features:
-#   - CRON: Added 'chown root:root' to enforce ownership (fixes BAD FILE MODE).
-#   - CRON: Verify function checks permissions, ownership, and formatting.
-#   - FIX: Auto-sanitize downloaded files (removes Windows ^M/CR characters).
+#   - CRON: Enforce permissions 600 (Strict Mode) to fix BAD FILE MODE.
+#   - CRON: Sync logic ensures /opt/etc/crontab is linked to spool/root.
+#   - FIX: Auto-sanitize downloaded files.
 #   - CORE: Smart Dependency Check.
 # ==============================================================================
 
@@ -39,6 +39,8 @@ FW_REPO="keenetic-firewall"
 
 # --- CRON COMMANDS ---
 CRON_FILE="/opt/etc/crontab"
+CRON_SPOOL_DIR="/opt/var/spool/cron/crontabs"
+CRON_SPOOL_FILE="$CRON_SPOOL_DIR/root"
 
 CMD_VNSTAT="root /opt/bin/traffic_manager.sh ppp0 >/opt/var/log/t_manager.log 2>&1"
 CMD_PING="root /opt/bin/pingtool.sh >> /opt/var/log/connmon.log 2>&1"
@@ -57,7 +59,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.17 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.18 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -77,7 +79,7 @@ EOF
     if [ $RES -eq 1 ]; then
         echo -e "${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"; echo -n " -> Apply & Restart? (y/n): "; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
-            sed -i 's/\r$//' "$TMP_FILE" # Sanitize self
+            sed -i 's/\r$//' "$TMP_FILE"
             mv "$TMP_FILE" "$P"; chmod +x "$P"
             echo -e "${GREEN}Updated.${RESET}"; sleep 1; exec "$P"
         else rm -f "$TMP_FILE"; pause; fi
@@ -87,7 +89,7 @@ EOF
         if [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; then
             echo -e "${CYAN}MD5 Differs.${RESET}"; echo -n " -> Force Reinstall? (y/n): "; read -r ans
             if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
-                sed -i 's/\r$//' "$TMP_FILE" # Sanitize self
+                sed -i 's/\r$//' "$TMP_FILE"
                 mv "$TMP_FILE" "$P"; chmod +x "$P"
                 echo "Reinstalling..."; sleep 1; exec "$P"
             else rm -f "$TMP_FILE"; pause; fi
@@ -132,12 +134,10 @@ perform_global_scan() {
 $T_VNSTAT
 EOF
     check_tool_status "UPD_VNSTAT" "$P" "$R" "$F"
-    
     IFS='|' read -r N P R F <<EOF
 $T_PING
 EOF
     check_tool_status "UPD_PING" "$P" "$R" "$F"
-    
     check_tool_status "UPD_FW" "$FW_CORE_LOCAL" "$FW_REPO" "scripts/update_blocklist.sh"
     
     if [ -z "$UPD_FW" ] && [ -f "$FW_CORE_LOCAL" ]; then
@@ -160,7 +160,6 @@ $INIT_DIR/S00ipset-load|scripts/S00ipset-load"
             fi
         done; unset IFS
     fi
-    
     IFS='|' read -r N P R F <<EOF
 $T_SMB
 EOF
@@ -249,7 +248,6 @@ install_file() {
     REPO=$1; RFILE=$2; LPATH=$3; DIR=$(dirname "$LPATH"); mkdir -p "$DIR"
     echo -n " -> Downloading ${CYAN}${RFILE##*/}${RESET}... "; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$LPATH"
     if [ -s "$LPATH" ]; then 
-        # FIX: Force removal of Windows CR line endings
         sed -i 's/\r$//' "$LPATH"
         chmod +x "$LPATH"; echo -e "${GREEN}OK${RESET}"; return 0
     else 
@@ -270,7 +268,7 @@ smart_process() {
     if [ $RES -eq 1 ]; then
         echo -e "${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"; echo -n "    Apply? (y/n): "; read -r ans
         [ "$ans" = "y" ] && { 
-            sed -i 's/\r$//' "$TMP_FILE" # Sanitize
+            sed -i 's/\r$//' "$TMP_FILE"
             mv "$TMP_FILE" "$LPATH"; chmod +x "$LPATH"; echo -e "    ${GREEN}Updated.${RESET}"; 
         } || rm -f "$TMP_FILE"
     elif [ $RES -eq 2 ]; then echo -e "${YELLOW}Local Newer.${RESET}"; rm -f "$TMP_FILE"
@@ -278,7 +276,7 @@ smart_process() {
         if [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then
             echo -e "${CYAN}MD5 Differs.${RESET}"; echo -n "    Overwrite local? (y/n): "; read -r ans
             [ "$ans" = "y" ] && { 
-                sed -i 's/\r$//' "$TMP_FILE" # Sanitize
+                sed -i 's/\r$//' "$TMP_FILE"
                 mv "$TMP_FILE" "$LPATH"; chmod +x "$LPATH"; echo -e "    ${GREEN}Replaced.${RESET}"; 
             } || rm -f "$TMP_FILE"
         else echo -e "${GREEN}Up to date.${RESET}"; rm -f "$TMP_FILE"; fi
@@ -290,44 +288,46 @@ smart_process() {
 sanitize_cron() {
     [ ! -f "$CRON_FILE" ] && touch "$CRON_FILE"
     
-    # 1. Fix Ownership & Permissions (Crucial for Cron "BAD FILE MODE")
+    # 1. Enforce STRICT Mode (600) + Ownership
     chown root:root "$CRON_FILE"
-    chmod 644 "$CRON_FILE"
+    chmod 600 "$CRON_FILE"
     
-    # 2. Remove empty lines
+    # 2. Cleanup
     grep -v "^[[:space:]]*$" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
-    
-    # 3. Deduplicate exact lines
     awk '!seen[$0]++' "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
-    
-    # 4. Ensure newline at EOF
     if [ -s "$CRON_FILE" ] && [ "$(tail -c 1 "$CRON_FILE")" != "" ]; then echo "" >> "$CRON_FILE"; fi
 }
 
 action_verify_cron() {
     header
-    echo -e "${BOLD}Verifying Crontab Integrity...${RESET}"
-    CRON_PATH="/opt/etc/crontab"
+    echo -e "${BOLD}Verifying Crontab (Advanced)...${RESET}"
     
-    # 1. Check/Create
-    if [ ! -f "$CRON_PATH" ]; then
-        echo -n " -> File missing. Creating... "; touch "$CRON_PATH"; echo -e "${GREEN}Created.${RESET}"
-    else
-        echo -e " -> File exists."
-    fi
+    # 1. Master File Check
+    if [ ! -f "$CRON_FILE" ]; then touch "$CRON_FILE"; echo -e " -> Master Created."; fi
     
-    # 2. Enforce Permissions & Ownership
-    echo -n " -> Enforcing permissions (root:root 644)... "
-    chown root:root "$CRON_PATH"
-    chmod 644 "$CRON_PATH"
+    # 2. Enforce Strict Permissions (600)
+    echo -n " -> Enforcing Strict Mode (600)... "
+    chown root:root "$CRON_FILE"
+    chmod 600 "$CRON_FILE"
     echo -e "${GREEN}Done.${RESET}"
     
-    # 3. Sanitize
+    # 3. Sanitize Content
     echo -n " -> Cleaning (Dedup/Format)... "
-    L1=$(wc -l < "$CRON_PATH"); sanitize_cron; L2=$(wc -l < "$CRON_PATH")
-    if [ "$L1" -ne "$L2" ]; then echo -e "${YELLOW}Cleaned ($((L1-L2)) lines removed).${RESET}"; else echo -e "${GREEN}OK.${RESET}"; fi
+    L1=$(wc -l < "$CRON_FILE"); sanitize_cron; L2=$(wc -l < "$CRON_FILE")
+    if [ "$L1" -ne "$L2" ]; then echo -e "${YELLOW}Cleaned ($((L1-L2)) lines).${RESET}"; else echo -e "${GREEN}OK.${RESET}"; fi
     
-    # 4. Restart
+    # 4. Sync to Spool (Fixes "wrong file" issue)
+    echo -n " -> Syncing to Spool (root)... "
+    if [ -d "$CRON_SPOOL_DIR" ]; then
+        cp "$CRON_FILE" "$CRON_SPOOL_FILE"
+        chown root:root "$CRON_SPOOL_FILE"
+        chmod 600 "$CRON_SPOOL_FILE"
+        echo -e "${GREEN}Synced.${RESET}"
+    else
+        echo -e "${YELLOW}Spool dir not found (Skipped).${RESET}"
+    fi
+    
+    # 5. Restart
     echo -n " -> Restarting Cron Daemon... "
     if [ -x /opt/etc/init.d/S10cron ]; then /opt/etc/init.d/S10cron restart >/dev/null 2>&1; echo -e "${GREEN}Done.${RESET}"; else echo -e "${RED}Service missing.${RESET}"; fi
     
@@ -345,15 +345,13 @@ interactive_cron_builder() {
     echo " 3. Daily at specific time"
     echo -n "Select [1-3]: "
     read -r opt
-    
     SCHED=""
     case $opt in
-        1) echo -n "Run every how many minutes? (e.g. 10): "; read -r mins; [ -z "$mins" ] && mins="10"; SCHED="*/$mins * * * *" ;;
-        2) echo -n "Run every how many hours? (e.g. 1): "; read -r hrs; [ -z "$hrs" ] && hrs="1"; SCHED="0 */$hrs * * *" ;;
-        3) echo -n "At what hour? (0-23): "; read -r hh; echo -n "At what minute? (0-59): "; read -r mm; [ -z "$hh" ] && hh="03"; [ -z "$mm" ] && mm="00"; SCHED="$mm $hh * * *" ;;
+        1) echo -n "Minutes (e.g. 10): "; read -r mins; [ -z "$mins" ] && mins="10"; SCHED="*/$mins * * * *" ;;
+        2) echo -n "Hours (e.g. 1): "; read -r hrs; [ -z "$hrs" ] && hrs="1"; SCHED="0 */$hrs * * *" ;;
+        3) echo -n "Hour (0-23): "; read -r hh; echo -n "Minute (0-59): "; read -r mm; [ -z "$hh" ] && hh="03"; [ -z "$mm" ] && mm="00"; SCHED="$mm $hh * * *" ;;
         *) echo "Invalid. Defaulting to daily 04:00."; SCHED="0 4 * * *" ;;
     esac
-    
     FINAL_LINE="$SCHED $CMD_TO_ADD"
     echo -e " -> Adding: ${BOLD}$FINAL_LINE${RESET}"
     echo "$FINAL_LINE" >> "$CRON_FILE"
