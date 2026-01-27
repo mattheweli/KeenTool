@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.22 (ALPHA)
+# KEENTOOL MANAGER v0.4.23 (ALPHA)
 # Author: MatthewEli
 # Features:
+#   - CRON: Strict Permission Enforcement (600) & Service Restart on ANY change.
+#   - FIREWALL: Fixed Regex for AbuseIPDB Key injection (overwrite any existing value).
 #   - UNINSTALL: Added full uninstallation (Files + Cron) for all tools.
 #   - DASHBOARD: Menu now displays installed version.
-#   - FIREWALL: Setup Wizard preserves AbuseIPDB API Key.
-#   - CORE: Smart Dependency Check & Auto-Sanitize.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -61,7 +61,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.22 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.23 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -111,7 +111,7 @@ setup_system() {
         echo -e "${RED}Stopped${RESET}"; echo -n " -> Start Cron? (y/n): "; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then /opt/etc/init.d/S10cron start; echo -e "    ${GREEN}Started.${RESET}"; fi
     fi
-    sanitize_cron
+    sanitize_and_reload_cron
     echo ""; echo -e "${BOLD}System Ready.${RESET}"; pause
 }
 
@@ -306,24 +306,52 @@ smart_process() {
 
 # --- CRON MANAGEMENT ---
 
-sanitize_cron() {
+sanitize_and_reload_cron() {
+    # 1. Ensure file exists
     [ ! -f "$CRON_FILE" ] && touch "$CRON_FILE"
+    
+    # 2. Fix Ownership & strict permissions (root only)
     chown root:root "$CRON_FILE"
     chmod 600 "$CRON_FILE"
+    
+    # 3. Format cleanup (remove blank lines, dupes)
     grep -v "^[[:space:]]*$" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     awk '!seen[$0]++' "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     if [ -s "$CRON_FILE" ] && [ "$(tail -c 1 "$CRON_FILE")" != "" ]; then echo "" >> "$CRON_FILE"; fi
+    
+    # 4. Sync to Spool (Keenetic specific structure)
+    if [ -d "$CRON_SPOOL_DIR" ]; then 
+        cp "$CRON_FILE" "$CRON_SPOOL_FILE"
+        chown root:root "$CRON_SPOOL_FILE"
+        chmod 600 "$CRON_SPOOL_FILE"
+    fi
+
+    # 5. RESTART CRON (Crucial step)
+    if [ -x /opt/etc/init.d/S10cron ]; then /opt/etc/init.d/S10cron restart >/dev/null 2>&1; fi
 }
 
 action_verify_cron() {
     header; echo -e "${BOLD}Verifying Crontab Integrity...${RESET}"
     CRON_PATH="/opt/etc/crontab"
+    
     if [ ! -f "$CRON_PATH" ]; then echo -n " -> File missing. Creating... "; touch "$CRON_PATH"; echo -e "${GREEN}Created.${RESET}"; else echo -e " -> File exists."; fi
-    echo -n " -> Enforcing permissions (root:root 600)... "; chown root:root "$CRON_PATH"; chmod 600 "$CRON_PATH"; echo -e "${GREEN}Done.${RESET}"
-    echo -n " -> Cleaning (Dedup/Format)... "; L1=$(wc -l < "$CRON_PATH"); sanitize_cron; L2=$(wc -l < "$CRON_PATH")
+    
+    echo -n " -> Enforcing permissions (root:root 600)... "
+    chown root:root "$CRON_PATH"; chmod 600 "$CRON_PATH"
+    echo -e "${GREEN}Done.${RESET}"
+    
+    echo -n " -> Cleaning (Dedup/Format)... "
+    L1=$(wc -l < "$CRON_PATH"); 
+    # Use helper, but without restart yet to show progress
+    grep -v "^[[:space:]]*$" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
+    awk '!seen[$0]++' "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
+    L2=$(wc -l < "$CRON_PATH")
     if [ "$L1" -ne "$L2" ]; then echo -e "${YELLOW}Cleaned ($((L1-L2)) lines).${RESET}"; else echo -e "${GREEN}OK.${RESET}"; fi
-    echo -n " -> Syncing to Spool... "; if [ -d "$CRON_SPOOL_DIR" ]; then cp "$CRON_FILE" "$CRON_SPOOL_FILE"; chown root:root "$CRON_SPOOL_FILE"; chmod 600 "$CRON_SPOOL_FILE"; echo -e "${GREEN}Synced.${RESET}"; else echo -e "${YELLOW}Spool dir not found.${RESET}"; fi
-    echo -n " -> Restarting Cron Daemon... "; if [ -x /opt/etc/init.d/S10cron ]; then /opt/etc/init.d/S10cron restart >/dev/null 2>&1; echo -e "${GREEN}Done.${RESET}"; else echo -e "${RED}Service missing.${RESET}"; fi
+    
+    echo -n " -> Syncing & Restarting Cron Daemon... "
+    sanitize_and_reload_cron
+    echo -e "${GREEN}Done.${RESET}"
+    
     echo ""; echo -e "${GREEN}Verification Complete.${RESET}"; pause
 }
 
@@ -346,12 +374,16 @@ interactive_cron_builder() {
         3) echo -n "Hour (0-23): "; read -r hh; echo -n "Minute (0-59): "; read -r mm; [ -z "$hh" ] && hh="03"; [ -z "$mm" ] && mm="00"; SCHED="$mm $hh * * *" ;;
         *) echo "Invalid. Defaulting to daily 04:00."; SCHED="0 4 * * *" ;;
     esac
-    echo -e " -> Adding: ${BOLD}$SCHED $CMD_TO_ADD${RESET}"; echo "$SCHED $CMD_TO_ADD" >> "$CRON_FILE"; sanitize_cron; echo -e "    ${GREEN}Scheduled.${RESET}"
+    echo -e " -> Adding: ${BOLD}$SCHED $CMD_TO_ADD${RESET}"; echo "$SCHED $CMD_TO_ADD" >> "$CRON_FILE"
+    sanitize_and_reload_cron
+    echo -e "    ${GREEN}Scheduled & Cron Reloaded.${RESET}"
 }
 
 remove_cron_cmd() {
     CMD_TO_REM="$1"; SCRIPT_NAME=$(echo "$CMD_TO_REM" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
-    grep -vF "$SCRIPT_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; sanitize_cron
+    grep -vF "$SCRIPT_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
+    sanitize_and_reload_cron
+    echo -e "    ${RED}Removed ($SCRIPT_NAME) & Cron Reloaded.${RESET}"
 }
 
 manage_cron_menu() {
@@ -372,7 +404,7 @@ manage_cron_menu() {
         fi
     else
         echo -n " -> Disable/Remove jobs? (y/n): "; read -r ans
-        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then for CMD in "$@"; do remove_cron_cmd "$CMD"; echo -e "    ${RED}Removed ($SCRIPT_NAME).${RESET}"; done; fi
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then for CMD in "$@"; do remove_cron_cmd "$CMD"; done; fi
     fi
 }
 
@@ -400,10 +432,10 @@ EOF
                fi
                if [ -n "$CRON_TARGET" ]; then manage_cron_menu "$CRON_TARGET"; fi; pause ;;
             2) header; if [ -n "$T_CMD" ]; then manage_cron_menu "$T_CMD"; else echo "No cron job defined."; fi; pause ;;
-            3) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove files and cron? (y/n): "; read -r ans
+            3) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove file and cron? (y/n): "; read -r ans
                if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
                    if [ -f "$P" ]; then rm -f "$P"; echo -e "    File removed."; else echo -e "    File not found."; fi
-                   if [ -n "$T_CMD" ]; then remove_cron_cmd "$T_CMD"; echo -e "    Cron removed."; fi
+                   if [ -n "$T_CMD" ]; then remove_cron_cmd "$T_CMD"; fi
                    echo -e "${GREEN}Done.${RESET}"
                fi; pause ;;
             0) return ;;
@@ -449,7 +481,8 @@ action_firewall() {
                if [ -n "$KEY_TO_SET" ]; then
                    for FILE in "$BIN_DIR/update_blocklist.sh" "$BIN_DIR/firewall_stats.sh"; do
                        if [ -f "$FILE" ]; then
-                           sed -i "s/ABUSEIPDB_KEY=\"\"/ABUSEIPDB_KEY=\"$KEY_TO_SET\"/" "$FILE"
+                           # FIX: Regex matches ANY content inside quotes to prevent partial replacement
+                           sed -i "s/^ABUSEIPDB_KEY=\".*\"/ABUSEIPDB_KEY=\"$KEY_TO_SET\"/" "$FILE"
                            echo -e "    ${GREEN}Key applied to $(basename "$FILE").${RESET}"
                        fi
                    done
@@ -462,7 +495,8 @@ action_firewall() {
                if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
                    F_LIST="$BIN_DIR/firewall_manager.sh $BIN_DIR/firewall_monitor $BIN_DIR/firewall_stats.sh $BIN_DIR/update_blocklist.sh $BIN_DIR/vpn_scan.sh $NDM_DIR/100-firewall.sh $INIT_DIR/S00ipset-load"
                    for F in $F_LIST; do if [ -f "$F" ]; then rm -f "$F"; echo -e "    Removed $F"; fi; done
-                   remove_cron_cmd "$CMD_FW_STAT"; remove_cron_cmd "$CMD_FW_UPD"; remove_cron_cmd "$CMD_FW_VPN"; echo -e "    Cron removed."; echo -e "${GREEN}Uninstalled.${RESET}"
+                   remove_cron_cmd "$CMD_FW_STAT"; remove_cron_cmd "$CMD_FW_UPD"; remove_cron_cmd "$CMD_FW_VPN";
+                   echo -e "${GREEN}Uninstalled.${RESET}"
                fi; pause ;;
             0) return ;;
         esac
