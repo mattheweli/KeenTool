@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.15 (ALPHA)
+# KEENTOOL MANAGER v0.4.16 (ALPHA)
 # Author: MatthewEli
 # Features:
-#   - FIX: Removed 'stat' command dependency for permission checks (compatibility).
-#   - CRON: Verify function now enforces chmod 644 directly.
-#   - CRON: Advanced sanitization & deduplication.
+#   - FIX: Auto-sanitize downloaded files (removes Windows ^M/CR characters).
+#   - FIX: Removed 'stat' dependency for compatibility.
+#   - CRON: Verify function enforces permissions and cleans formatting.
 #   - CORE: Smart Dependency Check.
 # ==============================================================================
 
@@ -57,7 +57,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.15 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.16 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -76,13 +76,21 @@ EOF
     echo -e " ${GREEN}OK${RESET}"; echo ""
     if [ $RES -eq 1 ]; then
         echo -e "${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"; echo -n " -> Apply & Restart? (y/n): "; read -r ans
-        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then mv "$TMP_FILE" "$P"; chmod +x "$P"; echo -e "${GREEN}Updated.${RESET}"; sleep 1; exec "$P"; else rm -f "$TMP_FILE"; pause; fi
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
+            sed -i 's/\r$//' "$TMP_FILE" # Sanitize self
+            mv "$TMP_FILE" "$P"; chmod +x "$P"
+            echo -e "${GREEN}Updated.${RESET}"; sleep 1; exec "$P"
+        else rm -f "$TMP_FILE"; pause; fi
     elif [ $RES -eq 2 ]; then
         echo -e "${YELLOW}Local is Newer (Dev).${RESET}"; rm -f "$TMP_FILE"; pause
     else
         if [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; then
             echo -e "${CYAN}MD5 Differs.${RESET}"; echo -n " -> Force Reinstall? (y/n): "; read -r ans
-            if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then mv "$TMP_FILE" "$P"; chmod +x "$P"; echo "Reinstalling..."; sleep 1; exec "$P"; else rm -f "$TMP_FILE"; pause; fi
+            if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
+                sed -i 's/\r$//' "$TMP_FILE" # Sanitize self
+                mv "$TMP_FILE" "$P"; chmod +x "$P"
+                echo "Reinstalling..."; sleep 1; exec "$P"
+            else rm -f "$TMP_FILE"; pause; fi
         else echo -e "${GREEN}Up to date.${RESET}"; rm -f "$TMP_FILE"; pause; fi
     fi
 }
@@ -240,7 +248,13 @@ EOF
 install_file() {
     REPO=$1; RFILE=$2; LPATH=$3; DIR=$(dirname "$LPATH"); mkdir -p "$DIR"
     echo -n " -> Downloading ${CYAN}${RFILE##*/}${RESET}... "; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$LPATH"
-    if [ -s "$LPATH" ]; then chmod +x "$LPATH"; echo -e "${GREEN}OK${RESET}"; return 0; else echo -e "${RED}Failed${RESET}"; rm -f "$LPATH"; return 1; fi
+    if [ -s "$LPATH" ]; then 
+        # FIX: Force removal of Windows CR line endings
+        sed -i 's/\r$//' "$LPATH"
+        chmod +x "$LPATH"; echo -e "${GREEN}OK${RESET}"; return 0
+    else 
+        echo -e "${RED}Failed${RESET}"; rm -f "$LPATH"; return 1
+    fi
 }
 
 smart_process() {
@@ -255,12 +269,18 @@ smart_process() {
     L_VER=$(get_version "$LPATH"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
     if [ $RES -eq 1 ]; then
         echo -e "${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"; echo -n "    Apply? (y/n): "; read -r ans
-        [ "$ans" = "y" ] && { mv "$TMP_FILE" "$LPATH"; chmod +x "$LPATH"; echo -e "    ${GREEN}Updated.${RESET}"; } || rm -f "$TMP_FILE"
+        [ "$ans" = "y" ] && { 
+            sed -i 's/\r$//' "$TMP_FILE" # Sanitize
+            mv "$TMP_FILE" "$LPATH"; chmod +x "$LPATH"; echo -e "    ${GREEN}Updated.${RESET}"; 
+        } || rm -f "$TMP_FILE"
     elif [ $RES -eq 2 ]; then echo -e "${YELLOW}Local Newer.${RESET}"; rm -f "$TMP_FILE"
     else
         if [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then
             echo -e "${CYAN}MD5 Differs.${RESET}"; echo -n "    Overwrite local? (y/n): "; read -r ans
-            [ "$ans" = "y" ] && { mv "$TMP_FILE" "$LPATH"; chmod +x "$LPATH"; echo -e "    ${GREEN}Replaced.${RESET}"; } || rm -f "$TMP_FILE"
+            [ "$ans" = "y" ] && { 
+                sed -i 's/\r$//' "$TMP_FILE" # Sanitize
+                mv "$TMP_FILE" "$LPATH"; chmod +x "$LPATH"; echo -e "    ${GREEN}Replaced.${RESET}"; 
+            } || rm -f "$TMP_FILE"
         else echo -e "${GREEN}Up to date.${RESET}"; rm -f "$TMP_FILE"; fi
     fi
 }
