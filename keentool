@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.8 (ALPHA)
+# KEENTOOL MANAGER v0.4.9 (ALPHA)
 # Author: MatthewEli
 # Features:
+#   - UPDATE: Firewall Scan now checks ALL suite files (Manager, Monitor, etc.).
 #   - FIREWALL: Added 'iprange' dependency for blocklist optimization.
 #   - CONFIG: Updated vnStat 2.13 configuration template.
-#   - FIX: Correct vnStat service restart path (S32vnstat2).
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -57,7 +57,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.8 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.9 ${RESET}${YELLOW}(Alpha)${RESET}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -118,15 +118,58 @@ perform_global_scan() {
             else eval "${VNAME}=''"; fi
         else eval "${VNAME}=''"; fi
     }
+    
+    # 1. Traffic Manager
     IFS='|' read -r N P R F <<EOF
 $T_VNSTAT
 EOF
     check_tool_status "UPD_VNSTAT" "$P" "$R" "$F"
+    
+    # 2. Ping Monitor
     IFS='|' read -r N P R F <<EOF
 $T_PING
 EOF
     check_tool_status "UPD_PING" "$P" "$R" "$F"
+    
+    # 3. Firewall Suite (Advanced Check)
+    # First check main core (update_blocklist.sh)
     check_tool_status "UPD_FW" "$FW_CORE_LOCAL" "$FW_REPO" "scripts/update_blocklist.sh"
+    
+    # If Core is up to date, check all components
+    if [ -z "$UPD_FW" ] && [ -f "$FW_CORE_LOCAL" ]; then
+        # List of sub-components to check
+        FW_SUBS="$BIN_DIR/firewall_manager.sh|scripts/firewall_manager.sh
+$BIN_DIR/firewall_monitor|scripts/firewall_monitor
+$BIN_DIR/firewall_stats.sh|scripts/firewall_stats.sh
+$BIN_DIR/vpn_scan.sh|scripts/vpn_scan.sh
+$NDM_DIR/100-firewall.sh|scripts/100-firewall.sh
+$INIT_DIR/S00ipset-load|scripts/S00ipset-load"
+        
+        IFS=$'\n'
+        for ROW in $FW_SUBS; do
+            local SUB_L=$(echo "$ROW" | cut -d'|' -f1)
+            local SUB_R=$(echo "$ROW" | cut -d'|' -f2)
+            if [ -f "$SUB_L" ]; then
+                echo -n "."
+                local SL_VER=$(get_version "$SUB_L")
+                local STMP="/tmp/chk_fw_sub.tmp"
+                curl -s -L "$BASE_URL/$FW_REPO/main/$SUB_R" -o "$STMP"
+                if [ -s "$STMP" ]; then
+                    local SR_VER=$(get_version "$STMP")
+                    ver_compare "$SR_VER" "$SL_VER"
+                    if [ $? -eq 1 ]; then
+                        UPD_FW=" -> ${MAGENTA}Patch${RESET}"
+                        rm -f "$STMP"
+                        break # Found update, exit loop
+                    fi
+                fi
+                rm -f "$STMP"
+            fi
+        done
+        unset IFS
+    fi
+    
+    # 4. SMB Backup
     IFS='|' read -r N P R F <<EOF
 $T_SMB
 EOF
