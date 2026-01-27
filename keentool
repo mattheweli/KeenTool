@@ -1,14 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.20 (ALPHA)
+# KEENTOOL MANAGER v0.4.21 (ALPHA)
 # Author: MatthewEli
 # Features:
-#   - UPDATE: Added tracking for Main Dashboard (index.html).
-#   - UPDATE: Global scan now detects file changes (MD5) even without version bump.
-#   - CRON: Conflict detection matches script path (ignores args/logs).
-#   - CRON: User choice to replace existing jobs or cancel.
-#   - PINGTOOL: Installation wizard asks for IPv4-only mode.
+#   - DASHBOARD: Menu now displays installed version (reads ).
+#   - FIREWALL: Setup Wizard now asks/preserves AbuseIPDB API Key.
+#   - FIREWALL: Auto-injects API Key into update_blocklist.sh & firewall_stats.sh.
+#   - CORE: Smart Dependency Check & Auto-Sanitize.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -62,7 +61,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.20 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.21 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -127,17 +126,9 @@ perform_global_scan() {
             curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP"
             if [ -s "$TMP" ]; then
                 local R_VER=$(get_version "$TMP"); ver_compare "$R_VER" "$L_VER"; local RES=$?
-                
-                if [ $RES -eq 1 ]; then
-                    eval "${VNAME}=' -> ${MAGENTA}v${R_VER}${RESET}'"
-                else
-                    # Fallback: MD5 Check if version is same or unknown (e.g. HTML files)
-                    if [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP")" ]; then
-                        eval "${VNAME}=' -> ${CYAN}Changed${RESET}'"
-                    else
-                        eval "${VNAME}=''"
-                    fi
-                fi
+                if [ $RES -eq 1 ]; then eval "${VNAME}=' -> ${MAGENTA}v${R_VER}${RESET}'"
+                elif [ $RES -eq 0 ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP")" ]; then eval "${VNAME}=' -> ${CYAN}Changed${RESET}'"
+                else eval "${VNAME}=''"; fi
                 rm -f "$TMP"
             else eval "${VNAME}=''"; fi
         else eval "${VNAME}=''"; fi
@@ -179,10 +170,7 @@ $INIT_DIR/S00ipset-load|scripts/S00ipset-load"
                 if [ -s "$STMP" ]; then
                     local SR_VER=$(get_version "$STMP"); ver_compare "$SR_VER" "$SL_VER"
                     if [ $? -eq 1 ]; then UPD_FW=" -> ${MAGENTA}Patch${RESET}"; rm -f "$STMP"; break; fi
-                    # MD5 check for sub-scripts too
-                    if [ "$(get_md5 "$SUB_L")" != "$(get_md5 "$STMP")" ]; then
-                         UPD_FW=" -> ${CYAN}Patch${RESET}"; rm -f "$STMP"; break
-                    fi
+                    if [ "$(get_md5 "$SUB_L")" != "$(get_md5 "$STMP")" ]; then UPD_FW=" -> ${CYAN}Patch${RESET}"; rm -f "$STMP"; break; fi
                 fi
                 rm -f "$STMP"
             fi
@@ -279,8 +267,8 @@ install_file() {
     echo -n " -> Downloading ${CYAN}${RFILE##*/}${RESET}... "; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$LPATH"
     if [ -s "$LPATH" ]; then 
         sed -i 's/\r$//' "$LPATH"
-        [ "${LPATH##*.}" = "sh" ] && chmod +x "$LPATH" # Make scripts executable
-        [ "${LPATH##*.}" = "html" ] && chmod 644 "$LPATH" # Make html readable
+        [ "${LPATH##*.}" = "sh" ] && chmod +x "$LPATH"
+        [ "${LPATH##*.}" = "html" ] && chmod 644 "$LPATH"
         echo -e "${GREEN}OK${RESET}"; return 0
     else 
         echo -e "${RED}Failed${RESET}"; rm -f "$LPATH"; return 1
@@ -298,15 +286,9 @@ smart_process() {
     if [ ! -s "$TMP_FILE" ]; then echo -e "${RED}Net Error${RESET}"; rm -f "$TMP_FILE"; return; fi
     L_VER=$(get_version "$LPATH"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
     
-    # Logic: 1=Newer Version, 2=Local Newer, 0=Same Version (Check MD5)
-    UPDATE_NEEDED=0
-    MSG=""
-    
-    if [ $RES -eq 1 ]; then 
-        UPDATE_NEEDED=1; MSG="${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
-    elif [ $RES -eq 0 ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then
-        UPDATE_NEEDED=1; MSG="${CYAN}Content Changed (Patch)${RESET}"
-    fi
+    UPDATE_NEEDED=0; MSG=""
+    if [ $RES -eq 1 ]; then UPDATE_NEEDED=1; MSG="${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
+    elif [ $RES -eq 0 ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then UPDATE_NEEDED=1; MSG="${CYAN}Content Changed (Patch)${RESET}"; fi
 
     if [ $UPDATE_NEEDED -eq 1 ]; then
         echo -e "$MSG"; echo -n "    Apply? (y/n): "; read -r ans
@@ -334,50 +316,29 @@ sanitize_cron() {
 }
 
 action_verify_cron() {
-    header
-    echo -e "${BOLD}Verifying Crontab Integrity...${RESET}"
+    header; echo -e "${BOLD}Verifying Crontab Integrity...${RESET}"
     CRON_PATH="/opt/etc/crontab"
     if [ ! -f "$CRON_PATH" ]; then echo -n " -> File missing. Creating... "; touch "$CRON_PATH"; echo -e "${GREEN}Created.${RESET}"; else echo -e " -> File exists."; fi
-    echo -n " -> Enforcing permissions (root:root 600)... "
-    chown root:root "$CRON_PATH"; chmod 600 "$CRON_PATH"; echo -e "${GREEN}Done.${RESET}"
-    echo -n " -> Cleaning (Dedup/Format)... "
-    L1=$(wc -l < "$CRON_PATH"); sanitize_cron; L2=$(wc -l < "$CRON_PATH")
+    echo -n " -> Enforcing permissions (root:root 600)... "; chown root:root "$CRON_PATH"; chmod 600 "$CRON_PATH"; echo -e "${GREEN}Done.${RESET}"
+    echo -n " -> Cleaning (Dedup/Format)... "; L1=$(wc -l < "$CRON_PATH"); sanitize_cron; L2=$(wc -l < "$CRON_PATH")
     if [ "$L1" -ne "$L2" ]; then echo -e "${YELLOW}Cleaned ($((L1-L2)) lines).${RESET}"; else echo -e "${GREEN}OK.${RESET}"; fi
-    echo -n " -> Syncing to Spool... "
-    if [ -d "$CRON_SPOOL_DIR" ]; then cp "$CRON_FILE" "$CRON_SPOOL_FILE"; chown root:root "$CRON_SPOOL_FILE"; chmod 600 "$CRON_SPOOL_FILE"; echo -e "${GREEN}Synced.${RESET}"; else echo -e "${YELLOW}Spool dir not found.${RESET}"; fi
-    echo -n " -> Restarting Cron Daemon... "
-    if [ -x /opt/etc/init.d/S10cron ]; then /opt/etc/init.d/S10cron restart >/dev/null 2>&1; echo -e "${GREEN}Done.${RESET}"; else echo -e "${RED}Service missing.${RESET}"; fi
+    echo -n " -> Syncing to Spool... "; if [ -d "$CRON_SPOOL_DIR" ]; then cp "$CRON_FILE" "$CRON_SPOOL_FILE"; chown root:root "$CRON_SPOOL_FILE"; chmod 600 "$CRON_SPOOL_FILE"; echo -e "${GREEN}Synced.${RESET}"; else echo -e "${YELLOW}Spool dir not found.${RESET}"; fi
+    echo -n " -> Restarting Cron Daemon... "; if [ -x /opt/etc/init.d/S10cron ]; then /opt/etc/init.d/S10cron restart >/dev/null 2>&1; echo -e "${GREEN}Done.${RESET}"; else echo -e "${RED}Service missing.${RESET}"; fi
     echo ""; echo -e "${GREEN}Verification Complete.${RESET}"; pause
 }
 
-cron_cmd_active() {
-    SCRIPT_NAME=$(echo "$1" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
-    grep -q "$SCRIPT_NAME" "$CRON_FILE"
-}
-
-get_cron_line() { 
-    SCRIPT_NAME=$(echo "$1" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
-    grep "$SCRIPT_NAME" "$CRON_FILE" | head -n 1
-}
+cron_cmd_active() { SCRIPT_NAME=$(echo "$1" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename); grep -q "$SCRIPT_NAME" "$CRON_FILE"; }
+get_cron_line() { SCRIPT_NAME=$(echo "$1" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename); grep "$SCRIPT_NAME" "$CRON_FILE" | head -n 1; }
 
 interactive_cron_builder() {
-    CMD_TO_ADD="$1"
-    SCRIPT_NAME=$(echo "$CMD_TO_ADD" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh')
-    BASE_NAME=$(basename "$SCRIPT_NAME")
-
+    CMD_TO_ADD="$1"; SCRIPT_NAME=$(echo "$CMD_TO_ADD" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh'); BASE_NAME=$(basename "$SCRIPT_NAME")
     if grep -qF "$BASE_NAME" "$CRON_FILE"; then
-        echo -e "${YELLOW}Warning: Existing jobs found for $BASE_NAME:${RESET}"
-        grep -F "$BASE_NAME" "$CRON_FILE"
-        echo ""
-        echo -n "Do you want to REPLACE them with the new schedule? (y/n): "
-        read -r confirm
+        echo -e "${YELLOW}Warning: Existing jobs found for $BASE_NAME:${RESET}"; grep -F "$BASE_NAME" "$CRON_FILE"; echo ""
+        echo -n "Do you want to REPLACE them with the new schedule? (y/n): "; read -r confirm
         if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then echo "Operation cancelled."; return; fi
-        grep -vF "$BASE_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
-        echo -e "${RED}Old entries removed.${RESET}"
+        grep -vF "$BASE_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; echo -e "${RED}Old entries removed.${RESET}"
     fi
-
-    echo -e "${CYAN}Configure Schedule ($BASE_NAME):${RESET}"
-    echo " 1. Every X Minutes"; echo " 2. Every X Hours"; echo " 3. Daily at specific time"; echo -n "Select [1-3]: "; read -r opt
+    echo -e "${CYAN}Configure Schedule ($BASE_NAME):${RESET}"; echo " 1. Every X Minutes"; echo " 2. Every X Hours"; echo " 3. Daily at specific time"; echo -n "Select [1-3]: "; read -r opt
     SCHED=""
     case $opt in
         1) echo -n "Minutes (e.g. 10): "; read -r mins; [ -z "$mins" ] && mins="10"; SCHED="*/$mins * * * *" ;;
@@ -389,10 +350,8 @@ interactive_cron_builder() {
 }
 
 remove_cron_cmd() {
-    CMD_TO_REM="$1"
-    SCRIPT_NAME=$(echo "$CMD_TO_REM" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
-    grep -vF "$SCRIPT_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
-    sanitize_cron
+    CMD_TO_REM="$1"; SCRIPT_NAME=$(echo "$CMD_TO_REM" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
+    grep -vF "$SCRIPT_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; sanitize_cron
     echo -e "    ${RED}Removed ($SCRIPT_NAME).${RESET}"
 }
 
@@ -401,29 +360,20 @@ manage_cron_menu() {
     for CMD in "$@"; do
         SCRIPT_NAME=$(echo "$CMD" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
         if cron_cmd_active "$CMD"; then
-            EXISTING=$(get_cron_line "$CMD")
-            SCHED_PART=$(echo "$EXISTING" | cut -d'/' -f1-5 | cut -c 1-20)
+            EXISTING=$(get_cron_line "$CMD"); SCHED_PART=$(echo "$EXISTING" | cut -d'/' -f1-5 | cut -c 1-20)
             echo -e "  [${GREEN}ON${RESET}] $SCRIPT_NAME (${DIM}$SCHED_PART...${RESET})"
         else
             echo -e "  [${RED}OFF${RESET}] $SCRIPT_NAME"; MISSING_COUNT=$((MISSING_COUNT+1))
         fi
     done
-    echo ""
-    if [ $MISSING_COUNT -gt 0 ]; then
+    echo ""; if [ $MISSING_COUNT -gt 0 ]; then
         echo -n " -> Configure missing jobs? (y/n): "; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-            for CMD in "$@"; do
-                if ! cron_cmd_active "$CMD"; then
-                    SCRIPT_NAME=$(echo "$CMD" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
-                    echo -e "\n[Setup] $SCRIPT_NAME"; interactive_cron_builder "$CMD"
-                fi
-            done
+            for CMD in "$@"; do if ! cron_cmd_active "$CMD"; then echo -e "\n[Setup] $CMD"; interactive_cron_builder "$CMD"; fi; done
         fi
     else
         echo -n " -> Disable/Remove jobs? (y/n): "; read -r ans
-        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-            for CMD in "$@"; do remove_cron_cmd "$CMD"; done
-        fi
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then for CMD in "$@"; do remove_cron_cmd "$CMD"; done; fi
     fi
 }
 
@@ -435,23 +385,13 @@ EOF
     [ "$N" = "SMB Backup" ] && check_and_install_deps "$DEPS_SMB" 
     [ "$N" = "Traffic Manager" ] && check_and_install_deps "$DEPS_VNSTAT"
     [ "$N" = "Ping Monitor" ] && check_and_install_deps "$DEPS_PING"
-    
     smart_process "$N" "$P" "$R" "$F"; 
     
-    # Custom Logic for Pingtool (IPv4 Flag)
     CRON_TARGET="$2"
     if [ "$N" = "Ping Monitor" ]; then
-        echo -n " -> Enable IPv4 Only mode (-ipv4 flag)? (y/n): "
-        read -r ans
-        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-            CRON_TARGET="$CMD_PING_BASE -ipv4 $CMD_PING_ARGS"
-            echo -e "    ${YELLOW}Mode set: IPv4 Only${RESET}"
-        else
-            CRON_TARGET="$CMD_PING_BASE $CMD_PING_ARGS"
-            echo -e "    ${GREEN}Mode set: Dual Stack (Default)${RESET}"
-        fi
+        echo -n " -> Enable IPv4 Only mode (-ipv4 flag)? (y/n): "; read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then CRON_TARGET="$CMD_PING_BASE -ipv4 $CMD_PING_ARGS"; echo -e "    ${YELLOW}Mode set: IPv4 Only${RESET}"; else CRON_TARGET="$CMD_PING_BASE $CMD_PING_ARGS"; echo -e "    ${GREEN}Mode set: Dual Stack (Default)${RESET}"; fi
     fi
-    
     shift; [ -n "$CRON_TARGET" ] && manage_cron_menu "$CRON_TARGET"; pause;
 }
 
@@ -461,12 +401,27 @@ action_firewall() {
         echo -e "Firewall Suite Status: $S_MAIN"; echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Run Manager"; echo " 4. Run Monitor"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
         case $op in
             1) header;
-               check_and_install_deps "$DEPS_FW"
-               RES_DEPS=$?
-               if [ $RES_DEPS -ne 0 ]; then
-                   echo -n " -> Dependencies missing. Continue anyway? (y/n): "; read -r ans
-                   if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then pause; break; fi
+               check_and_install_deps "$DEPS_FW"; RES_DEPS=$?
+               if [ $RES_DEPS -ne 0 ]; then echo -n " -> Dependencies missing. Continue anyway? (y/n): "; read -r ans; if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then pause; break; fi; fi
+               
+               # --- ABUSEIPDB KEY WIZARD ---
+               EXISTING_KEY=""; KEY_TO_SET=""
+               # Try to find existing key in update_blocklist.sh
+               if [ -f "$BIN_DIR/update_blocklist.sh" ]; then EXISTING_KEY=$(grep 'ABUSEIPDB_KEY=' "$BIN_DIR/update_blocklist.sh" | cut -d'"' -f2); fi
+               
+               echo -n " -> Configure AbuseIPDB Key for reports? (y/n): "; read -r ans
+               if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                   if [ -n "$EXISTING_KEY" ]; then
+                       echo -e "    Current Key: ${CYAN}${EXISTING_KEY:0:5}...${RESET}"
+                       echo -n "    Press [Enter] to keep, or type new key: "
+                       read -r KEY_INPUT
+                       if [ -z "$KEY_INPUT" ]; then KEY_TO_SET="$EXISTING_KEY"; else KEY_TO_SET="$KEY_INPUT"; fi
+                   else
+                       echo -n "    Enter API Key: "; read -r KEY_TO_SET
+                   fi
                fi
+               # ----------------------------
+
                REPO="$FW_REPO"
                smart_process "Manager" "$BIN_DIR/firewall_manager.sh" $REPO "scripts/firewall_manager.sh"
                smart_process "Monitor" "$BIN_DIR/firewall_monitor" $REPO "scripts/firewall_monitor"
@@ -475,6 +430,16 @@ action_firewall() {
                smart_process "VPN Scan" "$BIN_DIR/vpn_scan.sh" $REPO "scripts/vpn_scan.sh"
                smart_process "Netfilter" "$NDM_DIR/100-firewall.sh" $REPO "scripts/100-firewall.sh"
                smart_process "Init" "$INIT_DIR/S00ipset-load" $REPO "scripts/S00ipset-load"
+               
+               # --- APPLY KEY ---
+               if [ -n "$KEY_TO_SET" ]; then
+                   for FILE in "$BIN_DIR/update_blocklist.sh" "$BIN_DIR/firewall_stats.sh"; do
+                       if [ -f "$FILE" ]; then
+                           sed -i "s/ABUSEIPDB_KEY=\"\"/ABUSEIPDB_KEY=\"$KEY_TO_SET\"/" "$FILE"
+                           echo -e "    ${GREEN}Key applied to $(basename "$FILE").${RESET}"
+                       fi
+                   done
+               fi
                pause ;;
             2) header; manage_cron_menu "$CMD_FW_STAT" "$CMD_FW_UPD" "$CMD_FW_VPN"; pause ;;
             3) [ -f "$BIN_DIR/firewall_manager.sh" ] && $BIN_DIR/firewall_manager.sh || { echo "Missing"; sleep 1; };;
@@ -499,10 +464,12 @@ EOF
 $T_SMB
 EOF
     if [ -f "$P" ]; then V=$(get_version "$P"); [ "$V" = "0.0.0" ] && L4="${GREEN}Installed${RESET}" || L4="${GREEN}v$V${RESET}"; else L4="${DIM}Missing${RESET}"; fi
+    
+    # Dashboard Tracking
     IFS='|' read -r N P R F <<EOF
 $T_DASH
 EOF
-    if [ -f "$P" ]; then L5="${GREEN}Installed${RESET}"; else L5="${DIM}Missing${RESET}"; fi
+    if [ -f "$P" ]; then V=$(get_version "$P"); [ "$V" = "0.0.0" ] && L5="${GREEN}Installed${RESET}" || L5="${GREEN}v$V${RESET}"; else L5="${DIM}Missing${RESET}"; fi
 
     header
     echo -e " ${BOLD}System:${RESET}"; echo -e " 0. ${CYAN}System Setup${RESET} (Deps & WebServer)"
