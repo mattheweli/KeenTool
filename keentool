@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.18 (ALPHA)
+# KEENTOOL MANAGER v0.4.19 (ALPHA)
 # Author: MatthewEli
 # Features:
-#   - CRON: Enforce permissions 600 (Strict Mode) to fix BAD FILE MODE.
-#   - CRON: Sync logic ensures /opt/etc/crontab is linked to spool/root.
-#   - FIX: Auto-sanitize downloaded files.
-#   - CORE: Smart Dependency Check.
+#   - CRON: Conflict detection matches script path (ignores args/logs).
+#   - CRON: User choice to replace existing jobs or cancel (no auto-duplication).
+#   - PINGTOOL: Installation wizard asks for IPv4-only mode (-ipv4 flag).
+#   - FIX: Auto-sanitize files & strict permissions (600).
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -37,13 +37,15 @@ T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|Script/smb_backup_
 FW_CORE_LOCAL="$BIN_DIR/update_blocklist.sh"
 FW_REPO="keenetic-firewall"
 
-# --- CRON COMMANDS ---
+# --- CRON COMMANDS (DEFAULTS) ---
 CRON_FILE="/opt/etc/crontab"
 CRON_SPOOL_DIR="/opt/var/spool/cron/crontabs"
 CRON_SPOOL_FILE="$CRON_SPOOL_DIR/root"
 
 CMD_VNSTAT="root /opt/bin/traffic_manager.sh ppp0 >/opt/var/log/t_manager.log 2>&1"
-CMD_PING="root /opt/bin/pingtool.sh >> /opt/var/log/connmon.log 2>&1"
+# Pingtool command is dynamic, defined in action_generic
+CMD_PING_BASE="root /opt/bin/pingtool.sh"
+CMD_PING_ARGS=">> /opt/var/log/connmon.log 2>&1"
 CMD_FW_STAT="root /opt/bin/firewall_stats.sh > /dev/null 2>&1"
 CMD_FW_UPD="root /opt/bin/update_blocklist.sh > /dev/null 2>&1"
 CMD_FW_VPN="root /opt/bin/vpn_scan.sh > /dev/null 2>&1"
@@ -59,7 +61,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.18 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.19 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -287,12 +289,8 @@ smart_process() {
 
 sanitize_cron() {
     [ ! -f "$CRON_FILE" ] && touch "$CRON_FILE"
-    
-    # 1. Enforce STRICT Mode (600) + Ownership
     chown root:root "$CRON_FILE"
     chmod 600 "$CRON_FILE"
-    
-    # 2. Cleanup
     grep -v "^[[:space:]]*$" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     awk '!seen[$0]++' "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     if [ -s "$CRON_FILE" ] && [ "$(tail -c 1 "$CRON_FILE")" != "" ]; then echo "" >> "$CRON_FILE"; fi
@@ -300,46 +298,56 @@ sanitize_cron() {
 
 action_verify_cron() {
     header
-    echo -e "${BOLD}Verifying Crontab (Advanced)...${RESET}"
-    
-    # 1. Master File Check
-    if [ ! -f "$CRON_FILE" ]; then touch "$CRON_FILE"; echo -e " -> Master Created."; fi
-    
-    # 2. Enforce Strict Permissions (600)
-    echo -n " -> Enforcing Strict Mode (600)... "
-    chown root:root "$CRON_FILE"
-    chmod 600 "$CRON_FILE"
+    echo -e "${BOLD}Verifying Crontab Integrity...${RESET}"
+    CRON_PATH="/opt/etc/crontab"
+    if [ ! -f "$CRON_PATH" ]; then echo -n " -> File missing. Creating... "; touch "$CRON_PATH"; echo -e "${GREEN}Created.${RESET}"; else echo -e " -> File exists."; fi
+    echo -n " -> Enforcing permissions (root:root 600)... "
+    chown root:root "$CRON_PATH"
+    chmod 600 "$CRON_PATH"
     echo -e "${GREEN}Done.${RESET}"
-    
-    # 3. Sanitize Content
     echo -n " -> Cleaning (Dedup/Format)... "
-    L1=$(wc -l < "$CRON_FILE"); sanitize_cron; L2=$(wc -l < "$CRON_FILE")
+    L1=$(wc -l < "$CRON_PATH"); sanitize_cron; L2=$(wc -l < "$CRON_PATH")
     if [ "$L1" -ne "$L2" ]; then echo -e "${YELLOW}Cleaned ($((L1-L2)) lines).${RESET}"; else echo -e "${GREEN}OK.${RESET}"; fi
-    
-    # 4. Sync to Spool (Fixes "wrong file" issue)
-    echo -n " -> Syncing to Spool (root)... "
-    if [ -d "$CRON_SPOOL_DIR" ]; then
-        cp "$CRON_FILE" "$CRON_SPOOL_FILE"
-        chown root:root "$CRON_SPOOL_FILE"
-        chmod 600 "$CRON_SPOOL_FILE"
-        echo -e "${GREEN}Synced.${RESET}"
-    else
-        echo -e "${YELLOW}Spool dir not found (Skipped).${RESET}"
-    fi
-    
-    # 5. Restart
+    echo -n " -> Syncing to Spool... "
+    if [ -d "$CRON_SPOOL_DIR" ]; then cp "$CRON_FILE" "$CRON_SPOOL_FILE"; chown root:root "$CRON_SPOOL_FILE"; chmod 600 "$CRON_SPOOL_FILE"; echo -e "${GREEN}Synced.${RESET}"; else echo -e "${YELLOW}Spool dir not found.${RESET}"; fi
     echo -n " -> Restarting Cron Daemon... "
     if [ -x /opt/etc/init.d/S10cron ]; then /opt/etc/init.d/S10cron restart >/dev/null 2>&1; echo -e "${GREEN}Done.${RESET}"; else echo -e "${RED}Service missing.${RESET}"; fi
-    
     echo ""; echo -e "${GREEN}Verification Complete.${RESET}"; pause
 }
 
-cron_cmd_active() { grep -Fq "$1" "$CRON_FILE"; }
-get_cron_line() { grep -F "$1" "$CRON_FILE" | head -n 1; }
+cron_cmd_active() {
+    # Searches for the script PATH (ignoring flags)
+    # E.g., if checking "/opt/bin/pingtool.sh", will find "*/3 ... /opt/bin/pingtool.sh -ipv4 ..."
+    SCRIPT_NAME=$(echo "$1" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
+    grep -q "$SCRIPT_NAME" "$CRON_FILE"
+}
+
+get_cron_line() { 
+    SCRIPT_NAME=$(echo "$1" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
+    grep "$SCRIPT_NAME" "$CRON_FILE" | head -n 1
+}
 
 interactive_cron_builder() {
     CMD_TO_ADD="$1"
-    echo -e "${CYAN}Configure Schedule:${RESET}"
+    SCRIPT_NAME=$(echo "$CMD_TO_ADD" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh')
+    BASE_NAME=$(basename "$SCRIPT_NAME")
+
+    # CONFLICT CHECK: Look for ANY existing job for this script
+    if grep -qF "$BASE_NAME" "$CRON_FILE"; then
+        echo -e "${YELLOW}Warning: Existing jobs found for $BASE_NAME:${RESET}"
+        grep -F "$BASE_NAME" "$CRON_FILE"
+        echo ""
+        echo -n "Do you want to REPLACE them with the new schedule? (y/n): "
+        read -r confirm
+        if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+            echo "Operation cancelled."; return
+        fi
+        # Remove old entries
+        grep -vF "$BASE_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
+        echo -e "${RED}Old entries removed.${RESET}"
+    fi
+
+    echo -e "${CYAN}Configure Schedule ($BASE_NAME):${RESET}"
     echo " 1. Every X Minutes"
     echo " 2. Every X Hours"
     echo " 3. Daily at specific time"
@@ -361,9 +369,10 @@ interactive_cron_builder() {
 
 remove_cron_cmd() {
     CMD_TO_REM="$1"
-    grep -Fv "$CMD_TO_REM" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
+    SCRIPT_NAME=$(echo "$CMD_TO_REM" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
+    grep -vF "$SCRIPT_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     sanitize_cron
-    echo -e "    ${RED}Removed.${RESET}"
+    echo -e "    ${RED}Removed ($SCRIPT_NAME).${RESET}"
 }
 
 manage_cron_menu() {
@@ -407,7 +416,24 @@ EOF
     [ "$N" = "SMB Backup" ] && check_and_install_deps "$DEPS_SMB" 
     [ "$N" = "Traffic Manager" ] && check_and_install_deps "$DEPS_VNSTAT"
     [ "$N" = "Ping Monitor" ] && check_and_install_deps "$DEPS_PING"
-    smart_process "$N" "$P" "$R" "$F"; shift; [ -n "$1" ] && manage_cron_menu "$@"; pause;
+    
+    smart_process "$N" "$P" "$R" "$F"; 
+    
+    # Custom Logic for Pingtool (IPv4 Flag)
+    CRON_TARGET="$2"
+    if [ "$N" = "Ping Monitor" ]; then
+        echo -n " -> Enable IPv4 Only mode (-ipv4 flag)? (y/n): "
+        read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+            CRON_TARGET="$CMD_PING_BASE -ipv4 $CMD_PING_ARGS"
+            echo -e "    ${YELLOW}Mode set: IPv4 Only${RESET}"
+        else
+            CRON_TARGET="$CMD_PING_BASE $CMD_PING_ARGS"
+            echo -e "    ${GREEN}Mode set: Dual Stack (Default)${RESET}"
+        fi
+    fi
+    
+    shift; [ -n "$CRON_TARGET" ] && manage_cron_menu "$CRON_TARGET"; pause;
 }
 
 action_firewall() {
@@ -472,7 +498,7 @@ EOF
     case $choice in
         0) setup_system ;;
         1) action_generic "$T_VNSTAT" "$CMD_VNSTAT" ;;
-        2) action_generic "$T_PING" "$CMD_PING" ;;
+        2) action_generic "$T_PING" "" ;; # Pingtool cmd is built dynamically inside action_generic
         3) action_firewall ;;
         4) action_generic "$T_SMB" "$CMD_SMB" ;;
         u) perform_global_scan ;;
