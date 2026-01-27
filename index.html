@@ -1,4 +1,4 @@
-<!-- Keenetic Dashboard v1.0.1 -->
+<!-- Keenetic Dashboard v1.0.2 -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -23,6 +23,7 @@
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding: 0 5px; flex-wrap: wrap; gap: 15px; }
         
         .header h1 { font-size: 1.8rem; margin: 0; font-weight: 800; letter-spacing: -0.5px; display: flex; align-items: center; gap: 10px; }
+        .version-badge { font-size: 0.75rem; color: var(--card); background: var(--muted); padding: 2px 8px; border-radius: 6px; font-weight: 600; opacity: 0.8; vertical-align: middle; }
         
         .controls-area { display: flex; align-items: center; gap: 15px; background: var(--card); padding: 8px 15px; border-radius: 30px; border: 1px solid var(--border); box-shadow: 0 2px 5px var(--shadow); font-size: 0.85rem; }
         .controls-area label { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
@@ -30,8 +31,8 @@
         
         #global_clock { font-family: monospace; font-size: 1.1rem; font-weight: 600; color: var(--muted); margin-left: 10px; }
 
-        /* GRID FIX */
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 25px; flex: 1; align-items: start; }
+        /* GRID: Removed 'align-items: start' to allow cards to stretch to equal height */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 25px; flex: 1; }
 
         .card { 
             background: var(--card); border-radius: 16px; padding: 25px; 
@@ -74,7 +75,7 @@
 <body>
 
     <div class="header">
-        <h1>🏠 Keenetic Dashboard</h1>
+        <h1>🏠 Keenetic Dashboard <span class="version-badge">v1.0.2</span></h1>
         
         <div style="display: flex; align-items: center; gap: 15px;">
             <div class="controls-area">
