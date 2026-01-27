@@ -138,10 +138,13 @@
                     document.getElementById('tr_today').innerText = fmtBytes(dayData.rx + dayData.tx);
                     document.getElementById('tr_month').innerText = fmtBytes(monthData.rx + monthData.tx);
                     
-                    // Formatta la data dell'ultimo aggiornamento vnstat
+                    // --- MODIFICA DATA VNSTAT ---
                     const u = iface.updated;
-                    const dateStr = `${u.time.hour}:${u.time.minute.toString().padStart(2,'0')}`;
-                    document.getElementById('tr_meta').innerText = "VnStat Update: " + dateStr;
+                    const pad = (n) => n.toString().padStart(2, '0');
+                    // Costruisce la stringa data: DD-MM-YYYY HH:MM
+                    const ts = `${pad(u.date.day)}-${pad(u.date.month)}-${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}`;
+                    
+                    document.getElementById('tr_meta').innerText = "Last Update: " + ts;
                     document.getElementById('tr_status').classList.add('online');
                 } catch(e) { console.error("VnStat Logic Error", e); }
             } else { document.getElementById('tr_status').classList.add('offline'); }
@@ -157,7 +160,7 @@
                     
                     // Formatta i target
                     document.getElementById('ping_target').innerHTML = `<span style='opacity:0.6'>v4:</span> ${d.targets.v4} &nbsp; <span style='opacity:0.6'>v6:</span> ${d.targets.v6}`;
-                    document.getElementById('ping_update').innerText = "Updated: " + d.updated;
+                    document.getElementById('ping_update').innerText = "Last Update: " + d.updated;
 
                     if(cur.v4.loss < 100) document.getElementById('ping_status').classList.add('online');
                     else document.getElementById('ping_status').classList.add('offline');
