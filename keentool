@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.21 (ALPHA)
+# KEENTOOL MANAGER v0.4.22 (ALPHA)
 # Author: MatthewEli
 # Features:
-#   - DASHBOARD: Menu now displays installed version (reads ).
-#   - FIREWALL: Setup Wizard now asks/preserves AbuseIPDB API Key.
-#   - FIREWALL: Auto-injects API Key into update_blocklist.sh & firewall_stats.sh.
+#   - UNINSTALL: Added full uninstallation (Files + Cron) for all tools.
+#   - DASHBOARD: Menu now displays installed version.
+#   - FIREWALL: Setup Wizard preserves AbuseIPDB API Key.
 #   - CORE: Smart Dependency Check & Auto-Sanitize.
 # ==============================================================================
 
@@ -61,7 +61,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.21 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.22 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -352,7 +352,6 @@ interactive_cron_builder() {
 remove_cron_cmd() {
     CMD_TO_REM="$1"; SCRIPT_NAME=$(echo "$CMD_TO_REM" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
     grep -vF "$SCRIPT_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; sanitize_cron
-    echo -e "    ${RED}Removed ($SCRIPT_NAME).${RESET}"
 }
 
 manage_cron_menu() {
@@ -373,32 +372,49 @@ manage_cron_menu() {
         fi
     else
         echo -n " -> Disable/Remove jobs? (y/n): "; read -r ans
-        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then for CMD in "$@"; do remove_cron_cmd "$CMD"; done; fi
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then for CMD in "$@"; do remove_cron_cmd "$CMD"; echo -e "    ${RED}Removed ($SCRIPT_NAME).${RESET}"; done; fi
     fi
 }
 
 # --- ACTIONS ---
 action_generic() {
-    header; IFS='|' read -r N P R F <<EOF
-$1
+    T_DEF="$1"; T_CMD="$2"
+    IFS='|' read -r N P R F <<EOF
+$T_DEF
 EOF
-    [ "$N" = "SMB Backup" ] && check_and_install_deps "$DEPS_SMB" 
-    [ "$N" = "Traffic Manager" ] && check_and_install_deps "$DEPS_VNSTAT"
-    [ "$N" = "Ping Monitor" ] && check_and_install_deps "$DEPS_PING"
-    smart_process "$N" "$P" "$R" "$F"; 
-    
-    CRON_TARGET="$2"
-    if [ "$N" = "Ping Monitor" ]; then
-        echo -n " -> Enable IPv4 Only mode (-ipv4 flag)? (y/n): "; read -r ans
-        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then CRON_TARGET="$CMD_PING_BASE -ipv4 $CMD_PING_ARGS"; echo -e "    ${YELLOW}Mode set: IPv4 Only${RESET}"; else CRON_TARGET="$CMD_PING_BASE $CMD_PING_ARGS"; echo -e "    ${GREEN}Mode set: Dual Stack (Default)${RESET}"; fi
-    fi
-    shift; [ -n "$CRON_TARGET" ] && manage_cron_menu "$CRON_TARGET"; pause;
+    while true; do
+        header
+        if [ -f "$P" ]; then VER=$(get_version "$P"); echo -e "$N Status: ${GREEN}Installed (v$VER)${RESET}"; else echo -e "$N Status: ${DIM}Not Installed${RESET}"; fi
+        echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Uninstall"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
+        case $op in
+            1) header;
+               if [ "$N" = "SMB Backup" ]; then check_and_install_deps "$DEPS_SMB"; fi
+               if [ "$N" = "Traffic Manager" ]; then check_and_install_deps "$DEPS_VNSTAT"; fi
+               if [ "$N" = "Ping Monitor" ]; then check_and_install_deps "$DEPS_PING"; fi
+               smart_process "$N" "$P" "$R" "$F"; 
+               
+               CRON_TARGET="$T_CMD"
+               if [ "$N" = "Ping Monitor" ]; then
+                   echo -n " -> Enable IPv4 Only mode (-ipv4 flag)? (y/n): "; read -r ans
+                   if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then CRON_TARGET="$CMD_PING_BASE -ipv4 $CMD_PING_ARGS"; echo -e "    ${YELLOW}Mode set: IPv4 Only${RESET}"; else CRON_TARGET="$CMD_PING_BASE $CMD_PING_ARGS"; echo -e "    ${GREEN}Mode set: Dual Stack (Default)${RESET}"; fi
+               fi
+               if [ -n "$CRON_TARGET" ]; then manage_cron_menu "$CRON_TARGET"; fi; pause ;;
+            2) header; if [ -n "$T_CMD" ]; then manage_cron_menu "$T_CMD"; else echo "No cron job defined."; fi; pause ;;
+            3) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove files and cron? (y/n): "; read -r ans
+               if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                   if [ -f "$P" ]; then rm -f "$P"; echo -e "    File removed."; else echo -e "    File not found."; fi
+                   if [ -n "$T_CMD" ]; then remove_cron_cmd "$T_CMD"; echo -e "    Cron removed."; fi
+                   echo -e "${GREEN}Done.${RESET}"
+               fi; pause ;;
+            0) return ;;
+        esac
+    done
 }
 
 action_firewall() {
     while true; do
         header; if [ -f "$FW_CORE_LOCAL" ]; then V_CORE=$(get_version "$FW_CORE_LOCAL"); S_MAIN="${GREEN}Installed (v$V_CORE)${RESET}"; else S_MAIN="${DIM}Missing${RESET}"; fi
-        echo -e "Firewall Suite Status: $S_MAIN"; echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Run Manager"; echo " 4. Run Monitor"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
+        echo -e "Firewall Suite Status: $S_MAIN"; echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Run Manager"; echo " 4. Run Monitor"; echo " 5. Uninstall Suite"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
         case $op in
             1) header;
                check_and_install_deps "$DEPS_FW"; RES_DEPS=$?
@@ -406,7 +422,6 @@ action_firewall() {
                
                # --- ABUSEIPDB KEY WIZARD ---
                EXISTING_KEY=""; KEY_TO_SET=""
-               # Try to find existing key in update_blocklist.sh
                if [ -f "$BIN_DIR/update_blocklist.sh" ]; then EXISTING_KEY=$(grep 'ABUSEIPDB_KEY=' "$BIN_DIR/update_blocklist.sh" | cut -d'"' -f2); fi
                
                echo -n " -> Configure AbuseIPDB Key for reports? (y/n): "; read -r ans
@@ -431,7 +446,6 @@ action_firewall() {
                smart_process "Netfilter" "$NDM_DIR/100-firewall.sh" $REPO "scripts/100-firewall.sh"
                smart_process "Init" "$INIT_DIR/S00ipset-load" $REPO "scripts/S00ipset-load"
                
-               # --- APPLY KEY ---
                if [ -n "$KEY_TO_SET" ]; then
                    for FILE in "$BIN_DIR/update_blocklist.sh" "$BIN_DIR/firewall_stats.sh"; do
                        if [ -f "$FILE" ]; then
@@ -444,6 +458,12 @@ action_firewall() {
             2) header; manage_cron_menu "$CMD_FW_STAT" "$CMD_FW_UPD" "$CMD_FW_VPN"; pause ;;
             3) [ -f "$BIN_DIR/firewall_manager.sh" ] && $BIN_DIR/firewall_manager.sh || { echo "Missing"; sleep 1; };;
             4) [ -f "$BIN_DIR/firewall_monitor" ] && $BIN_DIR/firewall_monitor || { echo "Missing"; sleep 1; };;
+            5) header; echo -e "${BOLD}Uninstall Firewall Suite${RESET}"; echo -n " -> Remove ALL scripts and cron jobs? (y/n): "; read -r ans
+               if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                   F_LIST="$BIN_DIR/firewall_manager.sh $BIN_DIR/firewall_monitor $BIN_DIR/firewall_stats.sh $BIN_DIR/update_blocklist.sh $BIN_DIR/vpn_scan.sh $NDM_DIR/100-firewall.sh $INIT_DIR/S00ipset-load"
+                   for F in $F_LIST; do if [ -f "$F" ]; then rm -f "$F"; echo -e "    Removed $F"; fi; done
+                   remove_cron_cmd "$CMD_FW_STAT"; remove_cron_cmd "$CMD_FW_UPD"; remove_cron_cmd "$CMD_FW_VPN"; echo -e "    Cron removed."; echo -e "${GREEN}Uninstalled.${RESET}"
+               fi; pause ;;
             0) return ;;
         esac
     done
