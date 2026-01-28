@@ -1,10 +1,10 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.25 (ALPHA)
+# KEENTOOL MANAGER v0.4.26 (ALPHA)
 # Author: MatthewEli
 # Features:
-#   - CRON: Force permission fix (600) on startup and after every install action.
+#   - FIX: Cron permissions (600) applied AFTER file editing to prevent reset.
 #   - UNINSTALL: Added full uninstallation (Files + Cron) for all tools.
 #   - DASHBOARD: Menu now displays installed version.
 #   - CORE: Smart Dependency Check & Auto-Sanitize.
@@ -61,7 +61,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.25 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.26 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -308,15 +308,17 @@ smart_process() {
 
 sanitize_and_reload_cron() {
     [ ! -f "$CRON_FILE" ] && touch "$CRON_FILE"
-    chown root:root "$CRON_FILE"
-    chmod 600 "$CRON_FILE"
+    
+    # 1. Format cleanup (creates tmp files, resets perms to 644 default)
     grep -v "^[[:space:]]*$" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     awk '!seen[$0]++' "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     if [ -s "$CRON_FILE" ] && [ "$(tail -c 1 "$CRON_FILE")" != "" ]; then echo "" >> "$CRON_FILE"; fi
     
+    # 2. FIX: FORCE PERMISSIONS AFTER EDITING (Last Step)
+    chmod 600 "$CRON_FILE"
+    
     if [ -d "$CRON_SPOOL_DIR" ]; then 
         cp "$CRON_FILE" "$CRON_SPOOL_FILE"
-        chown root:root "$CRON_SPOOL_FILE"
         chmod 600 "$CRON_SPOOL_FILE"
     fi
     if [ -x /opt/etc/init.d/S10cron ]; then /opt/etc/init.d/S10cron restart >/dev/null 2>&1; fi
@@ -326,12 +328,12 @@ action_verify_cron() {
     header; echo -e "${BOLD}Verifying Crontab Integrity...${RESET}"
     CRON_PATH="/opt/etc/crontab"
     if [ ! -f "$CRON_PATH" ]; then echo -n " -> File missing. Creating... "; touch "$CRON_PATH"; echo -e "${GREEN}Created.${RESET}"; else echo -e " -> File exists."; fi
-    echo -n " -> Enforcing permissions (root:root 600)... "; chown root:root "$CRON_PATH"; chmod 600 "$CRON_PATH"; echo -e "${GREEN}Done.${RESET}"
-    echo -n " -> Cleaning (Dedup/Format)... "; L1=$(wc -l < "$CRON_PATH"); 
-    grep -v "^[[:space:]]*$" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
-    awk '!seen[$0]++' "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
-    L2=$(wc -l < "$CRON_PATH"); if [ "$L1" -ne "$L2" ]; then echo -e "${YELLOW}Cleaned ($((L1-L2)) lines).${RESET}"; else echo -e "${GREEN}OK.${RESET}"; fi
-    echo -n " -> Syncing & Restarting Cron Daemon... "; sanitize_and_reload_cron; echo -e "${GREEN}Done.${RESET}"
+    
+    # Cleaning will reset perms, but function handles it at end now
+    echo -n " -> Cleaning & Fixing Permissions... "
+    sanitize_and_reload_cron
+    echo -e "${GREEN}Done.${RESET}"
+    
     echo ""; echo -e "${GREEN}Verification Complete.${RESET}"; pause
 }
 
