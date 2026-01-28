@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.23 (ALPHA)
+# KEENTOOL MANAGER v0.4.25 (ALPHA)
 # Author: MatthewEli
 # Features:
-#   - CRON: Strict Permission Enforcement (600) & Service Restart on ANY change.
-#   - FIREWALL: Fixed Regex for AbuseIPDB Key injection (overwrite any existing value).
+#   - CRON: Force permission fix (600) on startup and after every install action.
 #   - UNINSTALL: Added full uninstallation (Files + Cron) for all tools.
 #   - DASHBOARD: Menu now displays installed version.
+#   - CORE: Smart Dependency Check & Auto-Sanitize.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -61,7 +61,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.23 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.25 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -168,9 +168,9 @@ $INIT_DIR/S00ipset-load|scripts/S00ipset-load"
                 echo -n "."; local SL_VER=$(get_version "$SUB_L"); local STMP="/tmp/chk_fw_sub.tmp"
                 curl -s -L "$BASE_URL/$FW_REPO/main/$SUB_R" -o "$STMP"
                 if [ -s "$STMP" ]; then
-                    local SR_VER=$(get_version "$STMP"); ver_compare "$SR_VER" "$SL_VER"
-                    if [ $? -eq 1 ]; then UPD_FW=" -> ${MAGENTA}Patch${RESET}"; rm -f "$STMP"; break; fi
-                    if [ "$(get_md5 "$SUB_L")" != "$(get_md5 "$STMP")" ]; then UPD_FW=" -> ${CYAN}Patch${RESET}"; rm -f "$STMP"; break; fi
+                    local SR_VER=$(get_version "$STMP"); ver_compare "$SR_VER" "$SL_VER"; local RES=$?
+                    if [ $RES -eq 1 ]; then UPD_FW=" -> ${MAGENTA}Patch${RESET}"; rm -f "$STMP"; break; fi
+                    if [ $RES -eq 0 ] && [ "$(get_md5 "$SUB_L")" != "$(get_md5 "$STMP")" ]; then UPD_FW=" -> ${CYAN}Patch${RESET}"; rm -f "$STMP"; break; fi
                 fi
                 rm -f "$STMP"
             fi
@@ -307,51 +307,31 @@ smart_process() {
 # --- CRON MANAGEMENT ---
 
 sanitize_and_reload_cron() {
-    # 1. Ensure file exists
     [ ! -f "$CRON_FILE" ] && touch "$CRON_FILE"
-    
-    # 2. Fix Ownership & strict permissions (root only)
     chown root:root "$CRON_FILE"
     chmod 600 "$CRON_FILE"
-    
-    # 3. Format cleanup (remove blank lines, dupes)
     grep -v "^[[:space:]]*$" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     awk '!seen[$0]++' "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     if [ -s "$CRON_FILE" ] && [ "$(tail -c 1 "$CRON_FILE")" != "" ]; then echo "" >> "$CRON_FILE"; fi
     
-    # 4. Sync to Spool (Keenetic specific structure)
     if [ -d "$CRON_SPOOL_DIR" ]; then 
         cp "$CRON_FILE" "$CRON_SPOOL_FILE"
         chown root:root "$CRON_SPOOL_FILE"
         chmod 600 "$CRON_SPOOL_FILE"
     fi
-
-    # 5. RESTART CRON (Crucial step)
     if [ -x /opt/etc/init.d/S10cron ]; then /opt/etc/init.d/S10cron restart >/dev/null 2>&1; fi
 }
 
 action_verify_cron() {
     header; echo -e "${BOLD}Verifying Crontab Integrity...${RESET}"
     CRON_PATH="/opt/etc/crontab"
-    
     if [ ! -f "$CRON_PATH" ]; then echo -n " -> File missing. Creating... "; touch "$CRON_PATH"; echo -e "${GREEN}Created.${RESET}"; else echo -e " -> File exists."; fi
-    
-    echo -n " -> Enforcing permissions (root:root 600)... "
-    chown root:root "$CRON_PATH"; chmod 600 "$CRON_PATH"
-    echo -e "${GREEN}Done.${RESET}"
-    
-    echo -n " -> Cleaning (Dedup/Format)... "
-    L1=$(wc -l < "$CRON_PATH"); 
-    # Use helper, but without restart yet to show progress
+    echo -n " -> Enforcing permissions (root:root 600)... "; chown root:root "$CRON_PATH"; chmod 600 "$CRON_PATH"; echo -e "${GREEN}Done.${RESET}"
+    echo -n " -> Cleaning (Dedup/Format)... "; L1=$(wc -l < "$CRON_PATH"); 
     grep -v "^[[:space:]]*$" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     awk '!seen[$0]++' "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
-    L2=$(wc -l < "$CRON_PATH")
-    if [ "$L1" -ne "$L2" ]; then echo -e "${YELLOW}Cleaned ($((L1-L2)) lines).${RESET}"; else echo -e "${GREEN}OK.${RESET}"; fi
-    
-    echo -n " -> Syncing & Restarting Cron Daemon... "
-    sanitize_and_reload_cron
-    echo -e "${GREEN}Done.${RESET}"
-    
+    L2=$(wc -l < "$CRON_PATH"); if [ "$L1" -ne "$L2" ]; then echo -e "${YELLOW}Cleaned ($((L1-L2)) lines).${RESET}"; else echo -e "${GREEN}OK.${RESET}"; fi
+    echo -n " -> Syncing & Restarting Cron Daemon... "; sanitize_and_reload_cron; echo -e "${GREEN}Done.${RESET}"
     echo ""; echo -e "${GREEN}Verification Complete.${RESET}"; pause
 }
 
@@ -374,15 +354,12 @@ interactive_cron_builder() {
         3) echo -n "Hour (0-23): "; read -r hh; echo -n "Minute (0-59): "; read -r mm; [ -z "$hh" ] && hh="03"; [ -z "$mm" ] && mm="00"; SCHED="$mm $hh * * *" ;;
         *) echo "Invalid. Defaulting to daily 04:00."; SCHED="0 4 * * *" ;;
     esac
-    echo -e " -> Adding: ${BOLD}$SCHED $CMD_TO_ADD${RESET}"; echo "$SCHED $CMD_TO_ADD" >> "$CRON_FILE"
-    sanitize_and_reload_cron
-    echo -e "    ${GREEN}Scheduled & Cron Reloaded.${RESET}"
+    echo -e " -> Adding: ${BOLD}$SCHED $CMD_TO_ADD${RESET}"; echo "$SCHED $CMD_TO_ADD" >> "$CRON_FILE"; sanitize_and_reload_cron; echo -e "    ${GREEN}Scheduled & Cron Reloaded.${RESET}"
 }
 
 remove_cron_cmd() {
     CMD_TO_REM="$1"; SCRIPT_NAME=$(echo "$CMD_TO_REM" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
-    grep -vF "$SCRIPT_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
-    sanitize_and_reload_cron
+    grep -vF "$SCRIPT_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; sanitize_and_reload_cron
     echo -e "    ${RED}Removed ($SCRIPT_NAME) & Cron Reloaded.${RESET}"
 }
 
@@ -424,6 +401,9 @@ EOF
                if [ "$N" = "Traffic Manager" ]; then check_and_install_deps "$DEPS_VNSTAT"; fi
                if [ "$N" = "Ping Monitor" ]; then check_and_install_deps "$DEPS_PING"; fi
                smart_process "$N" "$P" "$R" "$F"; 
+               
+               # FIX: Enforce cron permissions after install
+               sanitize_and_reload_cron
                
                CRON_TARGET="$T_CMD"
                if [ "$N" = "Ping Monitor" ]; then
@@ -478,10 +458,12 @@ action_firewall() {
                smart_process "Netfilter" "$NDM_DIR/100-firewall.sh" $REPO "scripts/100-firewall.sh"
                smart_process "Init" "$INIT_DIR/S00ipset-load" $REPO "scripts/S00ipset-load"
                
+               # FIX: Enforce cron permissions after install
+               sanitize_and_reload_cron
+               
                if [ -n "$KEY_TO_SET" ]; then
                    for FILE in "$BIN_DIR/update_blocklist.sh" "$BIN_DIR/firewall_stats.sh"; do
                        if [ -f "$FILE" ]; then
-                           # FIX: Regex matches ANY content inside quotes to prevent partial replacement
                            sed -i "s/^ABUSEIPDB_KEY=\".*\"/ABUSEIPDB_KEY=\"$KEY_TO_SET\"/" "$FILE"
                            echo -e "    ${GREEN}Key applied to $(basename "$FILE").${RESET}"
                        fi
@@ -519,11 +501,13 @@ $T_SMB
 EOF
     if [ -f "$P" ]; then V=$(get_version "$P"); [ "$V" = "0.0.0" ] && L4="${GREEN}Installed${RESET}" || L4="${GREEN}v$V${RESET}"; else L4="${DIM}Missing${RESET}"; fi
     
-    # Dashboard Tracking
     IFS='|' read -r N P R F <<EOF
 $T_DASH
 EOF
     if [ -f "$P" ]; then V=$(get_version "$P"); [ "$V" = "0.0.0" ] && L5="${GREEN}Installed${RESET}" || L5="${GREEN}v$V${RESET}"; else L5="${DIM}Missing${RESET}"; fi
+
+    # FORCE SANITIZE ON STARTUP
+    sanitize_and_reload_cron
 
     header
     echo -e " ${BOLD}System:${RESET}"; echo -e " 0. ${CYAN}System Setup${RESET} (Deps & WebServer)"
