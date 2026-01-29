@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.31 (ALPHA)
+# KEENTOOL MANAGER v0.4.32 (ALPHA)
 # Author: MatthewEli
 # Features:
+#   - FIREWALL: Added 'tcpdump' dependency for 'Sherlock Mode' (Port Detective).
 #   - DASHBOARD: Interactive setup for 'Filtered Noise' logs (Dual Logging).
 #   - LOGIC: Auto-patch HTML to remove secondary log if not requested.
 #   - UX: Added 'Run Tool (Interactive)' option for scripts like SMB Backup.
@@ -25,7 +26,8 @@ WEB_ROOT="/opt/var/www"
 DEPS_CORE="lighttpd bash curl wget-ssl cron"
 DEPS_VNSTAT="vnstat2 grep awk"
 DEPS_PING="sqlite3-cli iputils-ping mtr grep awk"
-DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed iprange"
+# Added tcpdump for Sherlock Mode
+DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed iprange tcpdump"
 DEPS_SMB="bash tar samba4-client coreutils-date"
 DEPS_DASH="syslog-ng logrotate"
 
@@ -50,6 +52,7 @@ CMD_FW_STAT="root /opt/bin/firewall_stats.sh > /dev/null 2>&1"
 CMD_FW_UPD="root /opt/bin/update_blocklist.sh > /dev/null 2>&1"
 CMD_FW_VPN="root /opt/bin/vpn_scan.sh > /dev/null 2>&1"
 CMD_SMB="/opt/bin/smb_backup_tool.sh -run"
+CMD_ABUSE="root /opt/bin/abuse_reporter.sh > /dev/null 2>&1"
 
 # COLORS
 ESC=$(printf '\033')
@@ -61,7 +64,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.31 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.32 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -171,6 +174,7 @@ EOF
 $BIN_DIR/firewall_monitor|scripts/firewall_monitor
 $BIN_DIR/firewall_stats.sh|scripts/firewall_stats.sh
 $BIN_DIR/vpn_scan.sh|scripts/vpn_scan.sh
+$BIN_DIR/abuse_reporter.sh|scripts/abuse_reporter.sh
 $NDM_DIR/100-firewall.sh|scripts/100-firewall.sh
 $INIT_DIR/S00ipset-load|scripts/S00ipset-load"
         IFS=$'\n'; for ROW in $FW_SUBS; do
@@ -328,11 +332,11 @@ configure_dashboard_extras() {
 }
 EOF
         # Note: We assume the downloaded syslog-ng.conf from Repo is ALREADY Dual Mode.
-        # If user has overwritten it with single mode before, re-downloading (update) fixes it.
     else
         # === NO: SINGLE MODE (CLEANUP) ===
         echo -e "    ${YELLOW}Configuring Single Log Mode...${RESET}"
         rm -f "$WEB_ROOT/filtered.log"
+        rm -f /opt/var/log/filtered.log
         
         # Write Standard Config for Syslog-ng (Overwriting Repo version if needed)
         cat > /opt/etc/syslog-ng.conf <<EOF
@@ -586,6 +590,7 @@ action_firewall() {
                smart_process "Stats" "$BIN_DIR/firewall_stats.sh" $REPO "scripts/firewall_stats.sh"
                smart_process "Updater" "$BIN_DIR/update_blocklist.sh" $REPO "scripts/update_blocklist.sh"
                smart_process "VPN Scan" "$BIN_DIR/vpn_scan.sh" $REPO "scripts/vpn_scan.sh"
+               smart_process "Reporter" "$BIN_DIR/abuse_reporter.sh" $REPO "scripts/abuse_reporter.sh"
                smart_process "Netfilter" "$NDM_DIR/100-firewall.sh" $REPO "scripts/100-firewall.sh"
                smart_process "Init" "$INIT_DIR/S00ipset-load" $REPO "scripts/S00ipset-load"
                
@@ -600,15 +605,15 @@ action_firewall() {
                    done
                fi
                pause ;;
-            2) header; manage_cron_menu "$CMD_FW_STAT" "$CMD_FW_UPD" "$CMD_FW_VPN"; pause ;;
+            2) header; manage_cron_menu "$CMD_FW_STAT" "$CMD_FW_UPD" "$CMD_FW_VPN" "$CMD_ABUSE"; pause ;;
             3) [ -f "$BIN_DIR/firewall_manager.sh" ] && $BIN_DIR/firewall_manager.sh || { echo "Missing"; sleep 1; };;
             4) [ -f "$BIN_DIR/firewall_monitor" ] && $BIN_DIR/firewall_monitor || { echo "Missing"; sleep 1; };;
             5) header;
                echo -e "${BOLD}Uninstall Firewall Suite${RESET}"; echo -n " -> Remove ALL scripts and cron jobs? (y/n): "; read -r ans
                if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-                   F_LIST="$BIN_DIR/firewall_manager.sh $BIN_DIR/firewall_monitor $BIN_DIR/firewall_stats.sh $BIN_DIR/update_blocklist.sh $BIN_DIR/vpn_scan.sh $NDM_DIR/100-firewall.sh $INIT_DIR/S00ipset-load"
+                   F_LIST="$BIN_DIR/firewall_manager.sh $BIN_DIR/firewall_monitor $BIN_DIR/firewall_stats.sh $BIN_DIR/update_blocklist.sh $BIN_DIR/vpn_scan.sh $BIN_DIR/abuse_reporter.sh $NDM_DIR/100-firewall.sh $INIT_DIR/S00ipset-load"
                    for F in $F_LIST; do if [ -f "$F" ]; then rm -f "$F"; echo -e "    Removed $F"; fi; done
-                   remove_cron_cmd "$CMD_FW_STAT"; remove_cron_cmd "$CMD_FW_UPD"; remove_cron_cmd "$CMD_FW_VPN";
+                   remove_cron_cmd "$CMD_FW_STAT"; remove_cron_cmd "$CMD_FW_UPD"; remove_cron_cmd "$CMD_FW_VPN"; remove_cron_cmd "$CMD_ABUSE";
                    echo -e "${GREEN}Uninstalled.${RESET}"
                fi; pause ;;
             0) return ;;
