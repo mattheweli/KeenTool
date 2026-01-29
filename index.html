@@ -1,4 +1,4 @@
-<!-- Keenetic Dashboard v1.0.4 -->
+<!-- Keenetic Dashboard v1.1.1 -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -13,6 +13,7 @@
             --border: #e9ecef; 
             --blue: #0d6efd; --green: #198754; --red: #dc3545; --orange: #fd7e14; --purple: #6f42c1;
             --shadow: rgba(0,0,0,0.05); --hover: #f8f9fa;
+            --term-bg: #1e1e1e; --term-text: #00ff00;
         }
         @media (prefers-color-scheme: dark) { 
             :root { --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --muted: #a0a0a0; --border: #2c2c2c; --shadow: rgba(0,0,0,0.5); --hover: #2a2a2a; } 
@@ -23,59 +24,60 @@
         /* HEADER LAYOUT */
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding: 0 5px; flex-wrap: wrap; gap: 15px; }
         .header h1 { font-size: 1.6rem; margin: 0; font-weight: 800; letter-spacing: -0.5px; }
-        
         .header-controls { display: flex; align-items: center; gap: 10px; }
         .clock-badge { font-size: 0.85rem; color: var(--muted); background: var(--card); padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); font-weight: 600; min-width: 80px; text-align: center; }
-        
-        /* REFRESH SELECTOR */
-        .refresh-select {
-            background: var(--card); color: var(--text); border: 1px solid var(--border);
-            padding: 6px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
-            cursor: pointer; outline: none; transition: border-color 0.2s;
-        }
+        .refresh-select { background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 6px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; outline: none; transition: border-color 0.2s; }
         .refresh-select:hover { border-color: var(--blue); }
 
-        /* GRID SYSTEM FOR EQUAL HEIGHTS */
-        .grid { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
-            gap: 20px; 
-            align-items: stretch; 
-        }
-
-        .card { 
-            background: var(--card); border-radius: 12px; padding: 20px; 
-            box-shadow: 0 4px 15px var(--shadow); border: 1px solid var(--border); 
-            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; cursor: pointer;
-            display: flex; flex-direction: column; height: 100%; box-sizing: border-box;
-        }
+        /* GRID SYSTEM */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; align-items: stretch; margin-bottom: 30px; }
+        .card { background: var(--card); border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px var(--shadow); border: 1px solid var(--border); transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; cursor: pointer; display: flex; flex-direction: column; height: 100%; box-sizing: border-box; }
         .card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px var(--shadow); border-color: var(--blue); }
-
         .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
         .card-header h3 { margin: 0; font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-        
-        /* Colored Bars */
         .card-header h3::before { content: ''; display: block; width: 4px; height: 16px; border-radius: 2px; flex-shrink: 0; }
         .card-fw h3::before { background: var(--red); }
         .card-tr h3::before { background: var(--blue); }
         .card-ping h3::before { background: var(--green); }
-
         .status-dot { height: 8px; width: 8px; border-radius: 50%; background-color: var(--muted); display: inline-block; box-shadow: 0 0 5px currentColor; opacity: 0.5; }
         .status-dot.online { background-color: var(--green); color: var(--green); opacity: 1; }
         .status-dot.offline { background-color: var(--red); color: var(--red); opacity: 1; }
-
-        /* CONTENT AREA */
         .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex-grow: 1; margin-bottom: 15px; }
-        
         .stat-item { background: var(--hover); padding: 10px 12px; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
         .stat-label { font-size: 0.7rem; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .stat-value { font-size: 1.1rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
-        
         .sub-text { font-size: 0.75rem; color: var(--muted); margin-top: auto; font-weight: 400; text-align: right; opacity: 0.8; }
-
-        .txt-red { color: var(--red); } .txt-blue { color: var(--blue); } .txt-green { color: var(--green); }
-        .txt-orange { color: var(--orange); } .txt-purple { color: var(--purple); }
+        .txt-red { color: var(--red); } .txt-blue { color: var(--blue); } .txt-green { color: var(--green); } .txt-orange { color: var(--orange); } .txt-purple { color: var(--purple); }
         
+        /* LOG VIEWER STYLES */
+        .log-container details {
+            background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+            box-shadow: 0 4px 15px var(--shadow); overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        .log-container summary {
+            padding: 15px 20px; font-weight: 700; cursor: pointer; list-style: none;
+            display: flex; justify-content: space-between; align-items: center;
+            background: var(--card); color: var(--text);
+        }
+        .log-container summary::-webkit-details-marker { display: none; }
+        .log-container summary:hover { background: var(--hover); }
+        .log-title { display: flex; align-items: center; gap: 10px; font-size: 1rem; text-transform: uppercase; }
+        .log-controls { display: flex; gap: 10px; }
+        .btn-log {
+            padding: 5px 12px; font-size: 0.75rem; border-radius: 4px; border: 1px solid var(--border);
+            background: var(--bg); color: var(--text); cursor: pointer; font-weight: 600;
+        }
+        .btn-log:hover { background: var(--blue); color: white; border-color: var(--blue); }
+        
+        .log-viewer {
+            background: var(--term-bg); color: var(--term-text);
+            font-family: 'Courier New', Courier, monospace; font-size: 0.8rem;
+            padding: 15px; max-height: 400px; overflow-y: auto;
+            white-space: pre-wrap; line-height: 1.4; border-top: 1px solid var(--border);
+        }
+        .log-meta { font-size: 0.75rem; color: var(--muted); margin-left: 10px; font-weight: 400; }
+
         .footer-copy { margin-top: auto; padding-top: 40px; text-align: center; font-size: 0.75rem; color: var(--muted); opacity: 0.6; }
     </style>
 </head>
@@ -96,7 +98,6 @@
     </div>
 
     <div class="grid">
-        
         <div class="card card-fw" onclick="location.href='firewall/index.html'">
             <div class="card-header"><h3>🛡️ Keenetic Firewall</h3><span class="status-dot" id="fw_status"></span></div>
             <div class="stat-grid">
@@ -127,7 +128,23 @@
             </div>
             <div class="sub-text" id="ping_update">Updated: -</div>
         </div>
+    </div>
 
+    <div class="log-container">
+        <details id="log_details" open>
+            <summary onclick="fetchLog()">
+                <div class="log-title">
+                    <span>📜 System Log</span>
+                    <span id="log_size" class="log-meta"></span>
+                </div>
+                <div class="log-controls">
+                    <button class="btn-log" onclick="downloadLog(event)">💾 Save Local</button>
+                    <button class="btn-log" onclick="fetchLog(true, event)">🔄 Reload</button>
+                    <span style="font-size: 1.2rem;">▾</span>
+                </div>
+            </summary>
+            <div class="log-viewer" id="log_content">Click to load system logs...</div>
+        </details>
     </div>
 
     <div class="footer-copy">Copyright &copy; 2026 mattheweli</div>
@@ -141,33 +158,76 @@
         const fmtBytes = (b) => { if (!b) return "0 B"; const u = ['B','KB','MB','GB','TB']; let i = 0; while(b >= 1024 && i < u.length-1){ b/=1024; i++; } return b.toFixed(2) + ' ' + u[i]; };
         const updateClock = () => { document.getElementById('global_clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}); };
         
-        // --- AUTO REFRESH LOGIC ---
-        let refreshInterval = null;
-        
-        function updateRefresh(val) {
-            // Save preference
-            localStorage.setItem('dash_refresh_rate', val);
+        // --- LOG LOGIC ---
+        let isLogLoaded = false;
+
+        async function fetchLog(force = false, event = null) {
+            if (event) event.stopPropagation(); // Stop details from toggling if clicking reload
             
-            // Clear existing
-            if (refreshInterval) clearInterval(refreshInterval);
+            const details = document.getElementById('log_details');
+            if (!details.open && !force && !event) return; // Only load if opening or forced
+
+            const viewer = document.getElementById('log_content');
             
-            // Set new if not 0
-            if (val > 0) {
-                refreshInterval = setInterval(() => {
-                    // Force reload from server, bypassing cache
-                    location.reload(true);
-                }, parseInt(val));
+            if (isLogLoaded && !force) return; // Don't reload if already loaded and not forced
+
+            viewer.innerText = "Loading /opt/var/log/messages ...";
+            
+            try {
+                // IMPORTANT: Ensure 'messages.log' is symlinked in /opt/var/www/
+                const response = await fetch('messages.log?t=' + new Date().getTime());
+                
+                if (!response.ok) throw new Error("Log file not found (Check Symlink)");
+                
+                const text = await response.text();
+                viewer.innerText = text;
+                document.getElementById('log_size').innerText = "(" + fmtBytes(text.length) + ")";
+                
+                // Scroll to bottom
+                viewer.scrollTop = viewer.scrollHeight;
+                isLogLoaded = true;
+            } catch (err) {
+                viewer.innerText = "Error loading log:\n" + err.message + "\n\nTry running: ln -s /opt/var/log/messages /opt/var/www/messages.log";
+                viewer.style.color = "#ff6b6b";
             }
         }
 
-        // --- INIT ---
+        function downloadLog(event) {
+            event.stopPropagation();
+            const content = document.getElementById('log_content').innerText;
+            if (!content || content.startsWith("Loading") || content.startsWith("Error")) {
+                alert("Please load the log first.");
+                return;
+            }
+            
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "keenetic_messages_" + new Date().toISOString().slice(0,10) + ".log";
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        // --- EXISTING DASHBOARD LOGIC ---
+        let refreshInterval = null;
+        function updateRefresh(val) {
+            localStorage.setItem('dash_refresh_rate', val);
+            if (refreshInterval) clearInterval(refreshInterval);
+            if (val > 0) {
+                refreshInterval = setInterval(() => { location.reload(true); }, parseInt(val));
+            }
+        }
+
         setInterval(updateClock, 1000); updateClock();
 
         window.onload = function() {
-            // Restore refresh preference
             const savedRate = localStorage.getItem('dash_refresh_rate') || "0";
             document.getElementById('refresh_timer').value = savedRate;
             updateRefresh(savedRate);
+
+            // AUTO LOAD LOG
+            fetchLog();
 
             // 1. FIREWALL
             if (typeof window.FW_DATA !== 'undefined') {
@@ -195,7 +255,6 @@
                     const u = iface.updated;
                     const pad = (n) => n.toString().padStart(2, '0');
                     const ts = `${pad(u.date.day)}-${pad(u.date.month)}-${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}`;
-                    
                     document.getElementById('tr_meta').innerText = "Last Update: " + ts;
                     document.getElementById('tr_status').classList.add('online');
                 } catch(e) { console.error("VnStat Logic Error", e); }
@@ -215,7 +274,6 @@
                     } else if (d.targets.v6 && d.targets.v6.length > 5) {
                          tHtml += ` &nbsp; <span style='opacity:0.6'>v6:</span> ${d.targets.v6}`;
                     }
-                    
                     document.getElementById('ping_target').innerHTML = tHtml;
                     document.getElementById('ping_update').innerText = "Last Update: " + d.updated;
 
