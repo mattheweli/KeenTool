@@ -1,13 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.29 (ALPHA)
+# KEENTOOL MANAGER v0.4.30 (ALPHA)
 # Author: MatthewEli
 # Features:
+#   - UX: Added 'Run Tool (Interactive)' option for scripts like SMB Backup.
 #   - UX: Auto-detect & Preserve AbuseIPDB Key during updates (No prompt).
 #   - CORE: Sanitize (CRLF fix) BEFORE MD5 check.
-#   - FIX: Explicit execution permissions for 'firewall_monitor'.
-#   - DASHBOARD: Auto-setup for Syslog, Logrotate & Log Viewer symlinks.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -62,7 +61,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.29 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.30 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -447,14 +446,16 @@ manage_cron_menu() {
 
 # --- ACTIONS ---
 action_generic() {
-    T_DEF="$1"; T_CMD="$2"
+    T_DEF="$1"; T_CMD="$2"; RUN_OPT="$3"
     IFS='|' read -r N P R F <<EOF
 $T_DEF
 EOF
     while true; do
         header
         if [ -f "$P" ]; then VER=$(get_version "$P"); echo -e "$N Status: ${GREEN}Installed (v$VER)${RESET}"; else echo -e "$N Status: ${DIM}Not Installed${RESET}"; fi
-        echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Uninstall"; echo ""; echo " 0. Back"; echo "";
+        echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Uninstall";
+        if [ "$RUN_OPT" = "yes" ]; then echo " 4. Run Tool (Interactive)"; fi
+        echo ""; echo " 0. Back"; echo "";
         echo -n "Select: "; read -r op
         case $op in
             1) header;
@@ -483,6 +484,16 @@ EOF
                    if [ -n "$T_CMD" ]; then remove_cron_cmd "$T_CMD"; fi
                    echo -e "${GREEN}Done.${RESET}"
                fi; pause ;;
+            4) if [ "$RUN_OPT" = "yes" ]; then
+                   if [ -x "$P" ]; then
+                       header
+                       "$P"
+                       pause
+                   else
+                       echo -e "${RED}Tool not found or not executable.${RESET}"
+                       pause
+                   fi
+               fi ;;
             0) return ;;
         esac
     done
@@ -595,7 +606,7 @@ EOF
         1) action_generic "$T_VNSTAT" "$CMD_VNSTAT" ;;
         2) action_generic "$T_PING" "" ;; 
         3) action_firewall ;;
-        4) action_generic "$T_SMB" "$CMD_SMB" ;;
+        4) action_generic "$T_SMB" "$CMD_SMB" "yes" ;;
         5) action_generic "$T_DASH" "" ;;
         u) perform_global_scan ;;
         s) action_self_update ;;
