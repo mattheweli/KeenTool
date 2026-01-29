@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.30 (ALPHA)
+# KEENTOOL MANAGER v0.4.31 (ALPHA)
 # Author: MatthewEli
 # Features:
+#   - DASHBOARD: Interactive setup for 'Filtered Noise' logs (Dual Logging).
+#   - LOGIC: Auto-patch HTML to remove secondary log if not requested.
 #   - UX: Added 'Run Tool (Interactive)' option for scripts like SMB Backup.
-#   - UX: Auto-detect & Preserve AbuseIPDB Key during updates (No prompt).
-#   - CORE: Sanitize (CRLF fix) BEFORE MD5 check.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -61,7 +61,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.30 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.31 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -87,10 +87,7 @@ EOF
     TMP_FILE="/tmp/keentool.tmp"
     echo -n " -> Contacting GitHub ($R)... "; curl -s -L "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
     if [ ! -s "$TMP_FILE" ]; then echo -e "${RED}Failed.${RESET}"; rm -f "$TMP_FILE"; pause; return; fi
-    
-    # Sanitize temp file BEFORE comparison
     sed -i 's/\r$//' "$TMP_FILE"
-
     L_VER=$(get_version "$P"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
     echo -e " ${GREEN}OK${RESET}"; echo ""
     if [ $RES -eq 1 ]; then
@@ -138,7 +135,6 @@ perform_global_scan() {
             local L_VER=$(get_version "$LPATH"); local TMP="/tmp/check_${RFILE##*/}.tmp"
             curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP"
             if [ -s "$TMP" ]; then
-                # Sanitize temp before check
                 sed -i 's/\r$//' "$TMP"
                 local R_VER=$(get_version "$TMP"); ver_compare "$R_VER" "$L_VER"; local RES=$?
                 if [ $RES -eq 1 ]; then eval "${VNAME}=' -> ${MAGENTA}v${R_VER}${RESET}'"
@@ -279,39 +275,97 @@ EOF
 }
 
 configure_dashboard_extras() {
-    # 1. Symlink for Web Log Viewer
+    # 1. Always link main message log
     if [ ! -L "$WEB_ROOT/messages.log" ]; then
         echo -n " -> Linking System Log to Web Root... "
         ln -sf /opt/var/log/messages "$WEB_ROOT/messages.log"
         echo -e "${GREEN}Done.${RESET}"
     fi
 
-    # 2. Syslog-ng Check
+    # 2. Setup Services
     if [ -x /opt/etc/init.d/S01syslog-ng ]; then
-        if ! pidof syslog-ng >/dev/null; then
-            echo -n " -> Start Syslog-ng Service? (y/n): "; read -r ans
-            if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-                /opt/etc/init.d/S01syslog-ng start
-            fi
+        if ! pidof syslog-ng >/dev/null; then /opt/etc/init.d/S01syslog-ng start; fi
+    fi
+    if [ -f /opt/etc/logrotate.conf ]; then
+        chmod 644 /opt/etc/logrotate.conf
+        [ -d /opt/etc/logrotate.d ] && chmod 755 /opt/etc/logrotate.d
+        if ! grep -q "logrotate" "$CRON_FILE"; then
+            echo "0 4 * * * root /opt/sbin/logrotate /opt/etc/logrotate.conf" >> "$CRON_FILE"
+            sanitize_and_reload_cron
         fi
     fi
 
-    # 3. Logrotate Check (Permissions & Cron)
-    if [ -f /opt/etc/logrotate.conf ]; then
-        # Fix permissions (Safety)
-        chmod 644 /opt/etc/logrotate.conf
-        [ -d /opt/etc/logrotate.d ] && chmod 755 /opt/etc/logrotate.d
+    # 3. INTERACTIVE LOG SETUP
+    echo -n " -> Enable 'Filtered Noise' Log (Dual Logging)? (y/n): "; read -r ans
+    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+        # === YES: DUAL MODE ===
+        echo -e "    ${GREEN}Configuring Dual Log Mode...${RESET}"
+        touch /opt/var/log/filtered.log
+        ln -sf /opt/var/log/filtered.log "$WEB_ROOT/filtered.log"
         
-        # Check Cron Job
-        if ! grep -q "logrotate" "$CRON_FILE"; then
-            echo -n " -> Add Logrotate to Cron (Daily 04:00)? (y/n): "; read -r ans
-             if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-                echo "0 4 * * * root /opt/sbin/logrotate /opt/etc/logrotate.conf" >> "$CRON_FILE"
-                sanitize_and_reload_cron
-                echo -e "    ${GREEN}Added to Cron.${RESET}"
-             fi
+        # Write Dual Config for Logrotate
+        cat > /opt/etc/logrotate.d/syslog-ng <<EOF
+/opt/var/log/messages {
+    rotate 4
+    size 5M
+    missingok
+    notifempty
+    compress
+    postrotate
+        /opt/etc/init.d/S01syslog-ng restart > /dev/null 2>&1
+    endscript
+}
+/opt/var/log/filtered.log {
+    monthly
+    rotate 4
+    size 5M
+    missingok
+    notifempty
+    compress
+    postrotate
+        /opt/etc/init.d/S01syslog-ng restart > /dev/null 2>&1
+    endscript
+}
+EOF
+        # Note: We assume the downloaded syslog-ng.conf from Repo is ALREADY Dual Mode.
+        # If user has overwritten it with single mode before, re-downloading (update) fixes it.
+    else
+        # === NO: SINGLE MODE (CLEANUP) ===
+        echo -e "    ${YELLOW}Configuring Single Log Mode...${RESET}"
+        rm -f "$WEB_ROOT/filtered.log"
+        
+        # Write Standard Config for Syslog-ng (Overwriting Repo version if needed)
+        cat > /opt/etc/syslog-ng.conf <<EOF
+@version: 4.7
+@include "scl.conf"
+options { chain_hostnames(no); create_dirs(yes); keep_hostname(yes); use_fqdn(no); log_msg_size(16384); log_fifo_size(256); stats(freq(21600)); dns-cache(no); };
+source s_local { internal(); unix-dgram("/dev/log"); };
+source s_network { udp(ip("0.0.0.0") port(514)); };
+destination d_messages { file("/opt/var/log/messages"); };
+destination d_nas { network("10.128.1.29" transport("tcp") port(514)); };
+log { source(s_local); source(s_network); destination(d_messages); };
+log { source(s_local); source(s_network); destination(d_nas); };
+EOF
+        
+        # Write Standard Logrotate
+        cat > /opt/etc/logrotate.d/syslog-ng <<EOF
+/opt/var/log/messages {
+    rotate 4
+    size 5M
+    missingok
+    notifempty
+    compress
+    postrotate
+        /opt/etc/init.d/S01syslog-ng restart > /dev/null 2>&1
+    endscript
+}
+EOF
+        # Patch HTML to remove the secondary log box
+        if [ -f "$WEB_ROOT/index.html" ]; then
+            sed -i '//,//d' "$WEB_ROOT/index.html"
         fi
     fi
+    /opt/etc/init.d/S01syslog-ng restart >/dev/null 2>&1
 }
 
 install_file() {
@@ -464,11 +518,13 @@ EOF
                if [ "$N" = "Ping Monitor" ]; then check_and_install_deps "$DEPS_PING"; fi
                if [ "$N" = "Main Dashboard" ]; then 
                    check_and_install_deps "$DEPS_DASH"
+                   smart_process "$N" "$P" "$R" "$F";
+                   sanitize_and_reload_cron
                    configure_dashboard_extras
+               else
+                   smart_process "$N" "$P" "$R" "$F";
+                   sanitize_and_reload_cron
                fi
-               
-               smart_process "$N" "$P" "$R" "$F";
-               sanitize_and_reload_cron
                
                CRON_TARGET="$T_CMD"
                if [ "$N" = "Ping Monitor" ]; then
