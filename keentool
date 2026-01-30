@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.32 (ALPHA)
+# KEENTOOL MANAGER v0.4.33 (HOTFIX)
 # Author: MatthewEli
 # Features:
 #   - FIREWALL: Added 'tcpdump' dependency for 'Sherlock Mode' (Port Detective).
 #   - DASHBOARD: Interactive setup for 'Filtered Noise' logs (Dual Logging).
-#   - LOGIC: Auto-patch HTML to remove secondary log if not requested.
+#   - FIX: Corrected sed command for HTML patching (Dual Log cleanup).
 #   - UX: Added 'Run Tool (Interactive)' option for scripts like SMB Backup.
 # ==============================================================================
 
@@ -26,7 +26,6 @@ WEB_ROOT="/opt/var/www"
 DEPS_CORE="lighttpd bash curl wget-ssl cron"
 DEPS_VNSTAT="vnstat2 grep awk"
 DEPS_PING="sqlite3-cli iputils-ping mtr grep awk"
-# Added tcpdump for Sherlock Mode
 DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed iprange tcpdump"
 DEPS_SMB="bash tar samba4-client coreutils-date"
 DEPS_DASH="syslog-ng logrotate"
@@ -40,7 +39,7 @@ T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|Script/smb_backup_
 FW_CORE_LOCAL="$BIN_DIR/update_blocklist.sh"
 FW_REPO="keenetic-firewall"
 
-# --- CRON COMMANDS (DEFAULTS) ---
+# --- CRON COMMANDS ---
 CRON_FILE="/opt/etc/crontab"
 CRON_SPOOL_DIR="/opt/var/spool/cron/crontabs"
 CRON_SPOOL_FILE="$CRON_SPOOL_DIR/root"
@@ -64,13 +63,13 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.32 ${RESET}${YELLOW}(Alpha)${BOLD}${BLUE}   |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.33 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}    |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
 ver_compare() { if [ "$1" = "$2" ]; then return 0; fi; awk -v v1="$1" -v v2="$2" 'BEGIN { split(v1,a,"."); split(v2,b,"."); for(i=1;i<=3;i++) { if(a[i]+0 > b[i]+0) exit 1; if(a[i]+0 < b[i]+0) exit 2; } exit 0; }'; return $?; }
 
-# --- HELPERS FOR INSTALLATION ---
+# --- HELPERS ---
 apply_perms() {
     FILE=$1
     sed -i 's/\r$//' "$FILE"
@@ -148,25 +147,21 @@ perform_global_scan() {
         else eval "${VNAME}=''"; fi
     }
     
-    # 0. Dashboard
     IFS='|' read -r N P R F <<EOF
 $T_DASH
 EOF
     check_tool_status "UPD_DASH" "$P" "$R" "$F"
 
-    # 1. VNStat
     IFS='|' read -r N P R F <<EOF
 $T_VNSTAT
 EOF
     check_tool_status "UPD_VNSTAT" "$P" "$R" "$F"
     
-    # 2. Ping
     IFS='|' read -r N P R F <<EOF
 $T_PING
 EOF
     check_tool_status "UPD_PING" "$P" "$R" "$F"
     
-    # 3. Firewall
     check_tool_status "UPD_FW" "$FW_CORE_LOCAL" "$FW_REPO" "scripts/update_blocklist.sh"
     
     if [ -z "$UPD_FW" ] && [ -f "$FW_CORE_LOCAL" ]; then
@@ -193,7 +188,6 @@ $INIT_DIR/S00ipset-load|scripts/S00ipset-load"
         done; unset IFS
     fi
     
-    # 4. SMB
     IFS='|' read -r N P R F <<EOF
 $T_SMB
 EOF
@@ -305,6 +299,7 @@ configure_dashboard_extras() {
         # === YES: DUAL MODE ===
         echo -e "    ${GREEN}Configuring Dual Log Mode...${RESET}"
         touch /opt/var/log/filtered.log
+        chmod 644 /opt/var/log/filtered.log
         ln -sf /opt/var/log/filtered.log "$WEB_ROOT/filtered.log"
         
         # Write Dual Config for Logrotate
@@ -331,14 +326,13 @@ configure_dashboard_extras() {
     endscript
 }
 EOF
-        # Note: We assume the downloaded syslog-ng.conf from Repo is ALREADY Dual Mode.
     else
         # === NO: SINGLE MODE (CLEANUP) ===
         echo -e "    ${YELLOW}Configuring Single Log Mode...${RESET}"
         rm -f "$WEB_ROOT/filtered.log"
         rm -f /opt/var/log/filtered.log
         
-        # Write Standard Config for Syslog-ng (Overwriting Repo version if needed)
+        # Write Standard Config for Syslog-ng
         cat > /opt/etc/syslog-ng.conf <<EOF
 @version: 4.7
 @include "scl.conf"
@@ -366,7 +360,7 @@ EOF
 EOF
         # Patch HTML to remove the secondary log box
         if [ -f "$WEB_ROOT/index.html" ]; then
-            sed -i '//,//d' "$WEB_ROOT/index.html"
+            sed -i '/<!--LOG 2 START/-->,/<!--LOG 2 END-->/d' "$WEB_ROOT/index.html"
         fi
     fi
     /opt/etc/init.d/S01syslog-ng restart >/dev/null 2>&1
@@ -392,16 +386,11 @@ smart_process() {
     fi
     echo -n "Checking $NAME... "; TMP_FILE="/tmp/${RFILE##*/}.tmp"; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP_FILE"
     if [ ! -s "$TMP_FILE" ]; then echo -e "${RED}Net Error${RESET}"; rm -f "$TMP_FILE"; return; fi
-    
-    # Sanitize temp file BEFORE check to prevent loops
     sed -i 's/\r$//' "$TMP_FILE"
-
     L_VER=$(get_version "$LPATH"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
-    
     UPDATE_NEEDED=0; MSG=""
     if [ $RES -eq 1 ]; then UPDATE_NEEDED=1; MSG="${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
     elif [ $RES -eq 0 ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then UPDATE_NEEDED=1; MSG="${CYAN}Content Changed (Patch)${RESET}"; fi
-
     if [ $UPDATE_NEEDED -eq 1 ]; then
         echo -e "$MSG"; echo -n "    Apply? (y/n): "; read -r ans
         [ "$ans" = "y" ] && { 
@@ -415,18 +404,12 @@ smart_process() {
 }
 
 # --- CRON MANAGEMENT ---
-
 sanitize_and_reload_cron() {
     [ ! -f "$CRON_FILE" ] && touch "$CRON_FILE"
-    
-    # 1. Format cleanup (creates tmp files, resets perms to 644 default)
     grep -v "^[[:space:]]*$" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     awk '!seen[$0]++' "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     if [ -s "$CRON_FILE" ] && [ "$(tail -c 1 "$CRON_FILE")" != "" ]; then echo "" >> "$CRON_FILE"; fi
-    
-    # 2. FIX: FORCE PERMISSIONS AFTER EDITING (Last Step)
     chmod 600 "$CRON_FILE"
-    
     if [ -d "$CRON_SPOOL_DIR" ]; then 
         cp "$CRON_FILE" "$CRON_SPOOL_FILE"
         chmod 600 "$CRON_SPOOL_FILE"
@@ -439,12 +422,9 @@ action_verify_cron() {
     CRON_PATH="/opt/etc/crontab"
     if [ ! -f "$CRON_PATH" ]; then echo -n " -> File missing. Creating... "; touch "$CRON_PATH"; echo -e "${GREEN}Created.${RESET}";
     else echo -e " -> File exists."; fi
-    
-    # Cleaning will reset perms, but function handles it at end now
     echo -n " -> Cleaning & Fixing Permissions... "
     sanitize_and_reload_cron
     echo -e "${GREEN}Done.${RESET}"
-    
     echo ""; echo -e "${GREEN}Verification Complete.${RESET}"; pause
 }
 
