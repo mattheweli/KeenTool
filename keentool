@@ -1,13 +1,14 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.5.2 (BETA)
+# KEENTOOL MANAGER v0.5.4 (BETA)
 # Author: MatthewEli
 # Features:
-#   - CRON: Now PRESERVES empty lines in crontab for better readability.
+#   - SYSLOG: Implemented user-defined "Clean Filter" (ndhcps, WifiMonitor).
+#   - DUAL LOG: Maps "Clean Rules" to "Noise Filter" to segregate spam.
+#   - CONFIG: Added dns-cache(no) to syslog-ng options for performance.
 #   - PING CONFIG: Edit Duration, Latency Trigger, Retention, Targets & Mode.
-#   - CORE: Direct script editing via sed for persistent configuration.
-#   - FIX: HTML patching & Dependencies checks included.
+#   - CRON: Preserves formatting.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -64,7 +65,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.5.2 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.5.4 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -91,12 +92,9 @@ configure_pingtool() {
         header
         echo -e "${BOLD}Ping Monitor Configuration${RESET}"
         
-        # Read values (quoted strings)
         CUR_V4=$(grep '^PING_TARGET="' "$P" | cut -d'"' -f2)
         CUR_V6=$(grep '^PING_TARGET_V6="' "$P" | cut -d'"' -f2)
         CUR_MODE=$(grep '^ENABLE_IPV6="' "$P" | cut -d'"' -f2)
-        
-        # Read values (unquoted numbers)
         CUR_DUR=$(grep '^PING_DURATION=' "$P" | cut -d'=' -f2)
         CUR_LAT=$(grep '^TRIGGER_LATENCY=' "$P" | cut -d'=' -f2)
         CUR_RET=$(grep '^RETENTION_DAYS=' "$P" | cut -d'=' -f2)
@@ -370,11 +368,60 @@ configure_dashboard_extras() {
     echo -n " -> Enable 'Filtered Noise' Log (Dual Logging)? (y/n): "; read -r ans
     if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
         # === YES: DUAL MODE ===
-        echo -e "    ${GREEN}Configuring Dual Log Mode...${RESET}"
+        echo -e "    ${GREEN}Configuring Dual Log Mode (Split Traffic)...${RESET}"
         touch /opt/var/log/filtered.log
         chmod 644 /opt/var/log/filtered.log
         ln -sf /opt/var/log/filtered.log "$WEB_ROOT/filtered.log"
         
+        # WRITE DUAL MODE SYSLOG-NG CONFIG
+        cat > /opt/etc/syslog-ng.conf <<EOF
+@version: 4.7
+@include "scl.conf"
+options { 
+    chain_hostnames(no); create_dirs(yes); keep_hostname(yes); use_fqdn(no); 
+    log_msg_size(16384); log_fifo_size(256); stats(freq(21600)); 
+    dns-cache(no); 
+};
+
+source s_local { internal(); unix-dgram("/dev/log"); };
+source s_network { udp(ip("0.0.0.0") port(514)); };
+
+destination d_messages { file("/opt/var/log/messages"); };
+destination d_filtered { file("/opt/var/log/filtered.log"); };
+destination d_nas { network("10.128.1.29" transport("tcp") port(514)); };
+
+# NOISE FILTER: Matches traffic_manager AND user-defined system noise (ndhcps, wifi)
+filter f_noise {
+    program("traffic_manager") or
+    program("pingtool") or
+    program("firewall_stats") or
+    program("vpn_scan") or
+    program("abuse_reporter") or
+    message("traffic_manager") or
+    message("pingtool") or
+    message("firewall_stats") or
+    
+    # SYSTEM CLEANUP RULES
+    program("ndhcps") or
+    message("Network::Interface::Mtk::WifiMonitor") or
+    message("WifiMonitor");
+};
+
+# IMPORTANT FILTER: Everything NOT noise
+filter f_important { not filter(f_noise); };
+
+# PATHS
+# 1. Noise -> Filtered Log
+log { source(s_local); source(s_network); filter(f_noise); destination(d_filtered); };
+
+# 2. Clean -> Main Log
+log { source(s_local); source(s_network); filter(f_important); destination(d_messages); };
+
+# 3. NAS (Optional)
+log { source(s_local); source(s_network); destination(d_nas); };
+EOF
+
+        # Write Dual Config for Logrotate
         cat > /opt/etc/logrotate.d/syslog-ng <<EOF
 /opt/var/log/messages {
     rotate 4
@@ -400,7 +447,7 @@ configure_dashboard_extras() {
 EOF
     else
         # === NO: SINGLE MODE (CLEANUP) ===
-        echo -e "    ${YELLOW}Configuring Single Log Mode...${RESET}"
+        echo -e "    ${YELLOW}Configuring Single Log Mode (With Cleanup Rules)...${RESET}"
         rm -f "$WEB_ROOT/filtered.log"
         rm -f /opt/var/log/filtered.log
         
@@ -409,17 +456,34 @@ EOF
             sed -i '/<!--LOG 2 START-->/,/<!--LOG 2 END-->/d' "$WEB_ROOT/index.html"
         fi
         
-        # Write Standard Config for Syslog-ng
+        # Write Config for Syslog-ng (WITH CLEANUP RULES APPLIED)
         cat > /opt/etc/syslog-ng.conf <<EOF
 @version: 4.7
 @include "scl.conf"
-options { chain_hostnames(no); create_dirs(yes); keep_hostname(yes); use_fqdn(no); log_msg_size(16384); log_fifo_size(256); stats(freq(21600)); dns-cache(no); };
+options { 
+    chain_hostnames(no); create_dirs(yes); keep_hostname(yes); use_fqdn(no); 
+    log_msg_size(16384); log_fifo_size(256); stats(freq(21600)); 
+    dns-cache(no); 
+};
+
 source s_local { internal(); unix-dgram("/dev/log"); };
 source s_network { udp(ip("0.0.0.0") port(514)); };
+
 destination d_messages { file("/opt/var/log/messages"); };
 destination d_nas { network("10.128.1.29" transport("tcp") port(514)); };
-log { source(s_local); source(s_network); destination(d_messages); };
-log { source(s_local); source(s_network); destination(d_nas); };
+
+# CLEANUP FILTER: Drops unwanted system noise
+filter f_clean_logs {
+    not program("ndhcps")
+    and not message("Network::Interface::Mtk::WifiMonitor")
+    and not message("WifiMonitor");
+};
+
+# 1. Main Log (Cleaned)
+log { source(s_local); source(s_network); filter(f_clean_logs); destination(d_messages); };
+
+# 2. NAS (Cleaned)
+log { source(s_local); source(s_network); filter(f_clean_logs); destination(d_nas); };
 EOF
         
         # Write Standard Logrotate
