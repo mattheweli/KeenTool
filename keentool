@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.4.34 (CRON MASTER)
+# KEENTOOL MANAGER v0.4.35 (CRON FIX)
 # Author: MatthewEli
 # Features:
 #   - FIREWALL: Added 'tcpdump' dependency for 'Sherlock Mode' (Port Detective).
-#   - CRON: Granular management. Edit, Remove, or Enable specific jobs per tool.
+#   - CRON: Granular management + Support for Logrotate in Dashboard menu.
 #   - FIX: Corrected HTML patching logic for Dual Logs.
-#   - UX: Added 'Run Tool (Interactive)' option.
+#   - LOGIC: Generalized Cron detection (supports binaries vs just .sh).
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -52,6 +52,8 @@ CMD_FW_UPD="root /opt/bin/update_blocklist.sh > /dev/null 2>&1"
 CMD_FW_VPN="root /opt/bin/vpn_scan.sh > /dev/null 2>&1"
 CMD_SMB="/opt/bin/smb_backup_tool.sh -run"
 CMD_ABUSE="root /opt/bin/abuse_reporter.sh > /dev/null 2>&1"
+# NEW: Logrotate command explicitly defined for Dashboard menu
+CMD_LOGROTATE="root /opt/sbin/logrotate /opt/etc/logrotate.conf"
 
 # COLORS
 ESC=$(printf '\033')
@@ -63,7 +65,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.34 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}    |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.4.35 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}    |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -302,7 +304,6 @@ configure_dashboard_extras() {
         chmod 644 /opt/var/log/filtered.log
         ln -sf /opt/var/log/filtered.log "$WEB_ROOT/filtered.log"
         
-        # Write Dual Config for Logrotate
         cat > /opt/etc/logrotate.d/syslog-ng <<EOF
 /opt/var/log/messages {
     rotate 4
@@ -332,6 +333,11 @@ EOF
         rm -f "$WEB_ROOT/filtered.log"
         rm -f /opt/var/log/filtered.log
         
+        # Patch HTML to remove the secondary log box
+        if [ -f "$WEB_ROOT/index.html" ]; then
+            sed -i '//,//d' "$WEB_ROOT/index.html"
+        fi
+        
         # Write Standard Config for Syslog-ng
         cat > /opt/etc/syslog-ng.conf <<EOF
 @version: 4.7
@@ -358,14 +364,11 @@ EOF
     endscript
 }
 EOF
-        # Patch HTML to remove the secondary log box
-        if [ -f "$WEB_ROOT/index.html" ]; then
-            sed -i '//,//d' "$WEB_ROOT/index.html"
-        fi
     fi
     /opt/etc/init.d/S01syslog-ng restart >/dev/null 2>&1
 }
 
+# --- GENERIC INSTALL/UPDATE HELPERS ---
 install_file() {
     REPO=$1; RFILE=$2; LPATH=$3; DIR=$(dirname "$LPATH"); mkdir -p "$DIR"
     echo -n " -> Downloading ${CYAN}${RFILE##*/}${RESET}... "; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$LPATH"
@@ -428,18 +431,34 @@ action_verify_cron() {
     echo ""; echo -e "${GREEN}Verification Complete.${RESET}"; pause
 }
 
-cron_cmd_active() { SCRIPT_NAME=$(echo "$1" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename); grep -q "$SCRIPT_NAME" "$CRON_FILE"; }
-get_cron_line() { SCRIPT_NAME=$(echo "$1" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename); grep "$SCRIPT_NAME" "$CRON_FILE" | head -n 1; }
+# Updated to support both .sh files and binaries like logrotate
+cron_cmd_active() { 
+    CMD_STR="$1"
+    # Try to extract base script/binary name
+    BASENAME=$(echo "$CMD_STR" | grep -oE '/opt/[a-zA-Z0-9_./-]+' | xargs basename 2>/dev/null)
+    [ -z "$BASENAME" ] && BASENAME=$(echo "$CMD_STR" | awk '{print $1}')
+    grep -q "$BASENAME" "$CRON_FILE" 
+}
+
+get_cron_line() { 
+    CMD_STR="$1"
+    BASENAME=$(echo "$CMD_STR" | grep -oE '/opt/[a-zA-Z0-9_./-]+' | xargs basename 2>/dev/null)
+    [ -z "$BASENAME" ] && BASENAME=$(echo "$CMD_STR" | awk '{print $1}')
+    grep "$BASENAME" "$CRON_FILE" | head -n 1
+}
 
 interactive_cron_builder() {
-    CMD_TO_ADD="$1"; SCRIPT_NAME=$(echo "$CMD_TO_ADD" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh'); BASE_NAME=$(basename "$SCRIPT_NAME")
-    if grep -qF "$BASE_NAME" "$CRON_FILE"; then
-        echo -e "${YELLOW}Warning: Existing jobs found for $BASE_NAME:${RESET}"; grep -F "$BASE_NAME" "$CRON_FILE"; echo ""
+    CMD_TO_ADD="$1"
+    BASENAME=$(echo "$CMD_TO_ADD" | grep -oE '/opt/[a-zA-Z0-9_./-]+' | xargs basename 2>/dev/null)
+    [ -z "$BASENAME" ] && BASENAME=$(echo "$CMD_TO_ADD" | awk '{print $1}')
+
+    if grep -qF "$BASENAME" "$CRON_FILE"; then
+        echo -e "${YELLOW}Warning: Existing jobs found for $BASENAME:${RESET}"; grep -F "$BASENAME" "$CRON_FILE"; echo ""
         echo -n "Do you want to REPLACE them with the new schedule? (y/n): "; read -r confirm
         if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then echo "Operation cancelled."; return; fi
-        grep -vF "$BASE_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; echo -e "${RED}Old entries removed.${RESET}"
+        grep -vF "$BASENAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; echo -e "${RED}Old entries removed.${RESET}"
     fi
-    echo -e "${CYAN}Configure Schedule ($BASE_NAME):${RESET}";
+    echo -e "${CYAN}Configure Schedule ($BASENAME):${RESET}";
     echo " 1. Every X Minutes"; echo " 2. Every X Hours"; echo " 3. Daily at specific time";
     echo -n "Select [1-3]: "; read -r opt
     SCHED=""
@@ -454,9 +473,12 @@ interactive_cron_builder() {
 }
 
 remove_cron_cmd() {
-    CMD_TO_REM="$1"; SCRIPT_NAME=$(echo "$CMD_TO_REM" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
-    grep -vF "$SCRIPT_NAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; sanitize_and_reload_cron
-    echo -e "    ${RED}Removed ($SCRIPT_NAME) & Cron Reloaded.${RESET}"
+    CMD_TO_REM="$1"
+    BASENAME=$(echo "$CMD_TO_REM" | grep -oE '/opt/[a-zA-Z0-9_./-]+' | xargs basename 2>/dev/null)
+    [ -z "$BASENAME" ] && BASENAME=$(echo "$CMD_TO_REM" | awk '{print $1}')
+    
+    grep -vF "$BASENAME" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; sanitize_and_reload_cron
+    echo -e "    ${RED}Removed ($BASENAME) & Cron Reloaded.${RESET}"
 }
 
 manage_cron_menu() {
@@ -469,12 +491,14 @@ manage_cron_menu() {
         
         i=1
         for CMD in "$@"; do
-            SCRIPT_NAME=$(echo "$CMD" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
+            BASENAME=$(echo "$CMD" | grep -oE '/opt/[a-zA-Z0-9_./-]+' | xargs basename 2>/dev/null)
+            [ -z "$BASENAME" ] && BASENAME=$(echo "$CMD" | awk '{print $1}')
+            
             if cron_cmd_active "$CMD"; then
                 EXISTING=$(get_cron_line "$CMD"); SCHED_PART=$(echo "$EXISTING" | cut -d'/' -f1-5 | cut -c 1-20)
-                echo -e " $i. [${GREEN}ON${RESET}] $SCRIPT_NAME (${DIM}$SCHED_PART...${RESET})"
+                echo -e " $i. [${GREEN}ON${RESET}] $BASENAME (${DIM}$SCHED_PART...${RESET})"
             else
-                echo -e " $i. [${RED}OFF${RESET}] $SCRIPT_NAME"
+                echo -e " $i. [${RED}OFF${RESET}] $BASENAME"
             fi
             i=$((i+1))
         done
@@ -483,7 +507,6 @@ manage_cron_menu() {
         
         if [ "$sel" = "0" ] || [ -z "$sel" ]; then return; fi
         
-        # Resolve selection to cmd
         idx=1; TARGET_CMD=""
         for CMD in "$@"; do
             if [ "$idx" -eq "$sel" ]; then TARGET_CMD="$CMD"; break; fi
@@ -492,10 +515,11 @@ manage_cron_menu() {
         
         if [ -n "$TARGET_CMD" ]; then
             echo ""
-            SCRIPT_NAME=$(echo "$TARGET_CMD" | grep -oE '/opt/[a-zA-Z0-9_./-]+\.sh' | xargs basename)
+            BASENAME=$(echo "$TARGET_CMD" | grep -oE '/opt/[a-zA-Z0-9_./-]+' | xargs basename 2>/dev/null)
+            [ -z "$BASENAME" ] && BASENAME=$(echo "$TARGET_CMD" | awk '{print $1}')
             
             if cron_cmd_active "$TARGET_CMD"; then
-                echo -e "Selected: ${BOLD}$SCRIPT_NAME${RESET} (Active)"
+                echo -e "Selected: ${BOLD}$BASENAME${RESET} (Active)"
                 echo " 1. Edit Schedule"
                 echo " 2. Disable / Remove"
                 echo " 0. Cancel"
@@ -505,7 +529,7 @@ manage_cron_menu() {
                     2) remove_cron_cmd "$TARGET_CMD"; pause ;;
                 esac
             else
-                echo -e "Selected: ${BOLD}$SCRIPT_NAME${RESET} (Inactive)"
+                echo -e "Selected: ${BOLD}$BASENAME${RESET} (Inactive)"
                 echo " 1. Enable (Configure Schedule)"
                 echo " 0. Cancel"
                 echo -n "Option: "; read -r subopt
@@ -551,7 +575,7 @@ EOF
                    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then CRON_TARGET="$CMD_PING_BASE -ipv4 $CMD_PING_ARGS"; echo -e "    ${YELLOW}Mode set: IPv4 Only${RESET}";
                    else CRON_TARGET="$CMD_PING_BASE $CMD_PING_ARGS"; echo -e "    ${GREEN}Mode set: Dual Stack (Default)${RESET}"; fi
                fi
-               if [ -n "$CRON_TARGET" ]; then manage_cron_menu "$CRON_TARGET"; fi; ;;
+               if [ -n "$CRON_TARGET" ]; then manage_cron_menu "$CRON_TARGET"; fi; pause ;;
             2) if [ -n "$T_CMD" ]; then manage_cron_menu "$T_CMD"; else echo "No cron job defined."; pause; fi; ;;
             3) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove file and cron? (y/n): "; read -r ans
                if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
@@ -683,7 +707,7 @@ EOF
         2) action_generic "$T_PING" "" ;; 
         3) action_firewall ;;
         4) action_generic "$T_SMB" "$CMD_SMB" "yes" ;;
-        5) action_generic "$T_DASH" "" ;;
+        5) action_generic "$T_DASH" "$CMD_LOGROTATE" ;;
         u) perform_global_scan ;;
         s) action_self_update ;;
         c) header; cat $CRON_FILE; pause ;;
