@@ -406,7 +406,7 @@ EOF
         
         # Patch HTML to remove the secondary log box
         if [ -f "$WEB_ROOT/index.html" ]; then
-            sed -i '//,//d' "$WEB_ROOT/index.html"
+            sed -i '/<!--LOG 2 START-->/,/<!--LOG 2 END-->/d' "$WEB_ROOT/index.html"
         fi
         
         # Write Standard Config for Syslog-ng
