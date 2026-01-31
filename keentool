@@ -1,14 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.5.7 (TRAFFIC CONFIG)
+# KEENTOOL MANAGER v0.5.8 (BETA)
 # Author: MatthewEli
 # Features:
-#   - TRAFFIC: Added Interface Manager (Change Dashboard Target, Add/Del DB).
-#   - AUTO-UPDATE: New '-update' CLI flag and Cron menu for self-updates.
-#   - UX FIX: Fixed Ctrl+C inheritance issue (using trap ':' instead of '').
-#   - PING CONFIG: Full parameter editing via menu.
-#   - SYSLOG: Cleaner logic & performance tuning.
+#   - SYSLOG: Added filter for 'https-dns-proxy' to suppress timeout spam.
+#   - TRAFFIC: Interface Manager (Change Dashboard Target, Add/Del DB).
+#   - AUTO-UPDATE: Headless & Interactive modes.
+#   - CORE: Preserves Crontab formatting & Trap Fixes.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -66,7 +65,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.5.7 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.5.8 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -84,7 +83,6 @@ apply_perms() {
 }
 
 run_protected() {
-    # FIX: Use ':' (no-op) instead of '' (ignore) for INT trap.
     trap ':' INT
     $1
     trap - INT
@@ -113,7 +111,6 @@ EOF
     exit 0
 }
 
-# --- ARGUMENT HANDLING ---
 case "$1" in
     -update|--update)
         perform_self_update_headless
@@ -134,7 +131,6 @@ configure_traffic() {
         echo -e " Current Dashboard Target: ${CYAN}${CUR_IFACE}${RESET}"
         echo ""
         
-        # Get VNStat DB list
         echo -e "${BOLD}Available Interfaces (VNStat DB):${RESET}"
         if command -v vnstat >/dev/null 2>&1; then
             vnstat --iflist 2>/dev/null | awk '{print "  - " $0}'
@@ -154,16 +150,9 @@ configure_traffic() {
             1) 
                 echo -n "Enter Interface Name (e.g. ppp0, usb0, eth3): "; read -r NEW_IF
                 if [ -n "$NEW_IF" ]; then
-                    # Update the CMD_VNSTAT line in THIS script file using sed
                     sed -i "s|traffic_manager.sh [a-zA-Z0-9_.]*|traffic_manager.sh $NEW_IF|" "$0"
-                    
-                    # Update local variable for current session
                     CUR_IFACE="$NEW_IF"
-                    
-                    # Re-construct command for Cron update
                     NEW_CMD="root /opt/bin/traffic_manager.sh $NEW_IF >/opt/var/log/t_manager.log 2>&1"
-                    
-                    # Update Crontab if job exists
                     if grep -q "traffic_manager.sh" "$CRON_FILE"; then
                         echo " -> Updating Crontab..."
                         grep -v "traffic_manager.sh" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
@@ -202,80 +191,31 @@ configure_traffic() {
 configure_pingtool() {
     P="/opt/bin/pingtool.sh"
     if [ ! -f "$P" ]; then echo -e "${RED}Error: Ping Monitor is not installed.${RESET}"; pause; return; fi
-    
     NEED_REFRESH=0
-    
     while true; do
         header
         echo -e "${BOLD}Ping Monitor Configuration${RESET}"
-        
-        CUR_V4=$(grep '^PING_TARGET="' "$P" | cut -d'"' -f2)
-        CUR_V6=$(grep '^PING_TARGET_V6="' "$P" | cut -d'"' -f2)
-        CUR_MODE=$(grep '^ENABLE_IPV6="' "$P" | cut -d'"' -f2)
-        CUR_DUR=$(grep '^PING_DURATION=' "$P" | cut -d'=' -f2)
-        CUR_LAT=$(grep '^TRIGGER_LATENCY=' "$P" | cut -d'=' -f2)
-        CUR_RET=$(grep '^RETENTION_DAYS=' "$P" | cut -d'=' -f2)
-        
+        CUR_V4=$(grep '^PING_TARGET="' "$P" | cut -d'"' -f2); CUR_V6=$(grep '^PING_TARGET_V6="' "$P" | cut -d'"' -f2); CUR_MODE=$(grep '^ENABLE_IPV6="' "$P" | cut -d'"' -f2)
+        CUR_DUR=$(grep '^PING_DURATION=' "$P" | cut -d'=' -f2); CUR_LAT=$(grep '^TRIGGER_LATENCY=' "$P" | cut -d'=' -f2); CUR_RET=$(grep '^RETENTION_DAYS=' "$P" | cut -d'=' -f2)
         if [ "$CUR_MODE" = "true" ]; then LBL_MODE="${GREEN}Enabled${RESET}"; else LBL_MODE="${RED}Disabled${RESET}"; fi
-        
-        echo ""
-        echo -e " ${BOLD}Targets:${RESET}"
+        echo ""; echo -e " ${BOLD}Targets:${RESET}"
         echo -e " 1. Set IPv4 Target      [Current: ${CYAN}$CUR_V4${RESET}]"
         echo -e " 2. Set IPv6 Target      [Current: ${CYAN}$CUR_V6${RESET}]"
         echo -e " 3. Toggle IPv6 Mode     [$LBL_MODE]"
-        echo ""
-        echo -e " ${BOLD}Parameters:${RESET}"
+        echo ""; echo -e " ${BOLD}Parameters:${RESET}"
         echo -e " 4. Ping Duration        [Current: ${CYAN}${CUR_DUR}s${RESET}]"
         echo -e " 5. Trigger Latency      [Current: ${CYAN}${CUR_LAT}ms${RESET}]"
         echo -e " 6. DB Retention Days    [Current: ${CYAN}${CUR_RET} days${RESET}]"
-        echo ""
-        echo " 0. Back"
-        echo ""
+        echo ""; echo " 0. Back"; echo ""
         echo -n "Select setting to change: "; read -r opt
-        
         case $opt in
-            1) echo -n "Enter new IPv4 Target (e.g., 1.1.1.1): "; read -r NEW_VAL
-               if [ -n "$NEW_VAL" ]; then
-                   sed -i 's/^PING_TARGET=".*"/PING_TARGET="'$NEW_VAL'"/' "$P"
-                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
-               fi ;;
-            2) echo -n "Enter new IPv6 Target: "; read -r NEW_VAL
-               if [ -n "$NEW_VAL" ]; then
-                   sed -i 's/^PING_TARGET_V6=".*"/PING_TARGET_V6="'$NEW_VAL'"/' "$P"
-                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
-               fi ;;
-            3) if [ "$CUR_MODE" = "true" ]; then NEW_MODE="false"; else NEW_MODE="true"; fi
-               sed -i 's/^ENABLE_IPV6=".*"/ENABLE_IPV6="'$NEW_MODE'"/' "$P"
-               echo -e " -> Mode switched to: $NEW_MODE"; NEED_REFRESH=1 ;;
-            4) echo -n "Enter Duration (seconds, e.g. 30): "; read -r NEW_VAL
-               if [ -n "$NEW_VAL" ]; then
-                   sed -i "s/^PING_DURATION=.*/PING_DURATION=$NEW_VAL/" "$P"
-                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
-               fi ;;
-            5) echo -n "Enter Latency Threshold (ms, e.g. 50): "; read -r NEW_VAL
-               if [ -n "$NEW_VAL" ]; then
-                   sed -i "s/^TRIGGER_LATENCY=.*/TRIGGER_LATENCY=$NEW_VAL/" "$P"
-                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
-               fi ;;
-            6) echo -n "Enter DB Retention (days, e.g. 45): "; read -r NEW_VAL
-               if [ -n "$NEW_VAL" ]; then
-                   sed -i "s/^RETENTION_DAYS=.*/RETENTION_DAYS=$NEW_VAL/" "$P"
-                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
-               fi ;;
-            0) 
-               if [ $NEED_REFRESH -eq 1 ]; then
-                   echo ""
-                   echo -e "${YELLOW}You made changes.${RESET}"
-                   echo -n " -> Run Pingtool now to update Dashboard data? (Takes ~${CUR_DUR}s) (y/n): "
-                   read -r refresh
-                   if [ "$refresh" = "y" ] || [ "$refresh" = "Y" ]; then
-                       echo "Running Pingtool... Please wait..."
-                       run_protected "$P"
-                       echo -e "${GREEN}Done. Dashboard updated.${RESET}"
-                       sleep 1
-                   fi
-               fi
-               return ;;
+            1) echo -n "Enter new IPv4 Target: "; read -r NEW_VAL; if [ -n "$NEW_VAL" ]; then sed -i 's/^PING_TARGET=".*"/PING_TARGET="'$NEW_VAL'"/' "$P"; echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1; fi ;;
+            2) echo -n "Enter new IPv6 Target: "; read -r NEW_VAL; if [ -n "$NEW_VAL" ]; then sed -i 's/^PING_TARGET_V6=".*"/PING_TARGET_V6="'$NEW_VAL'"/' "$P"; echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1; fi ;;
+            3) if [ "$CUR_MODE" = "true" ]; then NEW_MODE="false"; else NEW_MODE="true"; fi; sed -i 's/^ENABLE_IPV6=".*"/ENABLE_IPV6="'$NEW_MODE'"/' "$P"; echo -e " -> Mode: $NEW_MODE"; NEED_REFRESH=1 ;;
+            4) echo -n "Enter Duration (sec): "; read -r NEW_VAL; if [ -n "$NEW_VAL" ]; then sed -i "s/^PING_DURATION=.*/PING_DURATION=$NEW_VAL/" "$P"; echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1; fi ;;
+            5) echo -n "Enter Latency (ms): "; read -r NEW_VAL; if [ -n "$NEW_VAL" ]; then sed -i "s/^TRIGGER_LATENCY=.*/TRIGGER_LATENCY=$NEW_VAL/" "$P"; echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1; fi ;;
+            6) echo -n "Enter Retention (days): "; read -r NEW_VAL; if [ -n "$NEW_VAL" ]; then sed -i "s/^RETENTION_DAYS=.*/RETENTION_DAYS=$NEW_VAL/" "$P"; echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1; fi ;;
+            0) if [ $NEED_REFRESH -eq 1 ]; then echo ""; echo -n " -> Run Pingtool now? (y/n): "; read -r r; if [ "$r" = "y" ] || [ "$r" = "Y" ]; then run_protected "$P"; echo "Done."; sleep 1; fi; fi; return ;;
         esac
         sleep 0.5
     done
@@ -520,7 +460,7 @@ destination d_messages { file("/opt/var/log/messages"); };
 destination d_filtered { file("/opt/var/log/filtered.log"); };
 destination d_nas { network("10.128.1.29" transport("tcp") port(514)); };
 
-# NOISE FILTER: Matches traffic_manager AND user-defined system noise (ndhcps, wifi)
+# NOISE FILTER: Matches traffic_manager AND user-defined system noise (ndhcps, wifi, dns-proxy)
 filter f_noise {
     program("traffic_manager") or
     program("pingtool") or
@@ -533,6 +473,7 @@ filter f_noise {
     
     # SYSTEM CLEANUP RULES
     program("ndhcps") or
+    program("https-dns-proxy") or
     message("Network::Interface::Mtk::WifiMonitor") or
     message("WifiMonitor");
 };
@@ -605,6 +546,7 @@ destination d_nas { network("10.128.1.29" transport("tcp") port(514)); };
 # CLEANUP FILTER: Drops unwanted system noise
 filter f_clean_logs {
     not program("ndhcps")
+    and not program("https-dns-proxy")
     and not message("Network::Interface::Mtk::WifiMonitor")
     and not message("WifiMonitor");
 };
