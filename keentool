@@ -1,14 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.5.4 (BETA)
+# KEENTOOL MANAGER v0.5.5 (BETA)
 # Author: MatthewEli
 # Features:
-#   - SYSLOG: Implemented user-defined "Clean Filter" (ndhcps, WifiMonitor).
-#   - DUAL LOG: Maps "Clean Rules" to "Noise Filter" to segregate spam.
-#   - CONFIG: Added dns-cache(no) to syslog-ng options for performance.
-#   - PING CONFIG: Edit Duration, Latency Trigger, Retention, Targets & Mode.
-#   - CRON: Preserves formatting.
+#   - UX: 'Trap' logic preventing Ctrl+C from killing Keentool when in sub-tools.
+#   - PING: Auto-refresh prompt after config changes to update Dashboard JS immediately.
+#   - SYSLOG: Cleaner logic & dns-cache(no).
+#   - CORE: Preserves Cron formatting & robust navigation loops.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -65,7 +64,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.5.4 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.5.5 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -82,11 +81,20 @@ apply_perms() {
     fi
 }
 
+run_protected() {
+    # Runs a command while trapping SIGINT (Ctrl+C) so Keentool doesn't exit
+    trap '' INT
+    $1
+    trap - INT
+}
+
 # --- CONFIGURATORS ---
 
 configure_pingtool() {
     P="/opt/bin/pingtool.sh"
     if [ ! -f "$P" ]; then echo -e "${RED}Error: Ping Monitor is not installed.${RESET}"; pause; return; fi
+    
+    NEED_REFRESH=0
     
     while true; do
         header
@@ -120,32 +128,45 @@ configure_pingtool() {
             1) echo -n "Enter new IPv4 Target (e.g., 1.1.1.1): "; read -r NEW_VAL
                if [ -n "$NEW_VAL" ]; then
                    sed -i 's/^PING_TARGET=".*"/PING_TARGET="'$NEW_VAL'"/' "$P"
-                   echo -e " -> ${GREEN}Updated.${RESET}"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
                fi ;;
             2) echo -n "Enter new IPv6 Target: "; read -r NEW_VAL
                if [ -n "$NEW_VAL" ]; then
                    sed -i 's/^PING_TARGET_V6=".*"/PING_TARGET_V6="'$NEW_VAL'"/' "$P"
-                   echo -e " -> ${GREEN}Updated.${RESET}"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
                fi ;;
             3) if [ "$CUR_MODE" = "true" ]; then NEW_MODE="false"; else NEW_MODE="true"; fi
                sed -i 's/^ENABLE_IPV6=".*"/ENABLE_IPV6="'$NEW_MODE'"/' "$P"
-               echo -e " -> Mode switched to: $NEW_MODE" ;;
+               echo -e " -> Mode switched to: $NEW_MODE"; NEED_REFRESH=1 ;;
             4) echo -n "Enter Duration (seconds, e.g. 30): "; read -r NEW_VAL
                if [ -n "$NEW_VAL" ]; then
                    sed -i "s/^PING_DURATION=.*/PING_DURATION=$NEW_VAL/" "$P"
-                   echo -e " -> ${GREEN}Updated.${RESET}"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
                fi ;;
             5) echo -n "Enter Latency Threshold (ms, e.g. 50): "; read -r NEW_VAL
                if [ -n "$NEW_VAL" ]; then
                    sed -i "s/^TRIGGER_LATENCY=.*/TRIGGER_LATENCY=$NEW_VAL/" "$P"
-                   echo -e " -> ${GREEN}Updated.${RESET}"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
                fi ;;
             6) echo -n "Enter DB Retention (days, e.g. 45): "; read -r NEW_VAL
                if [ -n "$NEW_VAL" ]; then
                    sed -i "s/^RETENTION_DAYS=.*/RETENTION_DAYS=$NEW_VAL/" "$P"
-                   echo -e " -> ${GREEN}Updated.${RESET}"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
                fi ;;
-            0) return ;;
+            0) 
+               if [ $NEED_REFRESH -eq 1 ]; then
+                   echo ""
+                   echo -e "${YELLOW}You made changes.${RESET}"
+                   echo -n " -> Run Pingtool now to update Dashboard data? (Takes ~${CUR_DUR}s) (y/n): "
+                   read -r refresh
+                   if [ "$refresh" = "y" ] || [ "$refresh" = "Y" ]; then
+                       echo "Running Pingtool... Please wait..."
+                       run_protected "$P"
+                       echo -e "${GREEN}Done. Dashboard updated.${RESET}"
+                       sleep 1
+                   fi
+               fi
+               return ;;
         esac
         sleep 0.5
     done
@@ -453,7 +474,7 @@ EOF
         
         # Patch HTML to remove the secondary log box
         if [ -f "$WEB_ROOT/index.html" ]; then
-            sed -i '/<!--LOG 2 START-->/,/<!--LOG 2 END-->/d' "$WEB_ROOT/index.html"
+            sed -i '//,//d' "$WEB_ROOT/index.html"
         fi
         
         # Write Config for Syslog-ng (WITH CLEANUP RULES APPLIED)
@@ -749,7 +770,7 @@ EOF
             4) if [ "$RUN_OPT" = "yes" ]; then
                    if [ -x "$P" ]; then
                        header
-                       "$P"
+                       run_protected "$P"
                        pause
                    else
                        echo -e "${RED}Tool not found or not executable.${RESET}"
@@ -808,8 +829,8 @@ action_firewall() {
                fi
                pause ;;
             2) manage_cron_menu "$CMD_FW_STAT" "$CMD_FW_UPD" "$CMD_FW_VPN" "$CMD_ABUSE"; ;;
-            3) [ -f "$BIN_DIR/firewall_manager.sh" ] && $BIN_DIR/firewall_manager.sh || { echo "Missing"; sleep 1; };;
-            4) [ -f "$BIN_DIR/firewall_monitor" ] && $BIN_DIR/firewall_monitor || { echo "Missing"; sleep 1; };;
+            3) [ -f "$BIN_DIR/firewall_manager.sh" ] && run_protected "$BIN_DIR/firewall_manager.sh" || { echo "Missing"; sleep 1; };;
+            4) [ -f "$BIN_DIR/firewall_monitor" ] && run_protected "$BIN_DIR/firewall_monitor" || { echo "Missing"; sleep 1; };;
             5) header;
                echo -e "${BOLD}Uninstall Firewall Suite${RESET}"; echo -n " -> Remove ALL scripts and cron jobs? (y/n): "; read -r ans
                if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
