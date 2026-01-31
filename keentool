@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.5.5 (BETA)
+# KEENTOOL MANAGER v0.5.6 (BETA)
 # Author: MatthewEli
 # Features:
-#   - UX: 'Trap' logic preventing Ctrl+C from killing Keentool when in sub-tools.
-#   - PING: Auto-refresh prompt after config changes to update Dashboard JS immediately.
-#   - SYSLOG: Cleaner logic & dns-cache(no).
-#   - CORE: Preserves Cron formatting & robust navigation loops.
+#   - AUTO-UPDATE: New '-update' CLI flag and Cron menu for self-updates.
+#   - UX FIX: Fixed Ctrl+C inheritance issue (using trap ':' instead of '').
+#   - PING CONFIG: Full parameter editing via menu.
+#   - SYSLOG: Cleaner logic & performance tuning.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -53,6 +53,7 @@ CMD_FW_VPN="root /opt/bin/vpn_scan.sh > /dev/null 2>&1"
 CMD_SMB="/opt/bin/smb_backup_tool.sh -run"
 CMD_ABUSE="root /opt/bin/abuse_reporter.sh > /dev/null 2>&1"
 CMD_LOGROTATE="root /opt/sbin/logrotate /opt/etc/logrotate.conf"
+CMD_SELF_UPD="root /opt/bin/keentool -update >/dev/null 2>&1"
 
 # COLORS
 ESC=$(printf '\033')
@@ -64,7 +65,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.5.5 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.5.6 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -82,11 +83,45 @@ apply_perms() {
 }
 
 run_protected() {
-    # Runs a command while trapping SIGINT (Ctrl+C) so Keentool doesn't exit
-    trap '' INT
+    # FIX: Use ':' (no-op) instead of '' (ignore) for INT trap.
+    # Ignoring (SIG_IGN) is inherited by child processes and often cannot be overridden.
+    # Catching (with :) keeps parent alive but lets child receive the signal.
+    trap ':' INT
     $1
     trap - INT
 }
+
+# --- HEADLESS SELF-UPDATE (CLI) ---
+perform_self_update_headless() {
+    # Used by Cron
+    IFS='|' read -r N P R F <<EOF
+$T_SELF
+EOF
+    TMP_FILE="/tmp/keentool_bg.tmp"
+    curl -s -L "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
+    if [ ! -s "$TMP_FILE" ]; then rm -f "$TMP_FILE"; exit 1; fi
+    
+    sed -i 's/\r$//' "$TMP_FILE"
+    L_VER=$(get_version "$P"); R_VER=$(get_version "$TMP_FILE"); 
+    ver_compare "$R_VER" "$L_VER"; RES=$?
+    
+    # Update if Remote > Local (1) or Hash diff (0)
+    if [ $RES -eq 1 ] || { [ $RES -eq 0 ] && [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; }; then
+        mv "$TMP_FILE" "$P"
+        chmod +x "$P"
+        logger -t "KeenTool" "Self-updated to v$R_VER"
+    else
+        rm -f "$TMP_FILE"
+    fi
+    exit 0
+}
+
+# --- ARGUMENT HANDLING ---
+case "$1" in
+    -update|--update)
+        perform_self_update_headless
+        ;;
+esac
 
 # --- CONFIGURATORS ---
 
@@ -172,7 +207,7 @@ configure_pingtool() {
     done
 }
 
-# --- SELF UPDATE ---
+# --- SELF UPDATE (INTERACTIVE) ---
 action_self_update() {
     header; echo -e "${BOLD}Checking Keentool status...${RESET}"
     IFS='|' read -r N P R F <<EOF
@@ -880,6 +915,7 @@ EOF
     echo -e " ${BOLD}Global:${RESET}"
     echo -e " u. Check for Updates (Tools)"
     echo -e " s. ${MAGENTA}Update Keentool (Self)${RESET}"
+    echo -e " a. ${CYAN}Configure Auto-Update${RESET}"
     echo -e " c. View Crontab"
     echo -e " v. ${CYAN}Verify/Fix Crontab${RESET}"
     echo -e " q. Quit"
@@ -894,6 +930,7 @@ EOF
         5) action_generic "$T_DASH" "$CMD_LOGROTATE" ;;
         u) perform_global_scan ;;
         s) action_self_update ;;
+        a) manage_cron_menu "$CMD_SELF_UPD"; pause ;;
         c) header; cat $CRON_FILE; pause ;;
         v) action_verify_cron ;;
         q) exit 0 ;;
