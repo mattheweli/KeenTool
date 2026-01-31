@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.5.6 (BETA)
+# KEENTOOL MANAGER v0.5.7 (TRAFFIC CONFIG)
 # Author: MatthewEli
 # Features:
+#   - TRAFFIC: Added Interface Manager (Change Dashboard Target, Add/Del DB).
 #   - AUTO-UPDATE: New '-update' CLI flag and Cron menu for self-updates.
 #   - UX FIX: Fixed Ctrl+C inheritance issue (using trap ':' instead of '').
 #   - PING CONFIG: Full parameter editing via menu.
@@ -65,7 +66,7 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.5.6 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
+header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.5.7 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
 pause() { echo ""; read -p "Press [Enter] to return..." fack; }
 get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
 get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
@@ -84,8 +85,6 @@ apply_perms() {
 
 run_protected() {
     # FIX: Use ':' (no-op) instead of '' (ignore) for INT trap.
-    # Ignoring (SIG_IGN) is inherited by child processes and often cannot be overridden.
-    # Catching (with :) keeps parent alive but lets child receive the signal.
     trap ':' INT
     $1
     trap - INT
@@ -93,7 +92,6 @@ run_protected() {
 
 # --- HEADLESS SELF-UPDATE (CLI) ---
 perform_self_update_headless() {
-    # Used by Cron
     IFS='|' read -r N P R F <<EOF
 $T_SELF
 EOF
@@ -105,7 +103,6 @@ EOF
     L_VER=$(get_version "$P"); R_VER=$(get_version "$TMP_FILE"); 
     ver_compare "$R_VER" "$L_VER"; RES=$?
     
-    # Update if Remote > Local (1) or Hash diff (0)
     if [ $RES -eq 1 ] || { [ $RES -eq 0 ] && [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; }; then
         mv "$TMP_FILE" "$P"
         chmod +x "$P"
@@ -124,6 +121,83 @@ case "$1" in
 esac
 
 # --- CONFIGURATORS ---
+
+configure_traffic() {
+    # 1. Parse current Interface from internal variable (CMD_VNSTAT)
+    CUR_IFACE=$(echo "$CMD_VNSTAT" | grep -o 'traffic_manager.sh [^ ]*' | cut -d' ' -f2)
+    [ -z "$CUR_IFACE" ] && CUR_IFACE="ppp0"
+
+    while true; do
+        header
+        echo -e "${BOLD}Traffic Manager Configuration${RESET}"
+        echo ""
+        echo -e " Current Dashboard Target: ${CYAN}${CUR_IFACE}${RESET}"
+        echo ""
+        
+        # Get VNStat DB list
+        echo -e "${BOLD}Available Interfaces (VNStat DB):${RESET}"
+        if command -v vnstat >/dev/null 2>&1; then
+            vnstat --iflist 2>/dev/null | awk '{print "  - " $0}'
+        else
+            echo "  (VNStat not found)"
+        fi
+        
+        echo ""
+        echo " 1. Set Dashboard Interface (Updates Cron)"
+        echo " 2. Add New Interface to DB (vnstat --add)"
+        echo " 3. Remove Interface from DB (vnstat --remove)"
+        echo " 0. Back"
+        echo ""
+        echo -n "Select option: "; read -r opt
+        
+        case $opt in
+            1) 
+                echo -n "Enter Interface Name (e.g. ppp0, usb0, eth3): "; read -r NEW_IF
+                if [ -n "$NEW_IF" ]; then
+                    # Update the CMD_VNSTAT line in THIS script file using sed
+                    sed -i "s|traffic_manager.sh [a-zA-Z0-9_.]*|traffic_manager.sh $NEW_IF|" "$0"
+                    
+                    # Update local variable for current session
+                    CUR_IFACE="$NEW_IF"
+                    
+                    # Re-construct command for Cron update
+                    NEW_CMD="root /opt/bin/traffic_manager.sh $NEW_IF >/opt/var/log/t_manager.log 2>&1"
+                    
+                    # Update Crontab if job exists
+                    if grep -q "traffic_manager.sh" "$CRON_FILE"; then
+                        echo " -> Updating Crontab..."
+                        grep -v "traffic_manager.sh" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
+                        echo "*/10 * * * * $NEW_CMD" >> "$CRON_FILE"
+                        sanitize_and_reload_cron
+                    fi
+                    echo -e " -> ${GREEN}Target set to $NEW_IF.${RESET}"
+                    sleep 1
+                fi
+                ;;
+            2)
+                echo -n "Enter Interface to ADD (e.g. usb0): "; read -r ADD_IF
+                if [ -n "$ADD_IF" ]; then
+                    echo " -> Adding $ADD_IF..."
+                    vnstat --add -i "$ADD_IF"
+                    /opt/etc/init.d/S32vnstat2 restart
+                    echo -e " -> ${GREEN}Done. Please allow ~10m for data collection.${RESET}"
+                    pause
+                fi
+                ;;
+            3)
+                echo -n "Enter Interface to REMOVE (e.g. eth0): "; read -r DEL_IF
+                if [ -n "$DEL_IF" ]; then
+                    echo " -> Removing $DEL_IF..."
+                    vnstat --remove -i "$DEL_IF" --force
+                    /opt/etc/init.d/S32vnstat2 restart
+                    echo -e " -> ${RED}Removed.${RESET}"
+                    pause
+                fi
+                ;;
+            0) return ;;
+        esac
+    done
+}
 
 configure_pingtool() {
     P="/opt/bin/pingtool.sh"
@@ -768,6 +842,23 @@ EOF
     done
 }
 
+action_traffic() {
+    IFS='|' read -r N P R F <<EOF
+$T_VNSTAT
+EOF
+    while true; do
+        header; if [ -f "$P" ]; then VER=$(get_version "$P"); echo -e "$N Status: ${GREEN}Installed (v$VER)${RESET}"; else echo -e "$N Status: ${DIM}Not Installed${RESET}"; fi
+        echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Configure Interface (Dashboard/DB)"; echo " 4. Uninstall"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
+        case $op in
+            1) header; check_and_install_deps "$DEPS_VNSTAT"; smart_process "$N" "$P" "$R" "$F"; if [ -n "$CMD_VNSTAT" ]; then manage_cron_menu "$CMD_VNSTAT"; fi; pause ;;
+            2) manage_cron_menu "$CMD_VNSTAT"; ;;
+            3) configure_traffic ;;
+            4) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove file and cron? (y/n): "; read -r ans; if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then if [ -f "$P" ]; then rm -f "$P"; echo -e "    File removed."; fi; remove_cron_cmd "$CMD_VNSTAT"; echo -e "${GREEN}Done.${RESET}"; fi; pause ;;
+            0) return ;;
+        esac
+    done
+}
+
 action_generic() {
     T_DEF="$1"; T_CMD="$2"; RUN_OPT="$3"
     IFS='|' read -r N P R F <<EOF
@@ -923,7 +1014,7 @@ EOF
     echo -n "Select: "; read choice
     case $choice in
         0) setup_system ;;
-        1) action_generic "$T_VNSTAT" "$CMD_VNSTAT" ;;
+        1) action_traffic ;;
         2) action_ping ;; 
         3) action_firewall ;;
         4) action_generic "$T_SMB" "$CMD_SMB" "yes" ;;
