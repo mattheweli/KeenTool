@@ -1,4 +1,4 @@
-<!-- Keenetic Dashboard v1.1.4 -->
+<!-- Keenetic Dashboard v1.2.2 (Modular Logs) -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -129,43 +129,10 @@
         </div>
     </div>
 
-    <div class="log-container">
-        <details id="log_details_main" open>
-            <summary onclick="fetchLog('main')">
-                <div class="log-title">
-                    <span>📜 System Log (Clean)</span>
-                    <span id="log_size_main" class="log-meta"></span>
-                </div>
-                <div class="log-controls">
-                    <button class="btn-log" onclick="downloadLog('main', event)">💾 Save</button>
-                    <button class="btn-log" onclick="fetchLog('main', true, event)">🔄 Reload</button>
-                    <span style="font-size: 1.2rem;">▾</span>
-                </div>
-            </summary>
-            <div class="log-viewer" id="log_content_main">Click to load...</div>
-        </details>
-    </div>
-
-<!--LOG 2 START-->
-
-    <div class="log-container">
-        <details id="log_details_filtered">
-            <summary onclick="fetchLog('filtered')">
-                <div class="log-title">
-                    <span style="color:var(--muted)">🗑️ Filtered Logs (Noise)</span>
-                    <span id="log_size_filtered" class="log-meta"></span>
-                </div>
-                <div class="log-controls">
-                    <button class="btn-log" onclick="downloadLog('filtered', event)">💾 Save</button>
-                    <button class="btn-log" onclick="fetchLog('filtered', true, event)">🔄 Reload</button>
-                    <span style="font-size: 1.2rem;">▾</span>
-                </div>
-            </summary>
-            <div class="log-viewer secondary" id="log_content_filtered">Click to load...</div>
-        </details>
-    </div>
-
-<!--LOG 2 END-->
+<!--LOG GENERATION START-->
+    <div id="log_container_root">
+        </div>
+<!--LOG GENERATION END-->
 
     <div class="footer-copy">Copyright &copy; 2026 mattheweli</div>
 
@@ -174,50 +141,93 @@
     <script src="ping/data.js" onerror="console.log('Ping missing')"></script>
 
     <script>
+        // === LOG CONFIGURATION ===
+        const logConfig = [
+            { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true },
+            { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false },
+            { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false },
+            { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false },
+            { id: 'dns', file: 'dns_proxy.log', label: '🌍 DNS Proxy Errors', primary: false },
+            { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false },
+            { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false }
+        ];
+
         const fmtBytes = (b) => { if (!b) return "0 B"; const u = ['B','KB','MB','GB','TB']; let i = 0; while(b >= 1024 && i < u.length-1){ b/=1024; i++; } return b.toFixed(2) + ' ' + u[i]; };
         const updateClock = () => { document.getElementById('global_clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}); };
         
-        const logs = {
-            main: { file: 'messages.log', loaded: false, idContent: 'log_content_main', idDetails: 'log_details_main', idSize: 'log_size_main' },
-            filtered: { file: 'filtered.log', loaded: false, idContent: 'log_content_filtered', idDetails: 'log_details_filtered', idSize: 'log_size_filtered' }
-        };
+        let logsLoadedStatus = {};
 
-        async function fetchLog(type, force = false, event = null) {
+        // RENDER LOG BOXES
+        function renderLogs() {
+            const container = document.getElementById('log_container_root');
+            container.innerHTML = ''; // Clean start
+
+            logConfig.forEach(log => {
+                const isOpen = log.primary ? 'open' : '';
+                const styleClass = log.primary ? 'log-viewer' : 'log-viewer secondary';
+                const labelStyle = log.primary ? '' : 'style="color:var(--muted)"';
+                
+                const html = `
+                <div class="log-container">
+                    <details id="details_${log.id}" ${isOpen}>
+                        <summary onclick="fetchLog('${log.id}', '${log.file}')">
+                            <div class="log-title">
+                                <span ${labelStyle}>${log.label}</span>
+                                <span id="size_${log.id}" class="log-meta"></span>
+                            </div>
+                            <div class="log-controls">
+                                <button class="btn-log" onclick="downloadLog('${log.id}', '${log.file}', event)">💾 Save</button>
+                                <button class="btn-log" onclick="fetchLog('${log.id}', '${log.file}', true, event)">🔄 Reload</button>
+                                <span style="font-size: 1.2rem;">▾</span>
+                            </div>
+                        </summary>
+                        <div class="${styleClass}" id="content_${log.id}">Click to load...</div>
+                    </details>
+                </div>`;
+                
+                container.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        async function fetchLog(id, filename, force = false, event = null) {
             if (event) event.stopPropagation();
-            const cfg = logs[type];
-            if (!cfg) return;
-            const details = document.getElementById(cfg.idDetails);
-            if (!details) return; // Safety check if element removed
+            
+            const details = document.getElementById(`details_${id}`);
+            const viewer = document.getElementById(`content_${id}`);
+            const sizeLabel = document.getElementById(`size_${id}`);
+
+            // If manually clicking closed header (not force), don't load
             if (!details.open && !force && !event) return;
 
-            const viewer = document.getElementById(cfg.idContent);
-            if (cfg.loaded && !force) return;
+            // If already loaded and not forcing, do nothing
+            if (logsLoadedStatus[id] && !force) return;
 
-            viewer.innerText = "Loading " + cfg.file + " ...";
+            viewer.innerText = "Loading " + filename + " ...";
             try {
-                const response = await fetch(cfg.file + '?t=' + new Date().getTime());
-                if (!response.ok) throw new Error("Log file not found");
+                const response = await fetch(filename + '?t=' + new Date().getTime());
+                if (!response.ok) throw new Error("Log file empty or not found");
                 const text = await response.text();
                 viewer.innerText = text;
-                document.getElementById(cfg.idSize).innerText = "(" + fmtBytes(text.length) + ")";
+                sizeLabel.innerText = "(" + fmtBytes(text.length) + ")";
                 viewer.scrollTop = viewer.scrollHeight;
-                cfg.loaded = true;
+                logsLoadedStatus[id] = true;
             } catch (err) {
-                viewer.innerText = "Error loading " + cfg.file + ":\n" + err.message + "\n\n(Ensure symlink exists in /opt/var/www/)";
+                viewer.innerText = "No data available for " + filename + ".\n(File might not exist yet or is empty)";
+                sizeLabel.innerText = "(0 B)";
             }
         }
 
-        function downloadLog(type, event) {
+        function downloadLog(id, filename, event) {
             event.stopPropagation();
-            const cfg = logs[type];
-            if(!document.getElementById(cfg.idContent)) return;
-            const content = document.getElementById(cfg.idContent).innerText;
-            if (!content || content.startsWith("Loading") || content.startsWith("Error")) { alert("Load the log first."); return; }
+            const viewer = document.getElementById(`content_${id}`);
+            const content = viewer.innerText;
+            if (!content || content.startsWith("Loading") || content.startsWith("No data")) { alert("Load the log first."); return; }
+            
             const blob = new Blob([content], { type: 'text/plain' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = "keenetic_" + type + "_" + new Date().toISOString().slice(0,10) + ".log";
+            a.download = id + "_" + new Date().toISOString().slice(0,10) + ".log";
             a.click();
             window.URL.revokeObjectURL(url);
         }
@@ -232,10 +242,14 @@
         setInterval(updateClock, 1000); updateClock();
 
         window.onload = function() {
+            renderLogs(); // Generate Log Boxes
+
+            // Load ALL logs immediately, even if closed
+            logConfig.forEach(l => fetchLog(l.id, l.file, true));
+
             const savedRate = localStorage.getItem('dash_refresh_rate') || "0";
             document.getElementById('refresh_timer').value = savedRate;
             updateRefresh(savedRate);
-            fetchLog('main');
 
             if (typeof window.FW_DATA !== 'undefined') {
                 const d = window.FW_DATA;
@@ -257,7 +271,10 @@
                     document.getElementById('tr_today').innerText = fmtBytes(dayData.rx + dayData.tx);
                     document.getElementById('tr_month').innerText = fmtBytes(monthData.rx + monthData.tx);
                     const u = iface.updated; const pad = (n) => n.toString().padStart(2, '0');
-                    const ts = `${pad(u.date.day)}-${pad(u.date.month)}-${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}`;
+                    
+                    // FIXED TIMESTAMP
+                    const ts = `${pad(u.date.day)}-${pad(u.date.month)}-${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}:${u.time.second ? pad(u.time.second) : '00'}`;
+                    
                     document.getElementById('tr_meta').innerText = "Last Update: " + ts;
                     document.getElementById('tr_status').classList.add('online');
                 } catch(e) { console.error("VnStat Logic Error", e); }
