@@ -1,13 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.5.8 (BETA)
+# KEENTOOL MANAGER v0.5.11 (BETA)
 # Author: MatthewEli
 # Features:
-#   - SYSLOG: Added filter for 'https-dns-proxy' to suppress timeout spam.
-#   - TRAFFIC: Interface Manager (Change Dashboard Target, Add/Del DB).
-#   - AUTO-UPDATE: Headless & Interactive modes.
-#   - CORE: Preserves Crontab formatting & Trap Fixes.
+#   - LOGGING: Added Reverse Proxy (Nginx) Filter module.
+#   - SECURITY: Stores AbuseIPDB Key in /opt/etc/AbuseIPDB.key (chmod 600).
+#   - DYNAMIC: Updates syslog-ng, logrotate AND index.html JS config.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -21,6 +20,7 @@ BIN_DIR="/opt/bin"
 NDM_DIR="/opt/etc/ndm/netfilter.d"
 INIT_DIR="/opt/etc/init.d"
 WEB_ROOT="/opt/var/www"
+KEY_FILE="/opt/etc/AbuseIPDB.key"
 
 # --- DEPENDENCY LISTS ---
 DEPS_CORE="lighttpd bash curl wget-ssl cron"
@@ -65,11 +65,53 @@ RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CY
 UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 
 # --- UTILS ---
-header() { clear; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo -e "${BOLD}${BLUE}   KEENTOOL v0.5.8 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"; echo -e "${BOLD}${BLUE}======================================================${RESET}"; echo ""; }
-pause() { echo ""; read -p "Press [Enter] to return..." fack; }
-get_version() { [ -f "$1" ] && VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1); [ -z "$VER" ] && echo "0.0.0" || echo "${VER#v}"; }
-get_md5() { [ -f "$1" ] && md5sum "$1" | awk '{print $1}' || echo "none"; }
-ver_compare() { if [ "$1" = "$2" ]; then return 0; fi; awk -v v1="$1" -v v2="$2" 'BEGIN { split(v1,a,"."); split(v2,b,"."); for(i=1;i<=3;i++) { if(a[i]+0 > b[i]+0) exit 1; if(a[i]+0 < b[i]+0) exit 2; } exit 0; }'; return $?; }
+header() { 
+    clear
+    echo -e "${BOLD}${BLUE}======================================================${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.5.11 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}    |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================${RESET}"
+    echo "" 
+}
+
+pause() { 
+    echo ""
+    read -p "Press [Enter] to return..." fack 
+}
+
+get_version() { 
+    if [ -f "$1" ]; then
+        VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1)
+    fi
+    if [ -z "$VER" ]; then
+        echo "0.0.0"
+    else
+        echo "${VER#v}"
+    fi
+}
+
+get_md5() { 
+    if [ -f "$1" ]; then
+        md5sum "$1" | awk '{print $1}'
+    else
+        echo "none"
+    fi
+}
+
+ver_compare() { 
+    if [ "$1" = "$2" ]; then 
+        return 0
+    fi
+    awk -v v1="$1" -v v2="$2" 'BEGIN { 
+        split(v1,a,"."); 
+        split(v2,b,"."); 
+        for(i=1;i<=3;i++) { 
+            if(a[i]+0 > b[i]+0) exit 1; 
+            if(a[i]+0 < b[i]+0) exit 2; 
+        } 
+        exit 0; 
+    }'
+    return $? 
+}
 
 # --- HELPERS ---
 apply_perms() {
@@ -83,6 +125,7 @@ apply_perms() {
 }
 
 run_protected() {
+    # Fixes Ctrl+C killing the parent script
     trap ':' INT
     $1
     trap - INT
@@ -95,12 +138,20 @@ $T_SELF
 EOF
     TMP_FILE="/tmp/keentool_bg.tmp"
     curl -s -L "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
-    if [ ! -s "$TMP_FILE" ]; then rm -f "$TMP_FILE"; exit 1; fi
+    
+    if [ ! -s "$TMP_FILE" ]; then 
+        rm -f "$TMP_FILE"
+        exit 1
+    fi
     
     sed -i 's/\r$//' "$TMP_FILE"
-    L_VER=$(get_version "$P"); R_VER=$(get_version "$TMP_FILE"); 
-    ver_compare "$R_VER" "$L_VER"; RES=$?
+    L_VER=$(get_version "$P")
+    R_VER=$(get_version "$TMP_FILE")
     
+    ver_compare "$R_VER" "$L_VER"
+    RES=$?
+    
+    # Update if Remote > Local (1) or Hash diff (0)
     if [ $RES -eq 1 ] || { [ $RES -eq 0 ] && [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; }; then
         mv "$TMP_FILE" "$P"
         chmod +x "$P"
@@ -111,6 +162,7 @@ EOF
     exit 0
 }
 
+# --- ARGUMENT HANDLING ---
 case "$1" in
     -update|--update)
         perform_self_update_headless
@@ -118,6 +170,244 @@ case "$1" in
 esac
 
 # --- CONFIGURATORS ---
+
+configure_logging_modules() {
+    # Defaults
+    EN_VPN="yes"
+    EN_SCRIPTS="yes"
+    EN_DNS="yes"
+    EN_WIFI="yes"
+    EN_DHCP="yes"
+    EN_PROXY="yes"
+    
+    CONF="/opt/etc/syslog-ng.conf"
+    
+    # Detect current state
+    if [ -f "$CONF" ]; then
+        if grep -q "filter(f_vpn)" "$CONF"; then EN_VPN="yes"; else EN_VPN="no"; fi
+        if grep -q "filter(f_scripts)" "$CONF"; then EN_SCRIPTS="yes"; else EN_SCRIPTS="no"; fi
+        if grep -q "filter(f_dns)" "$CONF"; then EN_DNS="yes"; else EN_DNS="no"; fi
+        if grep -q "filter(f_wifi)" "$CONF"; then EN_WIFI="yes"; else EN_WIFI="no"; fi
+        if grep -q "filter(f_dhcp)" "$CONF"; then EN_DHCP="yes"; else EN_DHCP="no"; fi
+        if grep -q "filter(f_proxy)" "$CONF"; then EN_PROXY="yes"; else EN_PROXY="no"; fi
+    fi
+
+    while true; do
+        header
+        echo -e "${BOLD}Modular Logging Configuration${RESET}"
+        
+        # Color Logic
+        if [ "$EN_VPN" = "yes" ]; then c_vpn="${GREEN}ON${RESET}"; else c_vpn="${RED}OFF${RESET}"; fi
+        if [ "$EN_SCRIPTS" = "yes" ]; then c_scr="${GREEN}ON${RESET}"; else c_scr="${RED}OFF${RESET}"; fi
+        if [ "$EN_DNS" = "yes" ]; then c_dns="${GREEN}ON${RESET}"; else c_dns="${RED}OFF${RESET}"; fi
+        if [ "$EN_WIFI" = "yes" ]; then c_wif="${GREEN}ON${RESET}"; else c_wif="${RED}OFF${RESET}"; fi
+        if [ "$EN_DHCP" = "yes" ]; then c_dhc="${GREEN}ON${RESET}"; else c_dhc="${RED}OFF${RESET}"; fi
+        if [ "$EN_PROXY" = "yes" ]; then c_prx="${GREEN}ON${RESET}"; else c_prx="${RED}OFF${RESET}"; fi
+        
+        echo -e " 1. VPN Events (OpenVPN/WireGuard)    [$c_vpn]"
+        echo -e " 2. Keentool Scripts (Traffic/Ping)   [$c_scr]"
+        echo -e " 3. DNS Proxy Errors (Timeout Spam)   [$c_dns]"
+        echo -e " 4. WiFi Monitor (Mediatek Spam)      [$c_wif]"
+        echo -e " 5. DHCP Events (ndhcps)              [$c_dhc]"
+        echo -e " 6. Reverse Proxy (Nginx SSL Errors)  [$c_prx]"
+        echo ""
+        echo -e " ${BOLD}a. APPLY CHANGES & RESTART SERVICES${RESET}"
+        echo " 0. Cancel / Back"
+        echo ""
+        echo -n "Select: "
+        read -r opt
+        
+        case $opt in
+            1) if [ "$EN_VPN" = "yes" ]; then EN_VPN="no"; else EN_VPN="yes"; fi ;;
+            2) if [ "$EN_SCRIPTS" = "yes" ]; then EN_SCRIPTS="no"; else EN_SCRIPTS="yes"; fi ;;
+            3) if [ "$EN_DNS" = "yes" ]; then EN_DNS="no"; else EN_DNS="yes"; fi ;;
+            4) if [ "$EN_WIFI" = "yes" ]; then EN_WIFI="no"; else EN_WIFI="yes"; fi ;;
+            5) if [ "$EN_DHCP" = "yes" ]; then EN_DHCP="no"; else EN_DHCP="yes"; fi ;;
+            6) if [ "$EN_PROXY" = "yes" ]; then EN_PROXY="no"; else EN_PROXY="yes"; fi ;;
+            a)
+                echo ""
+                echo -e "${CYAN}Applying Configuration...${RESET}"
+                
+                # 1. SETUP SYMLINKS
+                mkdir -p "$WEB_ROOT"
+                LOG_LIST="vpn keentool dns_proxy wifi_monitor ndhcps nginx_proxy"
+                
+                for L in $LOG_LIST; do
+                    if [ ! -f "/opt/var/log/${L}.log" ]; then
+                        touch "/opt/var/log/${L}.log"
+                    fi
+                    chmod 644 "/opt/var/log/${L}.log"
+                    
+                    if [ ! -L "$WEB_ROOT/${L}.log" ]; then
+                        ln -sf "/opt/var/log/${L}.log" "$WEB_ROOT/${L}.log"
+                    fi
+                done
+                
+                if [ ! -L "$WEB_ROOT/messages.log" ]; then 
+                    ln -sf /opt/var/log/messages "$WEB_ROOT/messages.log"
+                fi
+
+                # 2. GENERATE SYSLOG-NG
+                cat > /opt/etc/syslog-ng.conf <<EOF
+@version: 4.7
+@include "scl.conf"
+
+options { 
+    chain_hostnames(no); 
+    create_dirs(yes); 
+    keep_hostname(yes); 
+    use_fqdn(no); 
+    log_msg_size(16384); 
+    log_fifo_size(256); 
+    stats(freq(21600)); 
+    dns-cache(no); 
+};
+
+source s_local { internal(); unix-dgram("/dev/log"); };
+source s_network { udp(ip("0.0.0.0") port(514)); };
+
+# FILTERS
+filter f_dns { program("https-dns-proxy"); };
+filter f_wifi { message("Network::Interface::Mtk::WifiMonitor") or message("WifiMonitor"); };
+filter f_dhcp { program("ndhcps"); };
+filter f_vpn { program("OpenVPN.*") or program("wireguard") or message("WireGuard"); };
+filter f_scripts { 
+    program("traffic_manager") or program("pingtool") or 
+    program("firewall_stats") or program("vpn_scan") or 
+    program("abuse_reporter") or 
+    message("traffic_manager") or message("pingtool") or message("firewall_stats"); 
+};
+filter f_proxy { program("nginx") or message("nginx:"); };
+
+# CLEAN FILTER (EXCLUDES ENABLED MODULES)
+filter f_clean {
+    not filter(f_dns) and 
+    not filter(f_wifi) and 
+    not filter(f_dhcp) and 
+    not filter(f_vpn) and 
+    not filter(f_scripts) and 
+    not filter(f_proxy);
+};
+
+# DESTINATIONS
+destination d_messages { file("/opt/var/log/messages"); };
+destination d_dns      { file("/opt/var/log/dns_proxy.log"); };
+destination d_wifi     { file("/opt/var/log/wifi_monitor.log"); };
+destination d_dhcp     { file("/opt/var/log/ndhcps.log"); };
+destination d_vpn      { file("/opt/var/log/vpn.log"); };
+destination d_scripts  { file("/opt/var/log/keentool.log"); };
+destination d_proxy    { file("/opt/var/log/nginx_proxy.log"); };
+destination d_nas      { network("10.128.1.29" transport("tcp") port(514)); };
+
+# LOG PATHS (Clean)
+log { source(s_local); source(s_network); filter(f_clean); destination(d_messages); };
+log { source(s_local); source(s_network); filter(f_clean); destination(d_nas); };
+EOF
+                # Append enabled logs
+                if [ "$EN_DNS" = "yes" ]; then 
+                    echo 'log { source(s_local); source(s_network); filter(f_dns); destination(d_dns); };' >> /opt/etc/syslog-ng.conf
+                fi
+                
+                if [ "$EN_WIFI" = "yes" ]; then 
+                    echo 'log { source(s_local); source(s_network); filter(f_wifi); destination(d_wifi); };' >> /opt/etc/syslog-ng.conf
+                fi
+                
+                if [ "$EN_DHCP" = "yes" ]; then 
+                    echo 'log { source(s_local); source(s_network); filter(f_dhcp); destination(d_dhcp); };' >> /opt/etc/syslog-ng.conf
+                fi
+                
+                if [ "$EN_VPN" = "yes" ]; then 
+                    echo 'log { source(s_local); source(s_network); filter(f_vpn); destination(d_vpn); };' >> /opt/etc/syslog-ng.conf
+                fi
+                
+                if [ "$EN_SCRIPTS" = "yes" ]; then 
+                    echo 'log { source(s_local); source(s_network); filter(f_scripts); destination(d_scripts); };' >> /opt/etc/syslog-ng.conf
+                fi
+                
+                if [ "$EN_PROXY" = "yes" ]; then 
+                    echo 'log { source(s_local); source(s_network); filter(f_proxy); destination(d_proxy); };' >> /opt/etc/syslog-ng.conf
+                fi
+
+                # 3. GENERATE LOGROTATE
+                cat > /opt/etc/logrotate.d/syslog-ng <<EOF
+/opt/var/log/messages { 
+    rotate 4 
+    size 5M 
+    missingok 
+    notifempty 
+    compress 
+    postrotate 
+        /opt/etc/init.d/S01syslog-ng restart > /dev/null 2>&1 
+    endscript 
+}
+EOF
+                
+                SECLOGS=""
+                [ "$EN_DNS" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/dns_proxy.log"
+                [ "$EN_WIFI" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/wifi_monitor.log"
+                [ "$EN_DHCP" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/ndhcps.log"
+                [ "$EN_VPN" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/vpn.log"
+                [ "$EN_SCRIPTS" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/keentool.log"
+                [ "$EN_PROXY" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/nginx_proxy.log"
+                
+                if [ -n "$SECLOGS" ]; then
+                    echo "$SECLOGS {" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    monthly" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    rotate 2" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    size 5M" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    missingok" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    notifempty" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    compress" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    postrotate" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "        /opt/etc/init.d/S01syslog-ng restart > /dev/null 2>&1" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    endscript" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "}" >> /opt/etc/logrotate.d/syslog-ng
+                fi
+
+                # 4. PATCH INDEX.HTML (JS CONFIG)
+                if [ -f "$WEB_ROOT/index.html" ]; then
+                    echo " -> Patching Dashboard HTML..."
+                    JS_CONFIG="const logConfig = ["
+                    JS_CONFIG="$JS_CONFIG { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true },"
+                    
+                    if [ "$EN_VPN" = "yes" ]; then
+                        JS_CONFIG="$JS_CONFIG { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false },"
+                    fi
+                    if [ "$EN_PROXY" = "yes" ]; then
+                        JS_CONFIG="$JS_CONFIG { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false },"
+                    fi
+                    if [ "$EN_SCRIPTS" = "yes" ]; then
+                        JS_CONFIG="$JS_CONFIG { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false },"
+                    fi
+                    if [ "$EN_DNS" = "yes" ]; then
+                        JS_CONFIG="$JS_CONFIG { id: 'dns', file: 'dns_proxy.log', label: '🌍 DNS Proxy Errors', primary: false },"
+                    fi
+                    if [ "$EN_WIFI" = "yes" ]; then
+                        JS_CONFIG="$JS_CONFIG { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false },"
+                    fi
+                    if [ "$EN_DHCP" = "yes" ]; then
+                        JS_CONFIG="$JS_CONFIG { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false },"
+                    fi
+                    
+                    # Remove trailing comma
+                    JS_CONFIG="${JS_CONFIG%,} ];"
+                    
+                    # Use sed with a temporary file approach to be safe with slashes/newlines
+                    sed -i '/const logConfig = \[/,/\];/c\'"$JS_CONFIG" "$WEB_ROOT/index.html"
+                fi
+
+                # 5. RESTART
+                echo " -> Restarting Syslog-ng..."
+                /opt/etc/init.d/S01syslog-ng restart >/dev/null 2>&1
+                
+                echo -e "${GREEN}Done. Configuration applied.${RESET}"
+                sleep 1
+                return
+                ;;
+            0) return ;;
+        esac
+    done
+}
 
 configure_traffic() {
     # 1. Parse current Interface from internal variable (CMD_VNSTAT)
@@ -131,6 +421,7 @@ configure_traffic() {
         echo -e " Current Dashboard Target: ${CYAN}${CUR_IFACE}${RESET}"
         echo ""
         
+        # Get VNStat DB list
         echo -e "${BOLD}Available Interfaces (VNStat DB):${RESET}"
         if command -v vnstat >/dev/null 2>&1; then
             vnstat --iflist 2>/dev/null | awk '{print "  - " $0}'
@@ -148,7 +439,8 @@ configure_traffic() {
         
         case $opt in
             1) 
-                echo -n "Enter Interface Name (e.g. ppp0, usb0, eth3): "; read -r NEW_IF
+                echo -n "Enter Interface Name (e.g. ppp0, usb0, eth3): "
+                read -r NEW_IF
                 if [ -n "$NEW_IF" ]; then
                     sed -i "s|traffic_manager.sh [a-zA-Z0-9_.]*|traffic_manager.sh $NEW_IF|" "$0"
                     CUR_IFACE="$NEW_IF"
@@ -164,7 +456,8 @@ configure_traffic() {
                 fi
                 ;;
             2)
-                echo -n "Enter Interface to ADD (e.g. usb0): "; read -r ADD_IF
+                echo -n "Enter Interface to ADD (e.g. usb0): "
+                read -r ADD_IF
                 if [ -n "$ADD_IF" ]; then
                     echo " -> Adding $ADD_IF..."
                     vnstat --add -i "$ADD_IF"
@@ -174,7 +467,8 @@ configure_traffic() {
                 fi
                 ;;
             3)
-                echo -n "Enter Interface to REMOVE (e.g. eth0): "; read -r DEL_IF
+                echo -n "Enter Interface to REMOVE (e.g. eth0): "
+                read -r DEL_IF
                 if [ -n "$DEL_IF" ]; then
                     echo " -> Removing $DEL_IF..."
                     vnstat --remove -i "$DEL_IF" --force
@@ -190,32 +484,85 @@ configure_traffic() {
 
 configure_pingtool() {
     P="/opt/bin/pingtool.sh"
-    if [ ! -f "$P" ]; then echo -e "${RED}Error: Ping Monitor is not installed.${RESET}"; pause; return; fi
+    if [ ! -f "$P" ]; then 
+        echo -e "${RED}Error: Ping Monitor is not installed.${RESET}"
+        pause
+        return
+    fi
+    
     NEED_REFRESH=0
+    
     while true; do
         header
         echo -e "${BOLD}Ping Monitor Configuration${RESET}"
-        CUR_V4=$(grep '^PING_TARGET="' "$P" | cut -d'"' -f2); CUR_V6=$(grep '^PING_TARGET_V6="' "$P" | cut -d'"' -f2); CUR_MODE=$(grep '^ENABLE_IPV6="' "$P" | cut -d'"' -f2)
-        CUR_DUR=$(grep '^PING_DURATION=' "$P" | cut -d'=' -f2); CUR_LAT=$(grep '^TRIGGER_LATENCY=' "$P" | cut -d'=' -f2); CUR_RET=$(grep '^RETENTION_DAYS=' "$P" | cut -d'=' -f2)
+        
+        CUR_V4=$(grep '^PING_TARGET="' "$P" | cut -d'"' -f2)
+        CUR_V6=$(grep '^PING_TARGET_V6="' "$P" | cut -d'"' -f2)
+        CUR_MODE=$(grep '^ENABLE_IPV6="' "$P" | cut -d'"' -f2)
+        CUR_DUR=$(grep '^PING_DURATION=' "$P" | cut -d'=' -f2)
+        CUR_LAT=$(grep '^TRIGGER_LATENCY=' "$P" | cut -d'=' -f2)
+        CUR_RET=$(grep '^RETENTION_DAYS=' "$P" | cut -d'=' -f2)
+        
         if [ "$CUR_MODE" = "true" ]; then LBL_MODE="${GREEN}Enabled${RESET}"; else LBL_MODE="${RED}Disabled${RESET}"; fi
-        echo ""; echo -e " ${BOLD}Targets:${RESET}"
+        
+        echo ""
+        echo -e " ${BOLD}Targets:${RESET}"
         echo -e " 1. Set IPv4 Target      [Current: ${CYAN}$CUR_V4${RESET}]"
         echo -e " 2. Set IPv6 Target      [Current: ${CYAN}$CUR_V6${RESET}]"
         echo -e " 3. Toggle IPv6 Mode     [$LBL_MODE]"
-        echo ""; echo -e " ${BOLD}Parameters:${RESET}"
+        echo ""
+        echo -e " ${BOLD}Parameters:${RESET}"
         echo -e " 4. Ping Duration        [Current: ${CYAN}${CUR_DUR}s${RESET}]"
         echo -e " 5. Trigger Latency      [Current: ${CYAN}${CUR_LAT}ms${RESET}]"
         echo -e " 6. DB Retention Days    [Current: ${CYAN}${CUR_RET} days${RESET}]"
-        echo ""; echo " 0. Back"; echo ""
+        echo ""
+        echo " 0. Back"
+        echo ""
         echo -n "Select setting to change: "; read -r opt
+        
         case $opt in
-            1) echo -n "Enter new IPv4 Target: "; read -r NEW_VAL; if [ -n "$NEW_VAL" ]; then sed -i 's/^PING_TARGET=".*"/PING_TARGET="'$NEW_VAL'"/' "$P"; echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1; fi ;;
-            2) echo -n "Enter new IPv6 Target: "; read -r NEW_VAL; if [ -n "$NEW_VAL" ]; then sed -i 's/^PING_TARGET_V6=".*"/PING_TARGET_V6="'$NEW_VAL'"/' "$P"; echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1; fi ;;
-            3) if [ "$CUR_MODE" = "true" ]; then NEW_MODE="false"; else NEW_MODE="true"; fi; sed -i 's/^ENABLE_IPV6=".*"/ENABLE_IPV6="'$NEW_MODE'"/' "$P"; echo -e " -> Mode: $NEW_MODE"; NEED_REFRESH=1 ;;
-            4) echo -n "Enter Duration (sec): "; read -r NEW_VAL; if [ -n "$NEW_VAL" ]; then sed -i "s/^PING_DURATION=.*/PING_DURATION=$NEW_VAL/" "$P"; echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1; fi ;;
-            5) echo -n "Enter Latency (ms): "; read -r NEW_VAL; if [ -n "$NEW_VAL" ]; then sed -i "s/^TRIGGER_LATENCY=.*/TRIGGER_LATENCY=$NEW_VAL/" "$P"; echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1; fi ;;
-            6) echo -n "Enter Retention (days): "; read -r NEW_VAL; if [ -n "$NEW_VAL" ]; then sed -i "s/^RETENTION_DAYS=.*/RETENTION_DAYS=$NEW_VAL/" "$P"; echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1; fi ;;
-            0) if [ $NEED_REFRESH -eq 1 ]; then echo ""; echo -n " -> Run Pingtool now? (y/n): "; read -r r; if [ "$r" = "y" ] || [ "$r" = "Y" ]; then run_protected "$P"; echo "Done."; sleep 1; fi; fi; return ;;
+            1) echo -n "Enter new IPv4 Target (e.g., 1.1.1.1): "; read -r NEW_VAL
+               if [ -n "$NEW_VAL" ]; then
+                   sed -i 's/^PING_TARGET=".*"/PING_TARGET="'$NEW_VAL'"/' "$P"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
+               fi ;;
+            2) echo -n "Enter new IPv6 Target: "; read -r NEW_VAL
+               if [ -n "$NEW_VAL" ]; then
+                   sed -i 's/^PING_TARGET_V6=".*"/PING_TARGET_V6="'$NEW_VAL'"/' "$P"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
+               fi ;;
+            3) if [ "$CUR_MODE" = "true" ]; then NEW_MODE="false"; else NEW_MODE="true"; fi
+               sed -i 's/^ENABLE_IPV6=".*"/ENABLE_IPV6="'$NEW_MODE'"/' "$P"
+               echo -e " -> Mode switched to: $NEW_MODE"; NEED_REFRESH=1 ;;
+            4) echo -n "Enter Duration (seconds, e.g. 30): "; read -r NEW_VAL
+               if [ -n "$NEW_VAL" ]; then
+                   sed -i "s/^PING_DURATION=.*/PING_DURATION=$NEW_VAL/" "$P"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
+               fi ;;
+            5) echo -n "Enter Latency Threshold (ms, e.g. 50): "; read -r NEW_VAL
+               if [ -n "$NEW_VAL" ]; then
+                   sed -i "s/^TRIGGER_LATENCY=.*/TRIGGER_LATENCY=$NEW_VAL/" "$P"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
+               fi ;;
+            6) echo -n "Enter DB Retention (days, e.g. 45): "; read -r NEW_VAL
+               if [ -n "$NEW_VAL" ]; then
+                   sed -i "s/^RETENTION_DAYS=.*/RETENTION_DAYS=$NEW_VAL/" "$P"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
+               fi ;;
+            0) 
+               if [ $NEED_REFRESH -eq 1 ]; then
+                   echo ""
+                   echo -e "${YELLOW}You made changes.${RESET}"
+                   echo -n " -> Run Pingtool now to update Dashboard data? (Takes ~${CUR_DUR}s) (y/n): "
+                   read -r refresh
+                   if [ "$refresh" = "y" ] || [ "$refresh" = "Y" ]; then
+                       echo "Running Pingtool... Please wait..."
+                       run_protected "$P"
+                       echo -e "${GREEN}Done. Dashboard updated.${RESET}"
+                       sleep 1
+                   fi
+               fi
+               return ;;
         esac
         sleep 0.5
     done
@@ -229,12 +576,18 @@ $T_SELF
 EOF
     TMP_FILE="/tmp/keentool.tmp"
     echo -n " -> Contacting GitHub ($R)... "; curl -s -L "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
-    if [ ! -s "$TMP_FILE" ]; then echo -e "${RED}Failed.${RESET}"; rm -f "$TMP_FILE"; pause; return; fi
+    
+    if [ ! -s "$TMP_FILE" ]; then 
+        echo -e "${RED}Failed.${RESET}"; rm -f "$TMP_FILE"; pause; return
+    fi
+    
     sed -i 's/\r$//' "$TMP_FILE"
     L_VER=$(get_version "$P"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
+    
     echo -e " ${GREEN}OK${RESET}"; echo ""
     if [ $RES -eq 1 ]; then
-        echo -e "${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"; echo -n " -> Apply & Restart? (y/n): "; read -r ans
+        echo -e "${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
+        echo -n " -> Apply & Restart? (y/n): "; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
             mv "$TMP_FILE" "$P"; apply_perms "$P"
             echo -e "${GREEN}Updated.${RESET}"; sleep 1; exec "$P"
@@ -243,7 +596,8 @@ EOF
         echo -e "${YELLOW}Local is Newer (Dev).${RESET}"; rm -f "$TMP_FILE"; pause
     else
         if [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; then
-            echo -e "${CYAN}MD5 Differs.${RESET}"; echo -n " -> Force Reinstall? (y/n): "; read -r ans
+            echo -e "${CYAN}MD5 Differs.${RESET}"
+            echo -n " -> Force Reinstall? (y/n): "; read -r ans
             if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
                 mv "$TMP_FILE" "$P"; apply_perms "$P"
                 echo "Reinstalling..."; sleep 1; exec "$P"
@@ -434,145 +788,8 @@ configure_dashboard_extras() {
         fi
     fi
 
-    # 3. INTERACTIVE LOG SETUP
-    echo -n " -> Enable 'Filtered Noise' Log (Dual Logging)? (y/n): "; read -r ans
-    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-        # === YES: DUAL MODE ===
-        echo -e "    ${GREEN}Configuring Dual Log Mode (Split Traffic)...${RESET}"
-        touch /opt/var/log/filtered.log
-        chmod 644 /opt/var/log/filtered.log
-        ln -sf /opt/var/log/filtered.log "$WEB_ROOT/filtered.log"
-        
-        # WRITE DUAL MODE SYSLOG-NG CONFIG
-        cat > /opt/etc/syslog-ng.conf <<EOF
-@version: 4.7
-@include "scl.conf"
-options { 
-    chain_hostnames(no); create_dirs(yes); keep_hostname(yes); use_fqdn(no); 
-    log_msg_size(16384); log_fifo_size(256); stats(freq(21600)); 
-    dns-cache(no); 
-};
-
-source s_local { internal(); unix-dgram("/dev/log"); };
-source s_network { udp(ip("0.0.0.0") port(514)); };
-
-destination d_messages { file("/opt/var/log/messages"); };
-destination d_filtered { file("/opt/var/log/filtered.log"); };
-destination d_nas { network("10.128.1.29" transport("tcp") port(514)); };
-
-# NOISE FILTER: Matches traffic_manager AND user-defined system noise (ndhcps, wifi, dns-proxy)
-filter f_noise {
-    program("traffic_manager") or
-    program("pingtool") or
-    program("firewall_stats") or
-    program("vpn_scan") or
-    program("abuse_reporter") or
-    message("traffic_manager") or
-    message("pingtool") or
-    message("firewall_stats") or
-    
-    # SYSTEM CLEANUP RULES
-    program("ndhcps") or
-    program("https-dns-proxy") or
-    message("Network::Interface::Mtk::WifiMonitor") or
-    message("WifiMonitor");
-};
-
-# IMPORTANT FILTER: Everything NOT noise
-filter f_important { not filter(f_noise); };
-
-# PATHS
-# 1. Noise -> Filtered Log
-log { source(s_local); source(s_network); filter(f_noise); destination(d_filtered); };
-
-# 2. Clean -> Main Log
-log { source(s_local); source(s_network); filter(f_important); destination(d_messages); };
-
-# 3. NAS (Optional)
-log { source(s_local); source(s_network); destination(d_nas); };
-EOF
-
-        # Write Dual Config for Logrotate
-        cat > /opt/etc/logrotate.d/syslog-ng <<EOF
-/opt/var/log/messages {
-    rotate 4
-    size 5M
-    missingok
-    notifempty
-    compress
-    postrotate
-        /opt/etc/init.d/S01syslog-ng restart > /dev/null 2>&1
-    endscript
-}
-/opt/var/log/filtered.log {
-    monthly
-    rotate 4
-    size 5M
-    missingok
-    notifempty
-    compress
-    postrotate
-        /opt/etc/init.d/S01syslog-ng restart > /dev/null 2>&1
-    endscript
-}
-EOF
-    else
-        # === NO: SINGLE MODE (CLEANUP) ===
-        echo -e "    ${YELLOW}Configuring Single Log Mode (With Cleanup Rules)...${RESET}"
-        rm -f "$WEB_ROOT/filtered.log"
-        rm -f /opt/var/log/filtered.log
-        
-        # Patch HTML to remove the secondary log box
-        if [ -f "$WEB_ROOT/index.html" ]; then
-            sed -i '//,//d' "$WEB_ROOT/index.html"
-        fi
-        
-        # Write Config for Syslog-ng (WITH CLEANUP RULES APPLIED)
-        cat > /opt/etc/syslog-ng.conf <<EOF
-@version: 4.7
-@include "scl.conf"
-options { 
-    chain_hostnames(no); create_dirs(yes); keep_hostname(yes); use_fqdn(no); 
-    log_msg_size(16384); log_fifo_size(256); stats(freq(21600)); 
-    dns-cache(no); 
-};
-
-source s_local { internal(); unix-dgram("/dev/log"); };
-source s_network { udp(ip("0.0.0.0") port(514)); };
-
-destination d_messages { file("/opt/var/log/messages"); };
-destination d_nas { network("10.128.1.29" transport("tcp") port(514)); };
-
-# CLEANUP FILTER: Drops unwanted system noise
-filter f_clean_logs {
-    not program("ndhcps")
-    and not program("https-dns-proxy")
-    and not message("Network::Interface::Mtk::WifiMonitor")
-    and not message("WifiMonitor");
-};
-
-# 1. Main Log (Cleaned)
-log { source(s_local); source(s_network); filter(f_clean_logs); destination(d_messages); };
-
-# 2. NAS (Cleaned)
-log { source(s_local); source(s_network); filter(f_clean_logs); destination(d_nas); };
-EOF
-        
-        # Write Standard Logrotate
-        cat > /opt/etc/logrotate.d/syslog-ng <<EOF
-/opt/var/log/messages {
-    rotate 4
-    size 5M
-    missingok
-    notifempty
-    compress
-    postrotate
-        /opt/etc/init.d/S01syslog-ng restart > /dev/null 2>&1
-    endscript
-}
-EOF
-    fi
-    /opt/etc/init.d/S01syslog-ng restart >/dev/null 2>&1
+    # 3. Prompt for Modules
+    configure_logging_modules
 }
 
 # --- GENERIC INSTALL/UPDATE HELPERS ---
@@ -616,15 +833,8 @@ smart_process() {
 # --- CRON MANAGEMENT ---
 sanitize_and_reload_cron() {
     [ ! -f "$CRON_FILE" ] && touch "$CRON_FILE"
-    
-    # 1. REMOVED cleaning of empty lines to respect manual formatting
-    
-    # 2. Deduplicate lines (BUT preserve empty lines)
-    # This awk command keeps lines if they are empty OR if they haven't been seen before
     awk 'length($0) == 0 || !seen[$0]++' "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
-    
     if [ -s "$CRON_FILE" ] && [ "$(tail -c 1 "$CRON_FILE")" != "" ]; then echo "" >> "$CRON_FILE"; fi
-    
     chmod 600 "$CRON_FILE"
     if [ -d "$CRON_SPOOL_DIR" ]; then 
         cp "$CRON_FILE" "$CRON_SPOOL_FILE"
@@ -644,10 +854,8 @@ action_verify_cron() {
     echo ""; echo -e "${GREEN}Verification Complete.${RESET}"; pause
 }
 
-# Updated to support both .sh files and binaries like logrotate
 cron_cmd_active() { 
     CMD_STR="$1"
-    # Try to extract base script/binary name
     BASENAME=$(echo "$CMD_STR" | grep -oE '/opt/[a-zA-Z0-9_./-]+' | xargs basename 2>/dev/null)
     [ -z "$BASENAME" ] && BASENAME=$(echo "$CMD_STR" | awk '{print $1}')
     grep -q "$BASENAME" "$CRON_FILE" 
@@ -861,17 +1069,21 @@ action_firewall() {
                check_and_install_deps "$DEPS_FW"; RES_DEPS=$?
                if [ $RES_DEPS -ne 0 ]; then echo -n " -> Dependencies missing. Continue anyway? (y/n): "; read -r ans; if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then pause; break; fi; fi
                
-               # --- ABUSEIPDB KEY WIZARD ---
-               EXISTING_KEY=""; KEY_TO_SET=""
-               if [ -f "$BIN_DIR/update_blocklist.sh" ]; then EXISTING_KEY=$(grep 'ABUSEIPDB_KEY=' "$BIN_DIR/update_blocklist.sh" | cut -d'"' -f2); fi
+               # --- KEY HANDLING ---
+               EXISTING_KEY=""
+               if [ -s "$KEY_FILE" ]; then EXISTING_KEY=$(cat "$KEY_FILE" | tr -d '[:space:]'); fi
                
                if [ -n "$EXISTING_KEY" ]; then
                    echo -e " -> Found AbuseIPDB Key: ${CYAN}${EXISTING_KEY:0:5}...${RESET} (Preserving)"
-                   KEY_TO_SET="$EXISTING_KEY"
                else
                    echo -n " -> Configure AbuseIPDB Key for reports? (y/n): "; read -r ans
                    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
                        echo -n "    Enter API Key: "; read -r KEY_TO_SET
+                       if [ -n "$KEY_TO_SET" ]; then
+                           echo -n "$KEY_TO_SET" > "$KEY_FILE"
+                           chmod 600 "$KEY_FILE"
+                           echo -e "    ${GREEN}Key Saved to $KEY_FILE${RESET}"
+                       fi
                    fi
                fi
                
@@ -886,15 +1098,6 @@ action_firewall() {
                smart_process "Init" "$INIT_DIR/S00ipset-load" $REPO "scripts/S00ipset-load"
                
                sanitize_and_reload_cron
-               
-               if [ -n "$KEY_TO_SET" ]; then
-                   for FILE in "$BIN_DIR/update_blocklist.sh" "$BIN_DIR/firewall_stats.sh"; do
-                       if [ -f "$FILE" ]; then
-                           sed -i "s/^ABUSEIPDB_KEY=\".*\"/ABUSEIPDB_KEY=\"$KEY_TO_SET\"/" "$FILE"
-                           echo -e "    ${GREEN}Key applied to $(basename "$FILE").${RESET}"
-                       fi
-                   done
-               fi
                pause ;;
             2) manage_cron_menu "$CMD_FW_STAT" "$CMD_FW_UPD" "$CMD_FW_VPN" "$CMD_ABUSE"; ;;
             3) [ -f "$BIN_DIR/firewall_manager.sh" ] && run_protected "$BIN_DIR/firewall_manager.sh" || { echo "Missing"; sleep 1; };;
@@ -944,6 +1147,7 @@ EOF
     echo -e " 3. Firewall Suite       [$L3]$UPD_FW"
     echo -e " 4. SMB Backup Tool      [$L4]$UPD_SMB"
     echo -e " 5. Main Dashboard       [$L5]$UPD_DASH"
+    echo -e "    -> ${CYAN}3. Configure Logging Modules${RESET} (NEW)"
     echo "";
     echo -e " ${BOLD}Global:${RESET}"
     echo -e " u. Check for Updates (Tools)"
@@ -960,7 +1164,24 @@ EOF
         2) action_ping ;; 
         3) action_firewall ;;
         4) action_generic "$T_SMB" "$CMD_SMB" "yes" ;;
-        5) action_generic "$T_DASH" "$CMD_LOGROTATE" ;;
+        5) 
+            while true; do
+                header
+                echo -e "${BOLD}Main Dashboard Manager${RESET}"
+                echo ""; echo " 1. Install / Update"
+                echo " 2. Manage Logrotate (Cron)"
+                echo " 3. Configure Logging Modules (Syslog & HTML)"
+                echo " 4. Uninstall"
+                echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read d_opt
+                case $d_opt in
+                    1) check_and_install_deps "$DEPS_DASH"; smart_process "Main Dashboard" "$WEB_ROOT/index.html" "KeenTool" "index.html"; sanitize_and_reload_cron; configure_dashboard_extras; pause ;;
+                    2) manage_cron_menu "$CMD_LOGROTATE"; pause ;;
+                    3) configure_logging_modules ;;
+                    4) echo "Uninstalling..."; rm -f "$WEB_ROOT/index.html"; echo "Done."; pause ;;
+                    0) break ;;
+                esac
+            done
+            ;;
         u) perform_global_scan ;;
         s) action_self_update ;;
         a) manage_cron_menu "$CMD_SELF_UPD"; pause ;;
