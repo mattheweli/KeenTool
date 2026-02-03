@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.6.7 (BETA)
+# KEENTOOL MANAGER v0.6.8 (BETA)
 # Author: MatthewEli
 # Features:
+#   - FIX: WireGuard logs (Kernel/NDM) are now correctly intercepted by regex.
 #   - FIX: Logging modules toggle correctly (fixed grep detection logic).
 #   - UX: Cron jobs are now displayed in human-readable format.
 #   - MENU: Dynamic status indicators for Email and Auto-Update schedule.
-#   - EMAIL: Native SMTP notifications (TLS/SSL) with encrypted password.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -75,7 +75,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.7 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.8 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -460,7 +460,12 @@ source s_network { udp(ip("0.0.0.0") port(514)); };
 filter f_dns { program("https-dns-proxy"); };
 filter f_wifi { message("Network::Interface::Mtk::WifiMonitor") or message("WifiMonitor"); };
 filter f_dhcp { program("ndhcps"); };
-filter f_vpn { program("OpenVPN.*") or program("wireguard") or message("WireGuard"); };
+filter f_vpn { 
+    program("OpenVPN.*") or 
+    message("Wireguard") or 
+    message("wireguard") or 
+    message("WireGuard"); 
+};
 filter f_scripts { 
     program("traffic_manager") or program("pingtool") or 
     program("Firewall_Stats") or program("firewall_stats") or 
