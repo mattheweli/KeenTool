@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.6.8 (BETA)
+# KEENTOOL MANAGER v0.6.10 (BETA)
 # Author: MatthewEli
 # Features:
-#   - FIX: WireGuard logs (Kernel/NDM) are now correctly intercepted by regex.
-#   - FIX: Logging modules toggle correctly (fixed grep detection logic).
-#   - UX: Cron jobs are now displayed in human-readable format.
-#   - MENU: Dynamic status indicators for Email and Auto-Update schedule.
+#   - LOGGING: Added CRON filter to redirect script execution logs to keentool.log.
+#   - MENU: Status indicators [OK/Missing] for System Setup.
+#   - FIX: WireGuard logs intercepted correctly.
+#   - UX: Cron jobs displayed in human-readable format.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -75,7 +75,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.8 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}     |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.10 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}    |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -467,14 +467,33 @@ filter f_vpn {
     message("WireGuard"); 
 };
 filter f_scripts { 
-    program("traffic_manager") or program("pingtool") or 
+    # A. Match per Nome Programma (Output diretto dello script)
+    program("traffic_manager") or 
+    program("pingtool") or 
     program("Firewall_Stats") or program("firewall_stats") or 
     program("Firewall_Update") or program("firewall_update") or 
     program("Abuse_Reporter") or program("abuse_reporter") or 
     program("VPN_Scanner") or program("vpn_scan") or 
     program("blocklist_loader") or program("update_blocklist") or 
-    message("traffic_manager") or message("pingtool") or 
-    message("Firewall_Stats") or message("Keentool");
+    
+    # B. Match per Contenuto del Messaggio (Safety Net)
+    message("Firewall_Stats:") or 
+    message("Firewall_Update:") or
+    message("Abuse_Reporter:") or
+    message("VPN_Scanner:") or
+    message("Keentool") or
+
+    # C. Match per Esecuzione CRON (NUOVO: Filtra l'avvio dei job)
+    (program("cron") and (
+        message("traffic_manager.sh") or
+        message("pingtool.sh") or
+        message("firewall_stats.sh") or
+        message("vpn_scan.sh") or
+        message("abuse_reporter.sh") or
+        message("update_blocklist.sh") or
+        message("smb_backup_tool.sh") or
+        message("keentool")
+    ));
 };
 filter f_proxy { program("nginx") or message("nginx:"); };
 
@@ -1362,6 +1381,15 @@ action_firewall() {
 
 # --- MAIN MENU ---
 while true; do
+    # Check Core Deps silently for menu display
+    SYS_MSG="${GREEN}OK${RESET}"
+    for PKG in $DEPS_CORE; do
+        if ! opkg list-installed | grep -q "^$PKG" && ! command -v "$PKG" >/dev/null 2>&1; then
+            SYS_MSG="${RED}Missing Deps${RESET}"
+            break
+        fi
+    done
+
     IFS='|' read -r N P R F <<EOF
 $T_VNSTAT
 EOF
@@ -1409,8 +1437,8 @@ EOF
 
     header
     echo -e " ${BOLD}System:${RESET}";
-    echo -e " 0. ${CYAN}System Setup${RESET} (Deps & WebServer)"
-    echo -e " e. ${CYAN}Email Notifications${RESET} [$EM_STATUS]"
+    echo -e " 0. ${CYAN}System Setup${RESET}           [$SYS_MSG]"
+    echo -e " e. ${CYAN}Email Notifications${RESET}    [$EM_STATUS]"
     echo "";
     echo -e " ${BOLD}Tools:${RESET}"
     echo -e " 1. Traffic Manager      [$L1]$UPD_VNSTAT"
