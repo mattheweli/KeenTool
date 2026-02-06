@@ -1,4 +1,4 @@
-<!-- Keenetic Dashboard v1.2.2 (Modular Logs) -->
+<!-- Keenetic Dashboard v1.3.2 (Granular Refresh) -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -25,8 +25,24 @@
         .header h1 { font-size: 1.6rem; margin: 0; font-weight: 800; letter-spacing: -0.5px; }
         .header-controls { display: flex; align-items: center; gap: 10px; }
         .clock-badge { font-size: 0.85rem; color: var(--muted); background: var(--card); padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); font-weight: 600; min-width: 80px; text-align: center; }
-        .refresh-select { background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 6px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; outline: none; transition: border-color 0.2s; }
+        
+        /* Styled Dropdown */
+        .refresh-wrapper { position: relative; }
+        .refresh-select { 
+            appearance: none; -webkit-appearance: none; 
+            background: var(--card); color: var(--text); 
+            border: 1px solid var(--border); padding: 6px 30px 6px 12px; 
+            border-radius: 20px; font-size: 0.8rem; font-weight: 600; 
+            cursor: pointer; outline: none; transition: border-color 0.2s; 
+            min-width: 140px; text-align: center;
+        }
         .refresh-select:hover { border-color: var(--blue); }
+        .refresh-arrow {
+            position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+            pointer-events: none; font-size: 0.7rem; color: var(--muted);
+        }
+        optgroup { font-weight: 700; color: var(--muted); font-style: italic; }
+        option { font-weight: 500; color: var(--text); font-style: normal; padding: 5px; }
 
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; align-items: stretch; margin-bottom: 30px; }
         .card { background: var(--card); border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px var(--shadow); border: 1px solid var(--border); transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; cursor: pointer; display: flex; flex-direction: column; height: 100%; box-sizing: border-box; }
@@ -37,14 +53,18 @@
         .card-fw h3::before { background: var(--red); }
         .card-tr h3::before { background: var(--blue); }
         .card-ping h3::before { background: var(--green); }
-        .status-dot { height: 8px; width: 8px; border-radius: 50%; background-color: var(--muted); display: inline-block; box-shadow: 0 0 5px currentColor; opacity: 0.5; }
+        
+        .status-dot { height: 8px; width: 8px; border-radius: 50%; background-color: var(--muted); display: inline-block; box-shadow: 0 0 5px currentColor; opacity: 0.5; transition: all 0.3s ease; }
         .status-dot.online { background-color: var(--green); color: var(--green); opacity: 1; }
         .status-dot.offline { background-color: var(--red); color: var(--red); opacity: 1; }
+        .status-dot.updating { transform: scale(1.5); opacity: 0.8; }
+
         .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex-grow: 1; margin-bottom: 15px; }
         .stat-item { background: var(--hover); padding: 10px 12px; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
         .stat-label { font-size: 0.7rem; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .stat-value { font-size: 1.1rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+        .stat-value { font-size: 1.1rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; transition: color 0.3s; }
         .sub-text { font-size: 0.75rem; color: var(--muted); margin-top: auto; font-weight: 400; text-align: right; opacity: 0.8; }
+        
         .txt-red { color: var(--red); } .txt-blue { color: var(--blue); } .txt-green { color: var(--green); } .txt-orange { color: var(--orange); } .txt-purple { color: var(--purple); }
         
         /* LOG VIEWER STYLES */
@@ -75,7 +95,6 @@
             white-space: pre-wrap; line-height: 1.4; border-top: 1px solid var(--border);
         }
         .log-viewer.secondary { color: var(--term-filter); }
-        
         .log-meta { font-size: 0.75rem; color: var(--muted); margin-left: 10px; font-weight: 400; }
         .footer-copy { margin-top: auto; padding-top: 40px; text-align: center; font-size: 0.75rem; color: var(--muted); opacity: 0.6; }
     </style>
@@ -85,13 +104,34 @@
     <div class="header">
         <h1>🏠 Keenetic Dashboard</h1>
         <div class="header-controls">
-            <select id="refresh_timer" class="refresh-select" onchange="updateRefresh(this.value)">
-                <option value="0">Auto-Refresh: OFF</option>
-                <option value="10000">10 Seconds</option>
-                <option value="30000">30 Seconds</option>
-                <option value="60000">1 Minute</option>
-                <option value="300000">5 Minutes</option>
-            </select>
+            
+            <div class="refresh-wrapper">
+                <select id="refresh_timer" class="refresh-select" onchange="changeRefreshRate(this.value)">
+                    <option value="0">⏹ Auto-Refresh: OFF</option>
+                    
+                    <optgroup label="Seconds">
+                        <option value="1000">1 sec</option>
+                        <option value="3000">3 sec</option>
+                        <option value="5000">5 sec</option>
+                        <option value="10000">10 sec</option>
+                        <option value="30000">30 sec</option>
+                    </optgroup>
+                    
+                    <optgroup label="Minutes">
+                        <option value="60000">1 min</option>
+                        <option value="180000">3 min</option>
+                        <option value="300000">5 min</option>
+                        <option value="600000">10 min</option>
+                        <option value="1800000">30 min</option>
+                    </optgroup>
+
+                    <optgroup label="Hours">
+                        <option value="3600000">1 hour</option>
+                    </optgroup>
+                </select>
+                <span class="refresh-arrow">▼</span>
+            </div>
+
             <span id="global_clock" class="clock-badge">Loading...</span>
         </div>
     </div>
@@ -129,19 +169,12 @@
         </div>
     </div>
 
-<!--LOG GENERATION START-->
-    <div id="log_container_root">
-        </div>
-<!--LOG GENERATION END-->
+    <div id="log_container_root"></div>
 
-    <div class="footer-copy">Copyright &copy; 2026 mattheweli</div>
-
-    <script src="firewall/firewall_data.js" onerror="console.log('FW missing')"></script>
-    <script src="vnstat/vnstat_data.js" onerror="console.log('VnStat missing')"></script>
-    <script src="ping/data.js" onerror="console.log('Ping missing')"></script>
+    <div class="footer-copy">Copyright &copy; <span id="year"></span> mattheweli</div>
 
     <script>
-        // === LOG CONFIGURATION ===
+        // === CONFIGURATION ===
         const logConfig = [
             { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true },
             { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false },
@@ -152,67 +185,174 @@
             { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false }
         ];
 
+        // === UTILS ===
         const fmtBytes = (b) => { if (!b) return "0 B"; const u = ['B','KB','MB','GB','TB']; let i = 0; while(b >= 1024 && i < u.length-1){ b/=1024; i++; } return b.toFixed(2) + ' ' + u[i]; };
         const updateClock = () => { document.getElementById('global_clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}); };
         
         let logsLoadedStatus = {};
+        let refreshIntervalId = null;
 
-        // RENDER LOG BOXES
+        // === CORE LOGIC ===
+
+        // Function to reload a JS data file dynamically
+        async function loadScriptData(url) {
+            try {
+                const response = await fetch(url + '?t=' + Date.now());
+                if (!response.ok) throw new Error(url + " not found");
+                const scriptContent = await response.text();
+                window.eval(scriptContent);
+                return true;
+            } catch (error) {
+                console.warn("Failed to load " + url, error);
+                return false;
+            }
+        }
+
+        // Main update function (AJAX)
+        async function updateDashboard() {
+            document.querySelectorAll('.status-dot.online').forEach(el => el.classList.add('updating'));
+
+            // 1. DATA REFRESH
+            const dataPromise = Promise.all([
+                loadScriptData('firewall/firewall_data.js'),
+                loadScriptData('vnstat/vnstat_data.js'),
+                loadScriptData('ping/data.js')
+            ]);
+
+            // 2. LOG REFRESH (ALL logs, forced)
+            const logsPromise = Promise.all(
+                logConfig.map(log => fetchLog(log.id, log.file, true))
+            );
+
+            await Promise.all([dataPromise, logsPromise]);
+
+            renderCards();
+
+            setTimeout(() => {
+                document.querySelectorAll('.status-dot').forEach(el => el.classList.remove('updating'));
+            }, 500);
+        }
+
+        function renderCards() {
+            // 1. FIREWALL
+            if (typeof window.FW_DATA !== 'undefined') {
+                const d = window.FW_DATA;
+                document.getElementById('fw_v4').innerText = d.lists.main || "0";
+                document.getElementById('fw_v6').innerText = d.lists.main6 || "0";
+                document.getElementById('fw_vpn').innerText = d.lists.vpn || "0";
+                document.getElementById('fw_drops').innerText = d.lifetime || "0";
+                document.getElementById('fw_update').innerText = "Last Update: " + d.updated;
+                setBoxStatus('fw_status', true);
+            } else { setBoxStatus('fw_status', false); }
+
+            // 2. TRAFFIC (VNSTAT)
+            if (typeof window.TRAFFIC_RAW !== 'undefined') {
+                try {
+                    const iface = window.TRAFFIC_RAW.interfaces[0];
+                    const tr = iface.traffic;
+                    const dayData = tr.day[tr.day.length - 1] || {rx:0, tx:0};
+                    const monthData = tr.month[tr.month.length - 1] || {rx:0, tx:0};
+                    
+                    document.getElementById('tr_iface').innerText = iface.name || iface.id;
+                    document.getElementById('tr_today').innerText = fmtBytes(dayData.rx + dayData.tx);
+                    document.getElementById('tr_month').innerText = fmtBytes(monthData.rx + monthData.tx);
+                    
+                    const u = iface.updated; const pad = (n) => n.toString().padStart(2, '0');
+                    const ts = `${pad(u.date.day)}-${pad(u.date.month)}-${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}:${u.time.second ? pad(u.time.second) : '00'}`;
+                    document.getElementById('tr_meta').innerText = "Last Update: " + ts;
+                    setBoxStatus('tr_status', true);
+                } catch(e) { console.error("VnStat Logic Error", e); setBoxStatus('tr_status', false); }
+            } else { setBoxStatus('tr_status', false); }
+
+            // 3. PING
+            if (typeof window.PING_DATA !== 'undefined') {
+                try {
+                    const d = window.PING_DATA; const cur = d.current;
+                    document.getElementById('ping_v4').innerText = cur.v4.ping + " ms";
+                    document.getElementById('ping_v6').innerText = cur.v6.ping + " ms";
+                    
+                    let tHtml = `<span style='opacity:0.6'>v4:</span> ${d.targets.v4}`;
+                    if (d.config && d.config.ipv6) { tHtml += ` &nbsp; <span style='opacity:0.6'>v6:</span> ${d.targets.v6}`; } 
+                    else if (d.targets.v6 && d.targets.v6.length > 5) { tHtml += ` &nbsp; <span style='opacity:0.6'>v6:</span> ${d.targets.v6}`; }
+                    
+                    document.getElementById('ping_target').innerHTML = tHtml;
+                    document.getElementById('ping_update').innerText = "Last Update: " + d.updated;
+                    
+                    setBoxStatus('ping_status', (cur.v4.loss < 100));
+                } catch(e) { console.error("Ping Logic Error", e); setBoxStatus('ping_status', false); }
+            } else { setBoxStatus('ping_status', false); }
+        }
+
+        function setBoxStatus(id, isOnline) {
+            const el = document.getElementById(id);
+            if(isOnline) { el.classList.add('online'); el.classList.remove('offline'); }
+            else { el.classList.add('offline'); el.classList.remove('online'); }
+        }
+
+        // === LOG LOGIC ===
         function renderLogs() {
             const container = document.getElementById('log_container_root');
-            container.innerHTML = ''; // Clean start
-
+            container.innerHTML = ''; 
             logConfig.forEach(log => {
                 const isOpen = log.primary ? 'open' : '';
                 const styleClass = log.primary ? 'log-viewer' : 'log-viewer secondary';
                 const labelStyle = log.primary ? '' : 'style="color:var(--muted)"';
-                
                 const html = `
                 <div class="log-container">
                     <details id="details_${log.id}" ${isOpen}>
                         <summary onclick="fetchLog('${log.id}', '${log.file}')">
-                            <div class="log-title">
-                                <span ${labelStyle}>${log.label}</span>
-                                <span id="size_${log.id}" class="log-meta"></span>
-                            </div>
+                            <div class="log-title"><span ${labelStyle}>${log.label}</span><span id="size_${log.id}" class="log-meta"></span></div>
                             <div class="log-controls">
                                 <button class="btn-log" onclick="downloadLog('${log.id}', '${log.file}', event)">💾 Save</button>
                                 <button class="btn-log" onclick="fetchLog('${log.id}', '${log.file}', true, event)">🔄 Reload</button>
-                                <span style="font-size: 1.2rem;">▾</span>
+                                <span>▾</span>
                             </div>
                         </summary>
                         <div class="${styleClass}" id="content_${log.id}">Click to load...</div>
                     </details>
                 </div>`;
-                
                 container.insertAdjacentHTML('beforeend', html);
             });
         }
 
         async function fetchLog(id, filename, force = false, event = null) {
             if (event) event.stopPropagation();
-            
             const details = document.getElementById(`details_${id}`);
             const viewer = document.getElementById(`content_${id}`);
             const sizeLabel = document.getElementById(`size_${id}`);
-
-            // If manually clicking closed header (not force), don't load
+            
+            // PRELOAD LOGIC:
+            // Allow if force=true (auto-refresh or init)
+            // Allow if clicked (event exists)
+            // Ignore if closed and not forced
             if (!details.open && !force && !event) return;
-
-            // If already loaded and not forcing, do nothing
             if (logsLoadedStatus[id] && !force) return;
 
-            viewer.innerText = "Loading " + filename + " ...";
+            // Only show "Loading..." if it's a manual action or first load
+            if (!logsLoadedStatus[id] || event) {
+                // Optional: viewer.innerText = "Loading..."; 
+                // Better: keep old content until new arrives for smoothness
+            }
+
             try {
-                const response = await fetch(filename + '?t=' + new Date().getTime());
-                if (!response.ok) throw new Error("Log file empty or not found");
+                const response = await fetch(filename + '?t=' + Date.now());
+                if (!response.ok) throw new Error("Empty/Missing");
                 const text = await response.text();
+                
+                // Smart Scroll: Only scroll to bottom if already at bottom
+                const wasAtBottom = (viewer.scrollHeight - viewer.scrollTop <= viewer.clientHeight + 50);
+                
                 viewer.innerText = text;
                 sizeLabel.innerText = "(" + fmtBytes(text.length) + ")";
-                viewer.scrollTop = viewer.scrollHeight;
+                
+                // First load OR was at bottom -> Auto Scroll
+                if (!logsLoadedStatus[id] || wasAtBottom) {
+                    viewer.scrollTop = viewer.scrollHeight;
+                }
+                
                 logsLoadedStatus[id] = true;
             } catch (err) {
-                viewer.innerText = "No data available for " + filename + ".\n(File might not exist yet or is empty)";
+                viewer.innerText = "Log unavailable.";
                 sizeLabel.innerText = "(0 B)";
             }
         }
@@ -221,79 +361,37 @@
             event.stopPropagation();
             const viewer = document.getElementById(`content_${id}`);
             const content = viewer.innerText;
-            if (!content || content.startsWith("Loading") || content.startsWith("No data")) { alert("Load the log first."); return; }
-            
-            const blob = new Blob([content], { type: 'text/plain' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
+            if (!content || content.startsWith("Loading") || content.startsWith("Log un")) { alert("Load log first."); return; }
+            const url = window.URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+            const a = document.createElement('a'); a.href = url;
             a.download = id + "_" + new Date().toISOString().slice(0,10) + ".log";
-            a.click();
-            window.URL.revokeObjectURL(url);
+            a.click(); window.URL.revokeObjectURL(url);
         }
 
-        let refreshInterval = null;
-        function updateRefresh(val) {
-            localStorage.setItem('dash_refresh_rate', val);
-            if (refreshInterval) clearInterval(refreshInterval);
-            if (val > 0) { refreshInterval = setInterval(() => { location.reload(true); }, parseInt(val)); }
+        // === INIT & TIMER ===
+        function changeRefreshRate(msStr) {
+            localStorage.setItem('dash_refresh_rate', msStr);
+            if (refreshIntervalId) clearInterval(refreshIntervalId);
+            const ms = parseInt(msStr);
+            if (ms > 0) {
+                refreshIntervalId = setInterval(updateDashboard, ms);
+            }
         }
-
-        setInterval(updateClock, 1000); updateClock();
 
         window.onload = function() {
-            renderLogs(); // Generate Log Boxes
-
-            // Load ALL logs immediately, even if closed
+            document.getElementById('year').innerText = new Date().getFullYear();
+            setInterval(updateClock, 1000); updateClock();
+            
+            renderLogs();
+            updateDashboard(); // First data load
+            
+            // PRELOAD ALL LOGS (Force Fetch to show sizes immediately)
             logConfig.forEach(l => fetchLog(l.id, l.file, true));
 
-            const savedRate = localStorage.getItem('dash_refresh_rate') || "0";
-            document.getElementById('refresh_timer').value = savedRate;
-            updateRefresh(savedRate);
-
-            if (typeof window.FW_DATA !== 'undefined') {
-                const d = window.FW_DATA;
-                document.getElementById('fw_v4').innerText = d.lists.main || "0";
-                document.getElementById('fw_v6').innerText = d.lists.main6 || "0";
-                document.getElementById('fw_vpn').innerText = d.lists.vpn || "0";
-                document.getElementById('fw_drops').innerText = d.lifetime || "0";
-                document.getElementById('fw_update').innerText = "Last Update: " + d.updated;
-                document.getElementById('fw_status').classList.add('online');
-            } else { document.getElementById('fw_status').classList.add('offline'); }
-
-            if (typeof window.TRAFFIC_RAW !== 'undefined') {
-                try {
-                    const iface = window.TRAFFIC_RAW.interfaces[0];
-                    const tr = iface.traffic;
-                    const dayData = tr.day[tr.day.length - 1] || {rx:0, tx:0};
-                    const monthData = tr.month[tr.month.length - 1] || {rx:0, tx:0};
-                    document.getElementById('tr_iface').innerText = iface.name || iface.id;
-                    document.getElementById('tr_today').innerText = fmtBytes(dayData.rx + dayData.tx);
-                    document.getElementById('tr_month').innerText = fmtBytes(monthData.rx + monthData.tx);
-                    const u = iface.updated; const pad = (n) => n.toString().padStart(2, '0');
-                    
-                    // FIXED TIMESTAMP
-                    const ts = `${pad(u.date.day)}-${pad(u.date.month)}-${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}:${u.time.second ? pad(u.time.second) : '00'}`;
-                    
-                    document.getElementById('tr_meta').innerText = "Last Update: " + ts;
-                    document.getElementById('tr_status').classList.add('online');
-                } catch(e) { console.error("VnStat Logic Error", e); }
-            } else { document.getElementById('tr_status').classList.add('offline'); }
-
-            if (typeof window.PING_DATA !== 'undefined') {
-                try {
-                    const d = window.PING_DATA; const cur = d.current;
-                    document.getElementById('ping_v4').innerText = cur.v4.ping + " ms";
-                    document.getElementById('ping_v6').innerText = cur.v6.ping + " ms";
-                    let tHtml = `<span style='opacity:0.6'>v4:</span> ${d.targets.v4}`;
-                    if (d.config && d.config.ipv6) { tHtml += ` &nbsp; <span style='opacity:0.6'>v6:</span> ${d.targets.v6}`; } 
-                    else if (d.targets.v6 && d.targets.v6.length > 5) { tHtml += ` &nbsp; <span style='opacity:0.6'>v6:</span> ${d.targets.v6}`; }
-                    document.getElementById('ping_target').innerHTML = tHtml;
-                    document.getElementById('ping_update').innerText = "Last Update: " + d.updated;
-                    if(cur.v4.loss < 100) document.getElementById('ping_status').classList.add('online');
-                    else document.getElementById('ping_status').classList.add('offline');
-                } catch(e) { console.error("Ping Logic Error", e); }
-            } else { document.getElementById('ping_status').classList.add('offline'); }
+            // Restore Saved Refresh Rate
+            const savedMs = localStorage.getItem('dash_refresh_rate') || "0";
+            document.getElementById('refresh_timer').value = savedMs;
+            changeRefreshRate(savedMs);
         };
     </script>
 </body>
