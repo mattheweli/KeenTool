@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.6.10 (BETA)
+# KEENTOOL MANAGER v0.6.11 (BETA)
 # Author: MatthewEli
 # Features:
 #   - LOGGING: Added CRON filter to redirect script execution logs to keentool.log.
@@ -75,7 +75,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.10 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}    |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.11 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}    |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -584,32 +584,48 @@ EOF
                 # 4. PATCH INDEX.HTML (JS CONFIG)
                 if [ -f "$WEB_ROOT/index.html" ]; then
                     echo " -> Patching Dashboard HTML..."
-                    JS_CONFIG="const logConfig = ["
-                    JS_CONFIG="$JS_CONFIG { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true },"
                     
+                    # Creazione file temporaneo per la configurazione JS
+                    JS_TMP="/tmp/keentool_js.tmp"
+                    
+                    # Scriviamo l'intestazione
+                    echo "    const logConfig = [" > "$JS_TMP"
+                    
+                    # Il log principale è sempre presente
+                    echo "        { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true }," >> "$JS_TMP"
+                    
+                    # Aggiungiamo solo i moduli ATTIVI (yes)
                     if [ "$EN_VPN" = "yes" ]; then
-                        JS_CONFIG="$JS_CONFIG { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false },"
+                        echo "        { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false }," >> "$JS_TMP"
                     fi
                     if [ "$EN_PROXY" = "yes" ]; then
-                        JS_CONFIG="$JS_CONFIG { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false },"
+                        echo "        { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false }," >> "$JS_TMP"
                     fi
                     if [ "$EN_SCRIPTS" = "yes" ]; then
-                        JS_CONFIG="$JS_CONFIG { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false },"
+                        echo "        { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false }," >> "$JS_TMP"
                     fi
                     if [ "$EN_DNS" = "yes" ]; then
-                        JS_CONFIG="$JS_CONFIG { id: 'dns', file: 'dns_proxy.log', label: '🌍 DNS Proxy Errors', primary: false },"
+                        echo "        { id: 'dns', file: 'dns_proxy.log', label: '🌍 DNS Proxy Errors', primary: false }," >> "$JS_TMP"
                     fi
                     if [ "$EN_WIFI" = "yes" ]; then
-                        JS_CONFIG="$JS_CONFIG { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false },"
+                        echo "        { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false }," >> "$JS_TMP"
                     fi
                     if [ "$EN_DHCP" = "yes" ]; then
-                        JS_CONFIG="$JS_CONFIG { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false },"
+                        echo "        { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false }," >> "$JS_TMP"
                     fi
                     
-                    # Remove trailing comma
-                    JS_CONFIG="${JS_CONFIG%,} ];"
-                    # Use sed with a temporary file approach to be safe with slashes/newlines
-                    sed -i '/const logConfig = \[/,/\];/c\'"$JS_CONFIG" "$WEB_ROOT/index.html"
+                    # Chiudiamo l'array (Javascript moderno accetta la virgola finale, non serve rimuoverla)
+                    echo "    ];" >> "$JS_TMP"
+
+                    # 1. Cancelliamo il vecchio blocco di configurazione da index.html
+                    sed -i '/const logConfig = \[/,/\];/d' "$WEB_ROOT/index.html"
+                    
+                    # 2. Inseriamo il nuovo blocco subito dopo il commento di configurazione
+                    # Cerchiamo la riga "// === CONFIGURATION ===" e scriviamo il file temporaneo subito dopo
+                    sed -i '/\/\/ === CONFIGURATION ===/r '"$JS_TMP" "$WEB_ROOT/index.html"
+                    
+                    # Pulizia
+                    rm -f "$JS_TMP"
                 fi
 
                 # 5. RESTART
