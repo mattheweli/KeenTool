@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.6.11 (BETA)
+# KEENTOOL MANAGER v0.6.14 (BETA)
 # Author: MatthewEli
-# Features:
-#   - LOGGING: Added CRON filter to redirect script execution logs to keentool.log.
-#   - MENU: Status indicators [OK/Missing] for System Setup.
-#   - FIX: WireGuard logs intercepted correctly.
-#   - UX: Cron jobs displayed in human-readable format.
+# Changelog v0.6.14:
+#   - FIX: Syslog-ng crash (removed invalid d_nas destination).
+#   - FIX: Dashboard HTML config now strictly respects enabled logs.
+#   - UX: Auto-Update is now NOTIFY ONLY (Email + Menu Flag).
+#   - UX: Main Menu shows pending updates instantly.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -69,13 +69,14 @@ BOLD="${ESC}[1m"
 RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CYAN="${ESC}[36m"; MAGENTA="${ESC}[35m"; DIM="${ESC}[2m"
 
 # GLOBAL STATE
-UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""
+UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW="";
+UPD_SMB=""; UPD_SELF=""
 
 # --- UTILS ---
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.11 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}    |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.14 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -111,10 +112,10 @@ ver_compare() {
     awk -v v1="$1" -v v2="$2" 'BEGIN { 
         split(v1,a,"."); split(v2,b,"."); 
         for(i=1;i<=3;i++) { 
-            if(a[i]+0 > b[i]+0) exit 1;
+            if(a[i]+0 > b[i]+0) exit 1; 
             if(a[i]+0 < b[i]+0) exit 2; 
         } 
-        exit 0;
+        exit 0; 
     }'
     return $? 
 }
@@ -317,7 +318,7 @@ run_protected() {
     trap - INT
 }
 
-# --- HEADLESS SELF-UPDATE (CLI) ---
+# --- HEADLESS SELF-UPDATE (CLI - NOTIFY ONLY) ---
 perform_self_update_headless() {
     IFS='|' read -r N P R F <<EOF
 $T_SELF
@@ -337,18 +338,20 @@ EOF
     ver_compare "$R_VER" "$L_VER"
     RES=$?
     
-    # Update if Remote > Local (1) or Hash diff (0)
+    # Se c'è un aggiornamento
     if [ $RES -eq 1 ] || { [ $RES -eq 0 ] && [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; }; then
-        mv "$TMP_FILE" "$P"
-        chmod +x "$P"
-        MSG="KeenTool updated successfully from v$L_VER to v$R_VER."
-        logger -t "KeenTool" "$MSG"
+        # 1. Salviamo la versione disponibile in un file temporaneo per il menu
+        echo "$R_VER" > "/tmp/keentool_new_ver"
         
-        # EMAIL NOTIFICATION ON SUCCESS
-        send_email_notification "Auto-Update Successful" "$MSG"
+        MSG="Update Available: KeenTool v$R_VER is available. Check menu option 's'."
+        logger -t "KeenTool" "$MSG"
+        send_email_notification "KeenTool Update Available" "$MSG"
     else
-        rm -f "$TMP_FILE"
+        # Se siamo aggiornati, rimuoviamo eventuali avvisi vecchi
+        rm -f "/tmp/keentool_new_ver"
     fi
+    
+    rm -f "$TMP_FILE"
     exit 0
 }
 
@@ -372,7 +375,7 @@ configure_logging_modules() {
     
     CONF="/opt/etc/syslog-ng.conf"
     
-    # Detect current state (Fixed grep logic: checks active log lines, not filters)
+    # Detect current state
     if [ -f "$CONF" ]; then
         if grep -q "filter(f_vpn); destination(d_vpn);" "$CONF"; then EN_VPN="yes"; else EN_VPN="no"; fi
         if grep -q "filter(f_scripts); destination(d_scripts);" "$CONF"; then EN_SCRIPTS="yes"; else EN_SCRIPTS="no"; fi
@@ -443,8 +446,7 @@ configure_logging_modules() {
 @include "scl.conf"
 
 options { 
-    chain_hostnames(no); 
-    create_dirs(yes); 
+    chain_hostnames(no); create_dirs(yes); 
     keep_hostname(yes); 
     use_fqdn(no); 
     log_msg_size(16384); 
@@ -455,7 +457,6 @@ options {
 
 source s_local { internal(); unix-dgram("/dev/log"); };
 source s_network { udp(ip("0.0.0.0") port(514)); };
-
 # FILTERS
 filter f_dns { program("https-dns-proxy"); };
 filter f_wifi { message("Network::Interface::Mtk::WifiMonitor") or message("WifiMonitor"); };
@@ -464,10 +465,9 @@ filter f_vpn {
     program("OpenVPN.*") or 
     message("Wireguard") or 
     message("wireguard") or 
-    message("WireGuard"); 
+    message("WireGuard");
 };
 filter f_scripts { 
-    # A. Match per Nome Programma (Output diretto dello script)
     program("traffic_manager") or 
     program("pingtool") or 
     program("Firewall_Stats") or program("firewall_stats") or 
@@ -475,15 +475,11 @@ filter f_scripts {
     program("Abuse_Reporter") or program("abuse_reporter") or 
     program("VPN_Scanner") or program("vpn_scan") or 
     program("blocklist_loader") or program("update_blocklist") or 
-    
-    # B. Match per Contenuto del Messaggio (Safety Net)
     message("Firewall_Stats:") or 
     message("Firewall_Update:") or
     message("Abuse_Reporter:") or
     message("VPN_Scanner:") or
     message("Keentool") or
-
-    # C. Match per Esecuzione CRON (NUOVO: Filtra l'avvio dei job)
     (program("cron") and (
         message("traffic_manager.sh") or
         message("pingtool.sh") or
@@ -496,7 +492,6 @@ filter f_scripts {
     ));
 };
 filter f_proxy { program("nginx") or message("nginx:"); };
-
 # CLEAN FILTER (EXCLUDES ENABLED MODULES)
 filter f_clean {
     not filter(f_dns) and 
@@ -518,29 +513,23 @@ destination d_proxy    { file("/opt/var/log/nginx_proxy.log"); };
 
 # LOG PATHS (Clean)
 log { source(s_local); source(s_network); filter(f_clean); destination(d_messages); };
-log { source(s_local); source(s_network); filter(f_clean); destination(d_nas); };
 EOF
                 # Append enabled logs
                 if [ "$EN_DNS" = "yes" ]; then 
                     echo 'log { source(s_local); source(s_network); filter(f_dns); destination(d_dns); };' >> /opt/etc/syslog-ng.conf
                 fi
-                
                 if [ "$EN_WIFI" = "yes" ]; then 
                     echo 'log { source(s_local); source(s_network); filter(f_wifi); destination(d_wifi); };' >> /opt/etc/syslog-ng.conf
                 fi
-                
                 if [ "$EN_DHCP" = "yes" ]; then 
                     echo 'log { source(s_local); source(s_network); filter(f_dhcp); destination(d_dhcp); };' >> /opt/etc/syslog-ng.conf
                 fi
-                
                 if [ "$EN_VPN" = "yes" ]; then 
                     echo 'log { source(s_local); source(s_network); filter(f_vpn); destination(d_vpn); };' >> /opt/etc/syslog-ng.conf
                 fi
-                
                 if [ "$EN_SCRIPTS" = "yes" ]; then 
                     echo 'log { source(s_local); source(s_network); filter(f_scripts); destination(d_scripts); };' >> /opt/etc/syslog-ng.conf
                 fi
-                
                 if [ "$EN_PROXY" = "yes" ]; then 
                     echo 'log { source(s_local); source(s_network); filter(f_proxy); destination(d_proxy); };' >> /opt/etc/syslog-ng.conf
                 fi
@@ -558,7 +547,6 @@ EOF
     endscript 
 }
 EOF
-                
                 SECLOGS=""
                 [ "$EN_DNS" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/dns_proxy.log"
                 [ "$EN_WIFI" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/wifi_monitor.log"
@@ -614,14 +602,13 @@ EOF
                         echo "        { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false }," >> "$JS_TMP"
                     fi
                     
-                    # Chiudiamo l'array (Javascript moderno accetta la virgola finale, non serve rimuoverla)
+                    # Chiudiamo l'array
                     echo "    ];" >> "$JS_TMP"
 
                     # 1. Cancelliamo il vecchio blocco di configurazione da index.html
                     sed -i '/const logConfig = \[/,/\];/d' "$WEB_ROOT/index.html"
                     
                     # 2. Inseriamo il nuovo blocco subito dopo il commento di configurazione
-                    # Cerchiamo la riga "// === CONFIGURATION ===" e scriviamo il file temporaneo subito dopo
                     sed -i '/\/\/ === CONFIGURATION ===/r '"$JS_TMP" "$WEB_ROOT/index.html"
                     
                     # Pulizia
@@ -822,6 +809,8 @@ EOF
         echo -n " -> Apply & Restart? (y/n): "; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
             mv "$TMP_FILE" "$P"; apply_perms "$P"
+            # Remove flag if exists
+            rm -f "/tmp/keentool_new_ver"
             echo -e "${GREEN}Updated.${RESET}"; sleep 1; exec "$P"
         else rm -f "$TMP_FILE"; pause; fi
     elif [ $RES -eq 2 ]; then
@@ -919,6 +908,13 @@ $INIT_DIR/S00ipset-load|scripts/S00ipset-load"
 $T_SMB
 EOF
     check_tool_status "UPD_SMB" "$P" "$R" "$F"
+    
+    # Check Self (Keentool)
+    IFS='|' read -r N P R F <<EOF
+$T_SELF
+EOF
+    check_tool_status "UPD_SELF" "$P" "$R" "$F"
+
     echo " Done."; sleep 0.5
 }
 
@@ -1191,7 +1187,7 @@ manage_cron_menu() {
             [ -z "$BASENAME" ] && BASENAME=$(echo "$CMD" | awk '{print $1}')
             
             if cron_cmd_active "$CMD"; then
-                EXISTING=$(get_cron_line "$CMD"); 
+                EXISTING=$(get_cron_line "$CMD");
                 # Parse raw string to 5 fields
                 RAW_M=$(echo "$EXISTING" | awk '{print $1}')
                 RAW_H=$(echo "$EXISTING" | awk '{print $2}')
@@ -1288,7 +1284,8 @@ EOF
             1) header; check_and_install_deps "$DEPS_VNSTAT"; smart_process "$N" "$P" "$R" "$F"; if [ -n "$CMD_VNSTAT" ]; then manage_cron_menu "$CMD_VNSTAT"; fi; pause ;;
             2) manage_cron_menu "$CMD_VNSTAT"; ;;
             3) configure_traffic ;;
-            4) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove file and cron? (y/n): "; read -r ans; if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then if [ -f "$P" ]; then rm -f "$P"; echo -e "    File removed."; fi; remove_cron_cmd "$CMD_VNSTAT"; echo -e "${GREEN}Done.${RESET}"; fi; pause ;;
+            4) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove file and cron? (y/n): "; read -r ans; if [ "$ans" = "y" ] ||
+            [ "$ans" = "Y" ]; then if [ -f "$P" ]; then rm -f "$P"; echo -e "    File removed."; fi; remove_cron_cmd "$CMD_VNSTAT"; echo -e "${GREEN}Done.${RESET}"; fi; pause ;;
             0) return ;;
         esac
     done
@@ -1451,6 +1448,15 @@ EOF
 
     sanitize_and_reload_cron
 
+    # 3. CHECK UPDATE FLAG (Per visualizzazione istantanea)
+    if [ -f "/tmp/keentool_new_ver" ]; then
+        NEW_V=$(cat "/tmp/keentool_new_ver")
+        # Se non è già stato popolato dallo scan manuale ('u'), usiamo il file
+        if [ -z "$UPD_SELF" ]; then
+            UPD_SELF=" -> ${MAGENTA}v${NEW_V}${RESET}"
+        fi
+    fi
+
     header
     echo -e " ${BOLD}System:${RESET}";
     echo -e " 0. ${CYAN}System Setup${RESET}           [$SYS_MSG]"
@@ -1465,7 +1471,7 @@ EOF
     echo "";
     echo -e " ${BOLD}Global:${RESET}"
     echo -e " u. Check for Updates (Tools)"
-    echo -e " s. ${MAGENTA}Update Keentool (Self)${RESET}"
+    echo -e " s. ${MAGENTA}Update Keentool (Self)${RESET} $UPD_SELF"
     echo -e " a. ${CYAN}Auto-Update${RESET}          [$AU_STATUS]"
     echo -e " c. View Crontab"
     echo -e " v. ${CYAN}Verify/Fix Crontab${RESET}"
@@ -1483,13 +1489,11 @@ EOF
             while true; do
                 header
                 echo -e "${BOLD}Main Dashboard Manager${RESET}"
-                echo "";
-                echo " 1. Install / Update"
+                echo ""; echo " 1. Install / Update"
                 echo " 2. Manage Logrotate (Cron)"
                 echo " 3. Configure Logging Modules (Syslog & HTML)"
                 echo " 4. Uninstall"
-                echo "";
-                echo " 0. Back"; echo ""; echo -n "Select: "; read d_opt
+                echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read d_opt
                 case $d_opt in
                     1) check_and_install_deps "$DEPS_DASH"; smart_process "Main Dashboard" "$WEB_ROOT/index.html" "KeenTool" "index.html"; sanitize_and_reload_cron; configure_dashboard_extras; pause ;;
                     2) manage_cron_menu "$CMD_LOGROTATE"; pause ;;
