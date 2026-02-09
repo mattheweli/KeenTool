@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v0.6.14 (BETA)
+#KEENTOOL MANAGER v0.6.16 (BETA)
 # Author: MatthewEli
-# Changelog v0.6.14:
+# Changelog v0.6.16:
+#   - FEAT: Dashboard config persists across updates (Smart Re-apply).
+#   - FIX: Firewall suite version synced on Firewall Manager.
 #   - FIX: Syslog-ng crash (removed invalid d_nas destination).
-#   - FIX: Dashboard HTML config now strictly respects enabled logs.
 #   - UX: Auto-Update is now NOTIFY ONLY (Email + Menu Flag).
-#   - UX: Main Menu shows pending updates instantly.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -43,7 +43,7 @@ T_DASH="Main Dashboard|$WEB_ROOT/index.html|KeenTool|index.html"
 T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|Script/traffic_manager.sh"
 T_PING="Ping Monitor|$BIN_DIR/pingtool.sh|keenetic-pingtool|scripts/pingtool.sh"
 T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|Script/smb_backup_tool.sh"
-FW_CORE_LOCAL="$BIN_DIR/update_blocklist.sh"
+FW_CORE_LOCAL="$BIN_DIR/firewall_manager.sh"
 FW_REPO="keenetic-firewall"
 
 # --- CRON COMMANDS ---
@@ -76,7 +76,7 @@ UPD_SMB=""; UPD_SELF=""
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.14 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.16 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -118,6 +118,45 @@ ver_compare() {
         exit 0; 
     }'
     return $? 
+}
+
+reapply_dashboard_config() {
+    echo " -> Syncing Dashboard Configuration..."
+    
+    # 1. RILEVAMENTO STATO ATTUALE DA SYSLOG-NG
+    CONF="/opt/etc/syslog-ng.conf"
+    # Default assumptions
+    EN_VPN="no"; EN_SCRIPTS="no"; EN_DNS="no"; EN_WIFI="no"; EN_DHCP="no"; EN_PROXY="no"
+    
+    if [ -f "$CONF" ]; then
+        if grep -q "filter(f_vpn); destination(d_vpn);" "$CONF"; then EN_VPN="yes"; fi
+        if grep -q "filter(f_scripts); destination(d_scripts);" "$CONF"; then EN_SCRIPTS="yes"; fi
+        if grep -q "filter(f_dns); destination(d_dns);" "$CONF"; then EN_DNS="yes"; fi
+        if grep -q "filter(f_wifi); destination(d_wifi);" "$CONF"; then EN_WIFI="yes"; fi
+        if grep -q "filter(f_dhcp); destination(d_dhcp);" "$CONF"; then EN_DHCP="yes"; fi
+        if grep -q "filter(f_proxy); destination(d_proxy);" "$CONF"; then EN_PROXY="yes"; fi
+    fi
+
+    # 2. PATCH INDEX.HTML
+    WEB_ROOT="/opt/var/www"
+    if [ -f "$WEB_ROOT/index.html" ]; then
+        JS_TMP="/tmp/keentool_js.tmp"
+        echo "    const logConfig = [" > "$JS_TMP"
+        echo "        { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true }," >> "$JS_TMP"
+        
+        if [ "$EN_VPN" = "yes" ]; then echo "        { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false }," >> "$JS_TMP"; fi
+        if [ "$EN_PROXY" = "yes" ]; then echo "        { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false }," >> "$JS_TMP"; fi
+        if [ "$EN_SCRIPTS" = "yes" ]; then echo "        { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false }," >> "$JS_TMP"; fi
+        if [ "$EN_DNS" = "yes" ]; then echo "        { id: 'dns', file: 'dns_proxy.log', label: '🌍 DNS Proxy Errors', primary: false }," >> "$JS_TMP"; fi
+        if [ "$EN_WIFI" = "yes" ]; then echo "        { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false }," >> "$JS_TMP"; fi
+        if [ "$EN_DHCP" = "yes" ]; then echo "        { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false }," >> "$JS_TMP"; fi
+        
+        echo "    ];" >> "$JS_TMP"
+
+        sed -i '/const logConfig = \[/,/\];/d' "$WEB_ROOT/index.html"
+        sed -i '/\/\/ === CONFIGURATION ===/r '"$JS_TMP" "$WEB_ROOT/index.html"
+        rm -f "$JS_TMP"
+    fi
 }
 
 # --- HUMAN READABLE CRON PARSER ---
@@ -569,51 +608,8 @@ EOF
                     echo "}" >> /opt/etc/logrotate.d/syslog-ng
                 fi
 
-                # 4. PATCH INDEX.HTML (JS CONFIG)
-                if [ -f "$WEB_ROOT/index.html" ]; then
-                    echo " -> Patching Dashboard HTML..."
-                    
-                    # Creazione file temporaneo per la configurazione JS
-                    JS_TMP="/tmp/keentool_js.tmp"
-                    
-                    # Scriviamo l'intestazione
-                    echo "    const logConfig = [" > "$JS_TMP"
-                    
-                    # Il log principale è sempre presente
-                    echo "        { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true }," >> "$JS_TMP"
-                    
-                    # Aggiungiamo solo i moduli ATTIVI (yes)
-                    if [ "$EN_VPN" = "yes" ]; then
-                        echo "        { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false }," >> "$JS_TMP"
-                    fi
-                    if [ "$EN_PROXY" = "yes" ]; then
-                        echo "        { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false }," >> "$JS_TMP"
-                    fi
-                    if [ "$EN_SCRIPTS" = "yes" ]; then
-                        echo "        { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false }," >> "$JS_TMP"
-                    fi
-                    if [ "$EN_DNS" = "yes" ]; then
-                        echo "        { id: 'dns', file: 'dns_proxy.log', label: '🌍 DNS Proxy Errors', primary: false }," >> "$JS_TMP"
-                    fi
-                    if [ "$EN_WIFI" = "yes" ]; then
-                        echo "        { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false }," >> "$JS_TMP"
-                    fi
-                    if [ "$EN_DHCP" = "yes" ]; then
-                        echo "        { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false }," >> "$JS_TMP"
-                    fi
-                    
-                    # Chiudiamo l'array
-                    echo "    ];" >> "$JS_TMP"
-
-                    # 1. Cancelliamo il vecchio blocco di configurazione da index.html
-                    sed -i '/const logConfig = \[/,/\];/d' "$WEB_ROOT/index.html"
-                    
-                    # 2. Inseriamo il nuovo blocco subito dopo il commento di configurazione
-                    sed -i '/\/\/ === CONFIGURATION ===/r '"$JS_TMP" "$WEB_ROOT/index.html"
-                    
-                    # Pulizia
-                    rm -f "$JS_TMP"
-                fi
+                # 4. PATCH INDEX.HTML (JS Cle temporaneo per la configurazione JS
+                reapply_dashboard_config
 
                 # 5. RESTART
                 echo " -> Restarting Syslog-ng..."
@@ -878,7 +874,7 @@ $T_PING
 EOF
     check_tool_status "UPD_PING" "$P" "$R" "$F"
     
-    check_tool_status "UPD_FW" "$FW_CORE_LOCAL" "$FW_REPO" "scripts/update_blocklist.sh"
+    check_tool_status "UPD_FW" "$FW_CORE_LOCAL" "$FW_REPO" "scripts/firewall_manager.sh"
     
     if [ -z "$UPD_FW" ] && [ -f "$FW_CORE_LOCAL" ]; then
         FW_SUBS="$BIN_DIR/firewall_manager.sh|scripts/firewall_manager.sh
@@ -1016,8 +1012,12 @@ configure_dashboard_extras() {
         fi
     fi
 
-    # 3. Prompt for Modules
-    configure_logging_modules
+    # 3. Handle Configuration (Silent vs Interactive)
+    if [ "$1" = "silent" ]; then
+        reapply_dashboard_config
+    else
+        configure_logging_modules
+    fi
 }
 
 # --- GENERIC INSTALL/UPDATE HELPERS ---
@@ -1308,9 +1308,13 @@ EOF
                if [ "$N" = "Traffic Manager" ]; then check_and_install_deps "$DEPS_VNSTAT"; fi
                if [ "$N" = "Main Dashboard" ]; then 
                    check_and_install_deps "$DEPS_DASH"
-                   smart_process "$N" "$P" "$R" "$F"; sanitize_and_reload_cron; configure_dashboard_extras
+                   smart_process "$N" "$P" "$R" "$F"; 
+                   sanitize_and_reload_cron; 
+                   # MODIFICA QUI: Aggiunto "silent"
+                   configure_dashboard_extras "silent"
                else
-                   smart_process "$N" "$P" "$R" "$F"; sanitize_and_reload_cron
+                   smart_process "$N" "$P" "$R" "$F"; 
+                   sanitize_and_reload_cron
                fi
                
                if [ -n "$T_CMD" ]; then manage_cron_menu "$T_CMD"; fi; pause ;;
