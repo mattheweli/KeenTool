@@ -1499,7 +1499,7 @@ EOF
                 echo " 4. Uninstall"
                 echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read d_opt
                 case $d_opt in
-                    1) check_and_install_deps "$DEPS_DASH"; smart_process "Main Dashboard" "$WEB_ROOT/index.html" "KeenTool" "index.html"; sanitize_and_reload_cron; configure_dashboard_extras; pause ;;
+                    1) check_and_install_deps "$DEPS_DASH"; smart_process "Main Dashboard" "$WEB_ROOT/index.html" "KeenTool" "index.html"; sanitize_and_reload_cron; configure_dashboard_extras "silent"; pause ;;
                     2) manage_cron_menu "$CMD_LOGROTATE"; pause ;;
                     3) configure_logging_modules ;;
                     4) echo "Uninstalling..."; rm -f "$WEB_ROOT/index.html"; echo "Done."; pause ;;
