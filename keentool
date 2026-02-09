@@ -608,7 +608,7 @@ EOF
                     echo "}" >> /opt/etc/logrotate.d/syslog-ng
                 fi
 
-                # 4. PATCH INDEX.HTML (JS Cle temporaneo per la configurazione JS
+                # 4. PATCH INDEX.HTML
                 reapply_dashboard_config
 
                 # 5. RESTART
