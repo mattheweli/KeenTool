@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # ==============================================================================
-#KEENTOOL MANAGER v0.6.16 (BETA)
+#KEENTOOL MANAGER v0.6.17 (BETA)
 # Author: MatthewEli
-# Changelog v0.6.16:
+# Changelog v0.6.17:
+#   - FIX: Dashboard MD5 infinite loop
 #   - FEAT: Dashboard config persists across updates (Smart Re-apply).
 #   - FIX: Firewall suite version synced on Firewall Manager.
 #   - FIX: Syslog-ng crash (removed invalid d_nas destination).
@@ -1044,8 +1045,12 @@ smart_process() {
     sed -i 's/\r$//' "$TMP_FILE"
     L_VER=$(get_version "$LPATH"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
     UPDATE_NEEDED=0; MSG=""
-    if [ $RES -eq 1 ]; then UPDATE_NEEDED=1; MSG="${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
-    elif [ $RES -eq 0 ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then UPDATE_NEEDED=1; MSG="${CYAN}Content Changed (Patch)${RESET}"; fi
+    if [ $RES -eq 1 ]; then 
+        UPDATE_NEEDED=1; MSG="${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
+    elif [ $RES -eq 0 ] && [ "$NAME" != "Main Dashboard" ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then 
+        # Ignora MD5 check per la Dashboard perché è sempre modificata localmente
+        UPDATE_NEEDED=1; MSG="${CYAN}Content Changed (Patch)${RESET}"
+    fi
     if [ $UPDATE_NEEDED -eq 1 ]; then
         echo -e "$MSG"; echo -n "    Apply? (y/n): "; read -r ans
         [ "$ans" = "y" ] && { 
