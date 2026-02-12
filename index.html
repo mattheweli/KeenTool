@@ -1,4 +1,4 @@
-<!-- Keenetic Dashboard v1.3.2 (Granular Refresh) -->
+<!-- Keenetic Dashboard v1.3.4 (Granular Refresh) -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -143,7 +143,8 @@
                 <div class="stat-item"><span class="stat-label">IPv4 Entries</span><span class="stat-value txt-red" id="fw_v4">-</span></div>
                 <div class="stat-item"><span class="stat-label">IPv6 Entries</span><span class="stat-value txt-purple" id="fw_v6">-</span></div>
                 <div class="stat-item"><span class="stat-label">VPN Entries</span><span class="stat-value txt-orange" id="fw_vpn">-</span></div>
-                <div class="stat-item"><span class="stat-label">Total Drops</span><span class="stat-value txt-blue" id="fw_drops">-</span></div>
+                <div class="stat-item"><span class="stat-label">Trap Entries</span><span class="stat-value" id="fw_trap">-</span></div>
+                <div class="stat-item" style="grid-column: 1 / -1;"><span class="stat-label">Total Drops</span><span class="stat-value txt-blue" id="fw_drops">-</span></div>
             </div>
             <div class="sub-text" id="fw_update">Updated: -</div>
         </div>
@@ -175,15 +176,16 @@
 
     <script>
         // === CONFIGURATION ===
-        const logConfig = [
-            { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true },
-            { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false },
-            { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false },
-            { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false },
-            { id: 'dns', file: 'dns_proxy.log', label: '🌍 DNS Proxy Errors', primary: false },
-            { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false },
-            { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false }
-        ];
+    const logConfig = [
+        { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true },
+        { id: 'ulogd', file: 'ulogd.log', label: '🔥 ULOGD Firewall', primary: false },
+        { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false },
+        { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false },
+        { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false },
+        { id: 'dns', file: 'dns_proxy.log', label: '🌍 DNS Proxy Errors', primary: false },
+        { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false },
+        { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false },
+    ];
 
         // === UTILS ===
         const fmtBytes = (b) => { if (!b) return "0 B"; const u = ['B','KB','MB','GB','TB']; let i = 0; while(b >= 1024 && i < u.length-1){ b/=1024; i++; } return b.toFixed(2) + ' ' + u[i]; };
@@ -240,6 +242,8 @@
                 document.getElementById('fw_v4').innerText = d.lists.main || "0";
                 document.getElementById('fw_v6').innerText = d.lists.main6 || "0";
                 document.getElementById('fw_vpn').innerText = d.lists.vpn || "0";
+                // UPDATE: Lettura Trap
+                document.getElementById('fw_trap').innerText = d.lists.trap_ips || "0";
                 document.getElementById('fw_drops').innerText = d.lifetime || "0";
                 document.getElementById('fw_update').innerText = "Last Update: " + d.updated;
                 setBoxStatus('fw_status', true);
