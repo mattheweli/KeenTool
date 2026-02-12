@@ -1,9 +1,11 @@
 #!/bin/sh
 
 # ==============================================================================
-#KEENTOOL MANAGER v0.6.17 (BETA)
+#KEENTOOL MANAGER v0.6.18 (BETA)
 # Author: MatthewEli
-# Changelog v0.6.17:
+# Changelog v0.6.18:
+#   - FEAT: Full ULOGD support (conf, init, rotate) for Firewall v2.3+.
+#   - FEAT: Dashboard Config Decoupled (HTML-only update mode added).
 #   - FIX: Dashboard MD5 infinite loop
 #   - FEAT: Dashboard config persists across updates (Smart Re-apply).
 #   - FIX: Firewall suite version synced on Firewall Manager.
@@ -34,7 +36,7 @@ EMAIL_ENC_KEY="keentool_internal_secret"
 DEPS_CORE="lighttpd bash curl wget-ssl cron openssl-util"
 DEPS_VNSTAT="vnstat2 grep awk"
 DEPS_PING="sqlite3-cli iputils-ping mtr grep awk"
-DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed iprange tcpdump"
+DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed iprange tcpdump bind-tools"
 DEPS_SMB="bash tar samba4-client coreutils-date"
 DEPS_DASH="syslog-ng logrotate"
 
@@ -77,7 +79,7 @@ UPD_SMB=""; UPD_SELF=""
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.16 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.18 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -124,18 +126,26 @@ ver_compare() {
 reapply_dashboard_config() {
     echo " -> Syncing Dashboard Configuration..."
     
-    # 1. RILEVAMENTO STATO ATTUALE DA SYSLOG-NG
-    CONF="/opt/etc/syslog-ng.conf"
-    # Default assumptions
-    EN_VPN="no"; EN_SCRIPTS="no"; EN_DNS="no"; EN_WIFI="no"; EN_DHCP="no"; EN_PROXY="no"
+    # PERCORSI
+    DASH_CONF="/opt/etc/keentool/dashboard.conf"
+    SYSLOG_CONF="/opt/etc/syslog-ng.conf"
     
-    if [ -f "$CONF" ]; then
-        if grep -q "filter(f_vpn); destination(d_vpn);" "$CONF"; then EN_VPN="yes"; fi
-        if grep -q "filter(f_scripts); destination(d_scripts);" "$CONF"; then EN_SCRIPTS="yes"; fi
-        if grep -q "filter(f_dns); destination(d_dns);" "$CONF"; then EN_DNS="yes"; fi
-        if grep -q "filter(f_wifi); destination(d_wifi);" "$CONF"; then EN_WIFI="yes"; fi
-        if grep -q "filter(f_dhcp); destination(d_dhcp);" "$CONF"; then EN_DHCP="yes"; fi
-        if grep -q "filter(f_proxy); destination(d_proxy);" "$CONF"; then EN_PROXY="yes"; fi
+    # 1. CARICAMENTO PREFERENZE
+    # Default assumptions
+    EN_VPN="no"; EN_SCRIPTS="no"; EN_DNS="no"; EN_WIFI="no"; EN_DHCP="no"; EN_PROXY="no"; EN_ULOGD="no"
+    
+    if [ -f "$DASH_CONF" ]; then
+        # Metodo Nuovo: Leggi dal file di stato (Disaccoppiato)
+        . "$DASH_CONF"
+    elif [ -f "$SYSLOG_CONF" ]; then
+        # Metodo Legacy: Indovina da Syslog-ng
+        grep -q "filter(f_vpn); destination(d_vpn);" "$SYSLOG_CONF" && EN_VPN="yes"
+        grep -q "filter(f_scripts); destination(d_scripts);" "$SYSLOG_CONF" && EN_SCRIPTS="yes"
+        grep -q "filter(f_dns); destination(d_dns);" "$SYSLOG_CONF" && EN_DNS="yes"
+        grep -q "filter(f_wifi); destination(d_wifi);" "$SYSLOG_CONF" && EN_WIFI="yes"
+        grep -q "filter(f_dhcp); destination(d_dhcp);" "$SYSLOG_CONF" && EN_DHCP="yes"
+        grep -q "filter(f_proxy); destination(d_proxy);" "$SYSLOG_CONF" && EN_PROXY="yes"
+        grep -q "# ulogd_enabled" "$SYSLOG_CONF" && EN_ULOGD="yes"
     fi
 
     # 2. PATCH INDEX.HTML
@@ -145,12 +155,13 @@ reapply_dashboard_config() {
         echo "    const logConfig = [" > "$JS_TMP"
         echo "        { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true }," >> "$JS_TMP"
         
-        if [ "$EN_VPN" = "yes" ]; then echo "        { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false }," >> "$JS_TMP"; fi
-        if [ "$EN_PROXY" = "yes" ]; then echo "        { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false }," >> "$JS_TMP"; fi
-        if [ "$EN_SCRIPTS" = "yes" ]; then echo "        { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false }," >> "$JS_TMP"; fi
-        if [ "$EN_DNS" = "yes" ]; then echo "        { id: 'dns', file: 'dns_proxy.log', label: '🌍 DNS Proxy Errors', primary: false }," >> "$JS_TMP"; fi
-        if [ "$EN_WIFI" = "yes" ]; then echo "        { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false }," >> "$JS_TMP"; fi
-        if [ "$EN_DHCP" = "yes" ]; then echo "        { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false }," >> "$JS_TMP"; fi
+        [ "$EN_ULOGD" = "yes" ] && echo "        { id: 'ulogd', file: 'ulogd.log', label: '🔥 ULOGD Firewall', primary: false }," >> "$JS_TMP"
+        [ "$EN_VPN" = "yes" ] && echo "        { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false }," >> "$JS_TMP"
+        [ "$EN_PROXY" = "yes" ] && echo "        { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false }," >> "$JS_TMP"
+        [ "$EN_SCRIPTS" = "yes" ] && echo "        { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false }," >> "$JS_TMP"
+        [ "$EN_DNS" = "yes" ] && echo "        { id: 'dns', file: 'dns_proxy.log', label: '🌍 DNS Proxy Errors', primary: false }," >> "$JS_TMP"
+        [ "$EN_WIFI" = "yes" ] && echo "        { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false }," >> "$JS_TMP"
+        [ "$EN_DHCP" = "yes" ] && echo "        { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false }," >> "$JS_TMP"
         
         echo "    ];" >> "$JS_TMP"
 
@@ -404,38 +415,65 @@ esac
 
 # --- CONFIGURATORS ---
 
+save_dashboard_state() {
+    mkdir -p "/opt/etc/keentool"
+    cat > "/opt/etc/keentool/dashboard.conf" <<EOF
+EN_VPN="$EN_VPN"
+EN_SCRIPTS="$EN_SCRIPTS"
+EN_DNS="$EN_DNS"
+EN_WIFI="$EN_WIFI"
+EN_DHCP="$EN_DHCP"
+EN_PROXY="$EN_PROXY"
+EN_ULOGD="$EN_ULOGD"
+EOF
+}
+
 configure_logging_modules() {
     # Defaults
-    EN_VPN="yes"
-    EN_SCRIPTS="yes"
-    EN_DNS="yes"
-    EN_WIFI="yes"
-    EN_DHCP="yes"
-    EN_PROXY="yes"
+    EN_VPN="yes"; EN_SCRIPTS="yes"; EN_DNS="yes"; EN_WIFI="yes"; EN_DHCP="yes"; EN_PROXY="yes"; EN_ULOGD="no"
     
     CONF="/opt/etc/syslog-ng.conf"
+    DASH_CONF="/opt/etc/keentool/dashboard.conf"
     
-    # Detect current state
-    if [ -f "$CONF" ]; then
-        if grep -q "filter(f_vpn); destination(d_vpn);" "$CONF"; then EN_VPN="yes"; else EN_VPN="no"; fi
-        if grep -q "filter(f_scripts); destination(d_scripts);" "$CONF"; then EN_SCRIPTS="yes"; else EN_SCRIPTS="no"; fi
-        if grep -q "filter(f_dns); destination(d_dns);" "$CONF"; then EN_DNS="yes"; else EN_DNS="no"; fi
-        if grep -q "filter(f_wifi); destination(d_wifi);" "$CONF"; then EN_WIFI="yes"; else EN_WIFI="no"; fi
-        if grep -q "filter(f_dhcp); destination(d_dhcp);" "$CONF"; then EN_DHCP="yes"; else EN_DHCP="no"; fi
-        if grep -q "filter(f_proxy); destination(d_proxy);" "$CONF"; then EN_PROXY="yes"; else EN_PROXY="no"; fi
+    # Rilevamento Stato (Priorità: Dashboard Conf > Syslog Conf)
+    if [ -f "$DASH_CONF" ]; then
+        . "$DASH_CONF"
+    elif [ -f "$CONF" ]; then
+        grep -q "filter(f_vpn); destination(d_vpn);" "$CONF" || EN_VPN="no"
+        grep -q "filter(f_scripts); destination(d_scripts);" "$CONF" || EN_SCRIPTS="no"
+        grep -q "filter(f_dns); destination(d_dns);" "$CONF" || EN_DNS="no"
+        grep -q "filter(f_wifi); destination(d_wifi);" "$CONF" || EN_WIFI="no"
+        grep -q "filter(f_dhcp); destination(d_dhcp);" "$CONF" || EN_DHCP="no"
+        grep -q "filter(f_proxy); destination(d_proxy);" "$CONF" || EN_PROXY="no"
+        grep -q "# ulogd_enabled" "$CONF" && EN_ULOGD="yes"
     fi
+    # Auto-enable ULOGD se il file di log esiste ed è la prima configurazione
+    if [ ! -f "$CONF" ] && [ -f "/opt/var/log/ulogd.log" ]; then EN_ULOGD="yes"; fi
+
+    # Helper function per i Symlink (usata sia in 'a' che in 'h')
+    sync_symlinks() {
+        mkdir -p "$WEB_ROOT"
+        LOG_LIST="vpn keentool dns_proxy wifi_monitor ndhcps nginx_proxy ulogd"
+        for L in $LOG_LIST; do
+            # Crea il file vuoto se non esiste (evita errori broken link)
+            if [ ! -f "/opt/var/log/${L}.log" ]; then touch "/opt/var/log/${L}.log"; fi
+            chmod 644 "/opt/var/log/${L}.log"
+            # Crea il link se manca
+            if [ ! -L "$WEB_ROOT/${L}.log" ]; then ln -sf "/opt/var/log/${L}.log" "$WEB_ROOT/${L}.log"; fi
+        done
+        # Main syslog
+        if [ ! -L "$WEB_ROOT/messages.log" ]; then ln -sf /opt/var/log/messages "$WEB_ROOT/messages.log"; fi
+    }
 
     while true; do
-        header
-        echo -e "${BOLD}Modular Logging Configuration${RESET}"
-        
-        # Color Logic
+        header; echo -e "${BOLD}Modular Logging Configuration${RESET}"
         if [ "$EN_VPN" = "yes" ]; then c_vpn="${GREEN}ON${RESET}"; else c_vpn="${RED}OFF${RESET}"; fi
         if [ "$EN_SCRIPTS" = "yes" ]; then c_scr="${GREEN}ON${RESET}"; else c_scr="${RED}OFF${RESET}"; fi
         if [ "$EN_DNS" = "yes" ]; then c_dns="${GREEN}ON${RESET}"; else c_dns="${RED}OFF${RESET}"; fi
         if [ "$EN_WIFI" = "yes" ]; then c_wif="${GREEN}ON${RESET}"; else c_wif="${RED}OFF${RESET}"; fi
         if [ "$EN_DHCP" = "yes" ]; then c_dhc="${GREEN}ON${RESET}"; else c_dhc="${RED}OFF${RESET}"; fi
         if [ "$EN_PROXY" = "yes" ]; then c_prx="${GREEN}ON${RESET}"; else c_prx="${RED}OFF${RESET}"; fi
+        if [ "$EN_ULOGD" = "yes" ]; then c_ulo="${GREEN}ON${RESET}"; else c_ulo="${RED}OFF${RESET}"; fi
         
         echo -e " 1. VPN Events (OpenVPN/WireGuard)    [$c_vpn]"
         echo -e " 2. Keentool Scripts (Traffic/Ping)   [$c_scr]"
@@ -443,12 +481,13 @@ configure_logging_modules() {
         echo -e " 4. WiFi Monitor (Mediatek Spam)      [$c_wif]"
         echo -e " 5. DHCP Events (ndhcps)              [$c_dhc]"
         echo -e " 6. Reverse Proxy (Nginx SSL Errors)  [$c_prx]"
+        echo -e " 7. ULOGD Netfilter Log (Firewall)    [$c_ulo]"
         echo ""
-        echo -e " ${BOLD}a. APPLY CHANGES & RESTART SERVICES${RESET}"
+        echo -e " ${BOLD}a. APPLY FULL (Syslog + HTML + Rotate)${RESET}"
+        echo -e " ${BOLD}h. APPLY HTML ONLY (Safe Mode)${RESET}"
         echo " 0. Cancel / Back"
         echo ""
-        echo -n "Select: "
-        read -r opt
+        echo -n "Select: "; read -r opt
         
         case $opt in
             1) if [ "$EN_VPN" = "yes" ]; then EN_VPN="no"; else EN_VPN="yes"; fi ;;
@@ -457,136 +496,63 @@ configure_logging_modules() {
             4) if [ "$EN_WIFI" = "yes" ]; then EN_WIFI="no"; else EN_WIFI="yes"; fi ;;
             5) if [ "$EN_DHCP" = "yes" ]; then EN_DHCP="no"; else EN_DHCP="yes"; fi ;;
             6) if [ "$EN_PROXY" = "yes" ]; then EN_PROXY="no"; else EN_PROXY="yes"; fi ;;
+            7) if [ "$EN_ULOGD" = "yes" ]; then EN_ULOGD="no"; else EN_ULOGD="yes"; fi ;;
+            
+            h)
+                echo ""; echo -e "${CYAN}Updating Dashboard HTML only...${RESET}"
+                save_dashboard_state
+                sync_symlinks
+                reapply_dashboard_config
+                echo -e "${GREEN}Done. HTML & Links Updated.${RESET}"
+                sleep 1; return ;;
+                
             a)
-                echo ""
-                echo -e "${CYAN}Applying Configuration...${RESET}"
+                echo ""; echo -e "${CYAN}Applying Configuration...${RESET}"
+                save_dashboard_state
+                sync_symlinks
                 
-                # 1. SETUP SYMLINKS
-                mkdir -p "$WEB_ROOT"
-                LOG_LIST="vpn keentool dns_proxy wifi_monitor ndhcps nginx_proxy"
-                
-                for L in $LOG_LIST; do
-                    if [ ! -f "/opt/var/log/${L}.log" ]; then
-                        touch "/opt/var/log/${L}.log"
-                    fi
-                    chmod 644 "/opt/var/log/${L}.log"
-                    
-                    if [ ! -L "$WEB_ROOT/${L}.log" ]; then
-                        ln -sf "/opt/var/log/${L}.log" "$WEB_ROOT/${L}.log"
-                    fi
-                done
-                
-                if [ ! -L "$WEB_ROOT/messages.log" ]; then 
-                    ln -sf /opt/var/log/messages "$WEB_ROOT/messages.log"
-                fi
-
                 # 2. GENERATE SYSLOG-NG
                 cat > /opt/etc/syslog-ng.conf <<EOF
 @version: 4.7
 @include "scl.conf"
-
-options { 
-    chain_hostnames(no); create_dirs(yes); 
-    keep_hostname(yes); 
-    use_fqdn(no); 
-    log_msg_size(16384); 
-    log_fifo_size(256); 
-    stats(freq(21600)); 
-    dns-cache(no); 
-};
-
+options { chain_hostnames(no); create_dirs(yes); keep_hostname(yes); use_fqdn(no); log_msg_size(16384); log_fifo_size(256); stats(freq(21600)); dns-cache(no); };
 source s_local { internal(); unix-dgram("/dev/log"); };
 source s_network { udp(ip("0.0.0.0") port(514)); };
-# FILTERS
 filter f_dns { program("https-dns-proxy"); };
 filter f_wifi { message("Network::Interface::Mtk::WifiMonitor") or message("WifiMonitor"); };
 filter f_dhcp { program("ndhcps"); };
-filter f_vpn { 
-    program("OpenVPN.*") or 
-    message("Wireguard") or 
-    message("wireguard") or 
-    message("WireGuard");
-};
+filter f_vpn { program("OpenVPN.*") or message("Wireguard") or message("wireguard") or message("WireGuard"); };
 filter f_scripts { 
-    program("traffic_manager") or 
-    program("pingtool") or 
-    program("Firewall_Stats") or program("firewall_stats") or 
-    program("Firewall_Update") or program("firewall_update") or 
-    program("Abuse_Reporter") or program("abuse_reporter") or 
-    program("VPN_Scanner") or program("vpn_scan") or 
-    program("blocklist_loader") or program("update_blocklist") or 
-    message("Firewall_Stats:") or 
-    message("Firewall_Update:") or
-    message("Abuse_Reporter:") or
-    message("VPN_Scanner:") or
-    message("Keentool") or
-    (program("cron") and (
-        message("traffic_manager.sh") or
-        message("pingtool.sh") or
-        message("firewall_stats.sh") or
-        message("vpn_scan.sh") or
-        message("abuse_reporter.sh") or
-        message("update_blocklist.sh") or
-        message("smb_backup_tool.sh") or
-        message("keentool")
-    ));
+    program("traffic_manager") or program("pingtool") or program("Firewall_Stats") or program("firewall_stats") or 
+    program("Firewall_Update") or program("firewall_update") or program("Abuse_Reporter") or program("abuse_reporter") or 
+    program("VPN_Scanner") or program("vpn_scan") or program("blocklist_loader") or program("update_blocklist") or 
+    message("Firewall_Stats:") or message("Firewall_Update:") or message("Abuse_Reporter:") or message("VPN_Scanner:") or message("Keentool") or
+    (program("cron") and (message("traffic_manager.sh") or message("pingtool.sh") or message("firewall_stats.sh") or message("vpn_scan.sh") or message("abuse_reporter.sh") or message("update_blocklist.sh") or message("smb_backup_tool.sh") or message("keentool")));
 };
 filter f_proxy { program("nginx") or message("nginx:"); };
-# CLEAN FILTER (EXCLUDES ENABLED MODULES)
-filter f_clean {
-    not filter(f_dns) and 
-    not filter(f_wifi) and 
-    not filter(f_dhcp) and 
-    not filter(f_vpn) and 
-    not filter(f_scripts) and 
-    not filter(f_proxy);
-};
-
-# DESTINATIONS
+filter f_clean { not filter(f_dns) and not filter(f_wifi) and not filter(f_dhcp) and not filter(f_vpn) and not filter(f_scripts) and not filter(f_proxy); };
 destination d_messages { file("/opt/var/log/messages"); };
-destination d_dns      { file("/opt/var/log/dns_proxy.log"); };
-destination d_wifi     { file("/opt/var/log/wifi_monitor.log"); };
-destination d_dhcp     { file("/opt/var/log/ndhcps.log"); };
-destination d_vpn      { file("/opt/var/log/vpn.log"); };
-destination d_scripts  { file("/opt/var/log/keentool.log"); };
-destination d_proxy    { file("/opt/var/log/nginx_proxy.log"); };
-
-# LOG PATHS (Clean)
+destination d_dns { file("/opt/var/log/dns_proxy.log"); };
+destination d_wifi { file("/opt/var/log/wifi_monitor.log"); };
+destination d_dhcp { file("/opt/var/log/ndhcps.log"); };
+destination d_vpn { file("/opt/var/log/vpn.log"); };
+destination d_scripts { file("/opt/var/log/keentool.log"); };
+destination d_proxy { file("/opt/var/log/nginx_proxy.log"); };
 log { source(s_local); source(s_network); filter(f_clean); destination(d_messages); };
 EOF
-                # Append enabled logs
-                if [ "$EN_DNS" = "yes" ]; then 
-                    echo 'log { source(s_local); source(s_network); filter(f_dns); destination(d_dns); };' >> /opt/etc/syslog-ng.conf
-                fi
-                if [ "$EN_WIFI" = "yes" ]; then 
-                    echo 'log { source(s_local); source(s_network); filter(f_wifi); destination(d_wifi); };' >> /opt/etc/syslog-ng.conf
-                fi
-                if [ "$EN_DHCP" = "yes" ]; then 
-                    echo 'log { source(s_local); source(s_network); filter(f_dhcp); destination(d_dhcp); };' >> /opt/etc/syslog-ng.conf
-                fi
-                if [ "$EN_VPN" = "yes" ]; then 
-                    echo 'log { source(s_local); source(s_network); filter(f_vpn); destination(d_vpn); };' >> /opt/etc/syslog-ng.conf
-                fi
-                if [ "$EN_SCRIPTS" = "yes" ]; then 
-                    echo 'log { source(s_local); source(s_network); filter(f_scripts); destination(d_scripts); };' >> /opt/etc/syslog-ng.conf
-                fi
-                if [ "$EN_PROXY" = "yes" ]; then 
-                    echo 'log { source(s_local); source(s_network); filter(f_proxy); destination(d_proxy); };' >> /opt/etc/syslog-ng.conf
-                fi
+                [ "$EN_DNS" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_dns); destination(d_dns); };' >> /opt/etc/syslog-ng.conf
+                [ "$EN_WIFI" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_wifi); destination(d_wifi); };' >> /opt/etc/syslog-ng.conf
+                [ "$EN_DHCP" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_dhcp); destination(d_dhcp); };' >> /opt/etc/syslog-ng.conf
+                [ "$EN_VPN" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_vpn); destination(d_vpn); };' >> /opt/etc/syslog-ng.conf
+                [ "$EN_SCRIPTS" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_scripts); destination(d_scripts); };' >> /opt/etc/syslog-ng.conf
+                [ "$EN_PROXY" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_proxy); destination(d_proxy); };' >> /opt/etc/syslog-ng.conf
+                
+                # ULOGD Marker (per compatibilità futura se il file dash.conf viene perso)
+                if [ "$EN_ULOGD" = "yes" ]; then echo "" >> /opt/etc/syslog-ng.conf; echo "# ulogd_enabled" >> /opt/etc/syslog-ng.conf; fi
 
-                # 3. GENERATE LOGROTATE
-                cat > /opt/etc/logrotate.d/syslog-ng <<EOF
-/opt/var/log/messages { 
-    rotate 4 
-    size 5M 
-    missingok 
-    notifempty 
-    compress 
-    postrotate 
-        /opt/etc/init.d/S01syslog-ng restart > /dev/null 2>&1 
-    endscript 
-}
-EOF
+                # 3. GENERATE LOGROTATE (Syslog)
+                echo "/opt/var/log/messages { rotate 4 size 5M missingok notifempty compress postrotate /opt/etc/init.d/S01syslog-ng restart >/dev/null 2>&1 endscript }" > /opt/etc/logrotate.d/syslog-ng
+                
                 SECLOGS=""
                 [ "$EN_DNS" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/dns_proxy.log"
                 [ "$EN_WIFI" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/wifi_monitor.log"
@@ -609,17 +575,31 @@ EOF
                     echo "}" >> /opt/etc/logrotate.d/syslog-ng
                 fi
 
+                # Logrotate ULOGD (Blocco Separato)
+                if [ -f "/opt/var/log/ulogd.log" ]; then
+                    cat >> /opt/etc/logrotate.d/syslog-ng <<EOF
+
+/opt/var/log/ulogd.log {
+    rotate 4
+    size 10M
+    missingok
+    notifempty
+    compress
+    postrotate
+        killall -HUP ulogd 2>/dev/null || /opt/etc/init.d/S11ulogd restart >/dev/null 2>&1
+    endscript
+}
+EOF
+                fi
+
                 # 4. PATCH INDEX.HTML
                 reapply_dashboard_config
 
                 # 5. RESTART
                 echo " -> Restarting Syslog-ng..."
                 /opt/etc/init.d/S01syslog-ng restart >/dev/null 2>&1
-                
                 echo -e "${GREEN}Done. Configuration applied.${RESET}"
-                sleep 1
-                return
-                ;;
+                sleep 1; return ;;
             0) return ;;
         esac
     done
@@ -1345,6 +1325,105 @@ EOF
     done
 }
 
+check_firewall_mods() {
+    echo -n "    Checking Kernel Modules (xt_NFLOG)... "
+    MISSING=""
+    # Moduli critici richiesti (Case Sensitive)
+    MODS="xt_recent xt_multiport xt_connlimit xt_NFLOG nfnetlink_log"
+    
+    # Determina percorso moduli
+    KVER="4.9-ndm-5"
+    if [ -d "/lib/modules/$(uname -r)" ]; then KVER="$(uname -r)"; fi
+    MOD_DIR="/lib/modules/$KVER"
+    
+    for M in $MODS; do
+        if [ ! -f "$MOD_DIR/${M}.ko" ]; then MISSING="$MISSING $M"; fi
+    done
+    
+    if [ -n "$MISSING" ]; then
+        echo -e "${RED}Failed${RESET}"
+        echo -e "${YELLOW}    [!] Missing Critical Kernel Modules:${RESET} ${BOLD}$MISSING${RESET}"
+        echo -e "    These modules are usually part of the firmware (Netfilter components)."
+        return 1
+    else
+        echo -e "${GREEN}OK${RESET}"
+        return 0
+    fi
+}
+
+verify_new_firewall_reqs() {
+    echo -n " -> Checking Remote Suite Version... "
+    TMP_HOOK="/tmp/chk_fw_hook.sh"
+    curl -s -L "$BASE_URL/$FW_REPO/main/scripts/100-firewall.sh" -o "$TMP_HOOK"
+    
+    IS_NEW_SUITE=0
+    if [ -s "$TMP_HOOK" ] && grep -q "NFLOG" "$TMP_HOOK"; then
+        IS_NEW_SUITE=1
+        echo -e "${MAGENTA}New v2.3+ (ULOGD) detected${RESET}"
+    else
+        echo -e "${CYAN}Standard/Legacy detected${RESET}"
+    fi
+    rm -f "$TMP_HOOK"
+
+    if [ "$IS_NEW_SUITE" -eq 1 ]; then
+        # A. Verifica/Installa pacchetti ulogd completi (NFlog + PCAP)
+        if ! opkg list-installed | grep -q "^ulogd-mod-pcap"; then
+            echo -n "    -> New suite requires ${BOLD}ulogd (nflog/pcap)${RESET}. Installing... "
+            opkg update >/dev/null 2>&1
+            opkg install ulogd ulogd-mod-nflog ulogd-mod-pcap >/dev/null 2>&1
+            if [ $? -eq 0 ]; then echo -e "${GREEN}Installed${RESET}"; else echo -e "${RED}Failed${RESET}"; return 1; fi
+        fi
+
+        # B. Configurazione ULOGD (Sovrascrittura)
+        echo -n "    -> Configuring ulogd... "
+        cat > /opt/etc/ulogd.conf <<EOF
+[global]
+logfile="/opt/var/log/ulogd.log"
+loglevel=3
+plugin="/opt/lib/ulogd/ulogd_inppkt_NFLOG.so"
+plugin="/opt/lib/ulogd/ulogd_raw2packet_BASE.so"
+plugin="/opt/lib/ulogd/ulogd_output_PCAP.so"
+stack=log1:NFLOG,base1:BASE,pcap1:PCAP
+
+[log1]
+group=1
+
+[pcap1]
+file="/tmp/fw_syn_ring.pcap"
+sync=1
+EOF
+        chmod 644 /opt/etc/ulogd.conf
+        echo -e "${GREEN}Done${RESET}"
+
+        # C. Script di avvio S11ulogd
+        if [ ! -f "/opt/etc/init.d/S11ulogd" ]; then
+            echo -n "    -> Creating startup script (S11ulogd)... "
+            cat > /opt/etc/init.d/S11ulogd <<EOF
+#!/bin/sh
+
+ENABLED=yes
+PROCS=ulogd
+ARGS="-d"
+PREARGS=""
+DESC=\$PROCS
+PATH=/opt/sbin:/opt/bin:/opt/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+. /opt/etc/init.d/rc.func
+EOF
+            chmod +x /opt/etc/init.d/S11ulogd
+            echo -e "${GREEN}Created${RESET}"
+        fi
+        
+        # Riavvio servizio
+        /opt/etc/init.d/S11ulogd restart >/dev/null 2>&1
+
+        # D. Verifica Moduli Kernel
+        check_firewall_mods
+        return $?
+    fi
+    return 0
+}
+
 action_firewall() {
     while true; do
         header; if [ -f "$FW_CORE_LOCAL" ]; then V_CORE=$(get_version "$FW_CORE_LOCAL"); S_MAIN="${GREEN}Installed (v$V_CORE)${RESET}"; else S_MAIN="${DIM}Missing${RESET}"; fi
@@ -1353,8 +1432,25 @@ action_firewall() {
         echo " 4. Run Monitor"; echo " 5. Uninstall Suite"; echo ""; echo " 0. Back"; echo "";
         echo -n "Select: "; read -r op
         case $op in
-            1) header; check_and_install_deps "$DEPS_FW"; RES_DEPS=$?
-               if [ $RES_DEPS -ne 0 ]; then echo -n " -> Dependencies missing. Continue anyway? (y/n): "; read -r ans; if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then pause; break; fi; fi
+            1) header; 
+               # 1. Controllo dipendenze base
+               check_and_install_deps "$DEPS_FW"; RES_DEPS=$?
+               if [ $RES_DEPS -ne 0 ]; then 
+                   echo -n " -> Base deps missing. Continue? (y/n): "; read -r ans
+                   if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then pause; break; fi
+               fi
+               
+               # 2. Controllo Specifico NUOVA SUITE (ULOGD/Moduli)
+               verify_new_firewall_reqs
+               if [ $? -ne 0 ]; then
+                   echo ""
+                   echo -e "${RED}[ABORT] Critical requirements for the new Firewall Suite are missing.${RESET}"
+                   pause; break
+               fi
+               
+               # ... (Il resto del codice esistente KEY HANDLING rimane uguale) ...
+               EXISTING_KEY=""
+               if [ -s "$KEY_FILE" ]; then EXISTING_KEY=$(cat "$KEY_FILE" | tr -d '[:space:]'); fi
                
                # --- KEY HANDLING ---
                EXISTING_KEY=""
