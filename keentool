@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # ==============================================================================
-#KEENTOOL MANAGER v0.6.18 (BETA)
+#KEENTOOL MANAGER v0.6.19 (BETA)
 # Author: MatthewEli
-# Changelog v0.6.18:
+# Changelog v0.6.19:
+#   - FEAT: Support of separated html and script parts of firewall_stats
 #   - FEAT: Full ULOGD support (conf, init, rotate) for Firewall v2.3+.
 #   - FEAT: Dashboard Config Decoupled (HTML-only update mode added).
 #   - FIX: Dashboard MD5 infinite loop
@@ -24,6 +25,7 @@ BIN_DIR="/opt/bin"
 NDM_DIR="/opt/etc/ndm/netfilter.d"
 INIT_DIR="/opt/etc/init.d"
 WEB_ROOT="/opt/var/www"
+FW_WEB_ROOT="$WEB_ROOT/firewall"
 KEY_FILE="/opt/etc/AbuseIPDB.key"
 
 # EMAIL CONFIGURATION
@@ -858,13 +860,16 @@ EOF
     check_tool_status "UPD_FW" "$FW_CORE_LOCAL" "$FW_REPO" "scripts/firewall_manager.sh"
     
     if [ -z "$UPD_FW" ] && [ -f "$FW_CORE_LOCAL" ]; then
+        
         FW_SUBS="$BIN_DIR/firewall_manager.sh|scripts/firewall_manager.sh
 $BIN_DIR/firewall_monitor|scripts/firewall_monitor
 $BIN_DIR/firewall_stats.sh|scripts/firewall_stats.sh
 $BIN_DIR/vpn_scan.sh|scripts/vpn_scan.sh
 $BIN_DIR/abuse_reporter.sh|scripts/abuse_reporter.sh
 $NDM_DIR/100-firewall.sh|scripts/100-firewall.sh
-$INIT_DIR/S00ipset-load|scripts/S00ipset-load"
+$INIT_DIR/S00ipset-load|scripts/S00ipset-load
+$FW_WEB_ROOT/index.html|www/index.html"
+
         IFS=$'\n'; for ROW in $FW_SUBS; do
             local SUB_L=$(echo "$ROW" | cut -d'|' -f1); local SUB_R=$(echo "$ROW" | cut -d'|' -f2)
             if [ -f "$SUB_L" ]; then
@@ -1474,6 +1479,10 @@ action_firewall() {
                smart_process "Manager" "$BIN_DIR/firewall_manager.sh" $REPO "scripts/firewall_manager.sh"
                smart_process "Monitor" "$BIN_DIR/firewall_monitor" $REPO "scripts/firewall_monitor"
                smart_process "Stats" "$BIN_DIR/firewall_stats.sh" $REPO "scripts/firewall_stats.sh"
+			   
+               if [ ! -d "$FW_WEB_ROOT" ]; then mkdir -p "$FW_WEB_ROOT"; fi
+               smart_process "Dash UI" "$FW_WEB_ROOT/index.html" $REPO "www/index.html"
+               
                smart_process "Updater" "$BIN_DIR/update_blocklist.sh" $REPO "scripts/update_blocklist.sh"
                smart_process "VPN Scan" "$BIN_DIR/vpn_scan.sh" $REPO "scripts/vpn_scan.sh"
                smart_process "Reporter" "$BIN_DIR/abuse_reporter.sh" $REPO "scripts/abuse_reporter.sh"
@@ -1489,6 +1498,10 @@ action_firewall() {
                if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
                    F_LIST="$BIN_DIR/firewall_manager.sh $BIN_DIR/firewall_monitor $BIN_DIR/firewall_stats.sh $BIN_DIR/update_blocklist.sh $BIN_DIR/vpn_scan.sh $BIN_DIR/abuse_reporter.sh $NDM_DIR/100-firewall.sh $INIT_DIR/S00ipset-load"
                    for F in $F_LIST; do if [ -f "$F" ]; then rm -f "$F"; echo -e "    Removed $F"; fi; done
+				   if [ -d "$FW_WEB_ROOT" ]; then 
+                       rm -rf "$FW_WEB_ROOT"
+                       echo -e "    Removed Firewall Web UI ($FW_WEB_ROOT)"
+                   fi
                    remove_cron_cmd "$CMD_FW_STAT"; remove_cron_cmd "$CMD_FW_UPD"; remove_cron_cmd "$CMD_FW_VPN"; remove_cron_cmd "$CMD_ABUSE";
                    echo -e "${GREEN}Uninstalled.${RESET}"
                fi; pause ;;
