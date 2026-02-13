@@ -1,4 +1,4 @@
-<!-- Keenetic Dashboard v1.3.4 (Granular Refresh) -->
+<!-- Keenetic Dashboard v1.3.5 (Granular Refresh) -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -242,8 +242,10 @@
                 document.getElementById('fw_v4').innerText = d.lists.main || "0";
                 document.getElementById('fw_v6').innerText = d.lists.main6 || "0";
                 document.getElementById('fw_vpn').innerText = d.lists.vpn || "0";
-                // UPDATE: Lettura Trap
-                document.getElementById('fw_trap').innerText = d.lists.trap_ips || "0";
+                // UPDATE: Lettura Trap (Somma v4 + v6)
+				const t4 = parseInt(d.lists.trap_ips) || 0;
+				const t6 = parseInt(d.lists.trap6_ips) || 0;
+				document.getElementById('fw_trap').innerText = (t4 + t6);
                 document.getElementById('fw_drops').innerText = d.lifetime || "0";
                 document.getElementById('fw_update').innerText = "Last Update: " + d.updated;
                 setBoxStatus('fw_status', true);
