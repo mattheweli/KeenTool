@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # ==============================================================================
-#KEENTOOL MANAGER v0.6.19 (BETA)
+#KEENTOOL MANAGER v0.6.20 (BETA)
 # Author: MatthewEli
-# Changelog v0.6.19:
+# Changelog v0.6.20:
+#   - FIX: Kernel components check fix for Firewall
 #   - FEAT: Support of separated html and script parts of firewall_stats
 #   - FEAT: Full ULOGD support (conf, init, rotate) for Firewall v2.3+.
 #   - FEAT: Dashboard Config Decoupled (HTML-only update mode added).
@@ -81,7 +82,7 @@ UPD_SMB=""; UPD_SELF=""
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.18 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.20 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -1331,24 +1332,41 @@ EOF
 }
 
 check_firewall_mods() {
-    echo -n "    Checking Kernel Modules (xt_NFLOG)... "
+    echo -n "    Checking Kernel Modules... "
     MISSING=""
-    # Moduli critici richiesti (Case Sensitive)
-    MODS="xt_recent xt_multiport xt_connlimit xt_NFLOG nfnetlink_log"
-    
-    # Determina percorso moduli
+
+    # 1. FILE-BASED CHECK (Standard Modules)
+    # Check for modules that typically exist as .ko files or are listed in modules.builtin
+    FILE_MODS="xt_recent xt_multiport xt_NFLOG nfnetlink_log"
+
+    # Determine module path
     KVER="4.9-ndm-5"
     if [ -d "/lib/modules/$(uname -r)" ]; then KVER="$(uname -r)"; fi
     MOD_DIR="/lib/modules/$KVER"
-    
-    for M in $MODS; do
-        if [ ! -f "$MOD_DIR/${M}.ko" ]; then MISSING="$MISSING $M"; fi
+
+    for M in $FILE_MODS; do
+        # Check if .ko file exists OR if it is listed in modules.builtin
+        if [ ! -f "$MOD_DIR/${M}.ko" ] && ! grep -q "$M" "$MOD_DIR/modules.builtin" 2>/dev/null; then
+            MISSING="$MISSING $M"
+        fi
     done
-    
+
+    # 2. FUNCTIONAL TEST (Specific for xt_connlimit)
+    # This module is often statically built into Keenetic kernels without file traces.
+    # We attempt to insert a dummy rule. If iptables accepts it, the module is present.
+    if ! iptables -A INPUT -p tcp --dport 9999 -m connlimit --connlimit-above 100 -j RETURN >/dev/null 2>&1; then
+         # Rule failed: Module is missing
+         MISSING="$MISSING xt_connlimit"
+    else
+         # Rule accepted: Module exists. Remove the dummy rule immediately.
+         iptables -D INPUT -p tcp --dport 9999 -m connlimit --connlimit-above 100 -j RETURN >/dev/null 2>&1
+    fi
+
+    # 3. FINAL REPORT
     if [ -n "$MISSING" ]; then
         echo -e "${RED}Failed${RESET}"
-        echo -e "${YELLOW}    [!] Missing Critical Kernel Modules:${RESET} ${BOLD}$MISSING${RESET}"
-        echo -e "    These modules are usually part of the firmware (Netfilter components)."
+        echo -e "${YELLOW}    [!] Missing Critical Modules:${RESET} ${BOLD}$MISSING${RESET}"
+        echo -e "    Please check 'Netfilter' components in Keenetic firmware."
         return 1
     else
         echo -e "${GREEN}OK${RESET}"
