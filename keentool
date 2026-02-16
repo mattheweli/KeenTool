@@ -22,6 +22,7 @@ export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 # --- CONFIGURATION ---
 REPO_USER="mattheweli"
 BASE_URL="https://raw.githubusercontent.com/$REPO_USER"
+AS_URL="https://keentoolstats.laniakear.workers.dev"
 
 # DIRECTORIES
 BIN_DIR="/opt/bin"
@@ -111,6 +112,11 @@ get_md5() {
     else
         echo "none"
     fi
+}
+
+send_analytics() {
+    TYPE=$1
+    curl -s "${AS_URL}/track/${TYPE}" >/dev/null 2>&1 &
 }
 
 ver_compare() { 
@@ -807,6 +813,7 @@ EOF
             else rm -f "$TMP_FILE"; pause; fi
         else echo -e "${GREEN}Up to date.${RESET}"; rm -f "$TMP_FILE"; pause; fi
     fi
+	send_analytics "update"
 }
 
 # --- SYSTEM SETUP ---
@@ -822,6 +829,7 @@ setup_system() {
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then /opt/etc/init.d/S10cron start; echo -e "    ${GREEN}Started.${RESET}"; fi
     fi
     sanitize_and_reload_cron
+	send_analytics "install"
     echo ""; echo -e "${BOLD}System Ready.${RESET}"; pause
 }
 
