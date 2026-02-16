@@ -23,6 +23,7 @@ export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 REPO_USER="mattheweli"
 BASE_URL="https://raw.githubusercontent.com/$REPO_USER"
 AS_URL="https://keentoolstats.laniakear.workers.dev"
+ID_FILE="/opt/etc/keentool.id"
 
 # DIRECTORIES
 BIN_DIR="/opt/bin"
@@ -114,9 +115,17 @@ get_md5() {
     fi
 }
 
+get_device_id() {
+    if [ ! -f "$ID_FILE" ]; then
+        cat /proc/sys/kernel/random/uuid > "$ID_FILE"
+    fi
+    cat "$ID_FILE"
+}
+
 send_analytics() {
     TYPE=$1
-    curl -s "${AS_URL}/track/${TYPE}" >/dev/null 2>&1 &
+    UUID=$(get_device_id)
+    curl -s "${AS_URL}/track/${TYPE}?uid=${UUID}" >/dev/null 2>&1 &
 }
 
 ver_compare() { 
