@@ -808,6 +808,7 @@ EOF
             mv "$TMP_FILE" "$P"; apply_perms "$P"
             # Remove flag if exists
             rm -f "/tmp/keentool_new_ver"
+            send_analytics "update"
             echo -e "${GREEN}Updated.${RESET}"; sleep 1; exec "$P"
         else rm -f "$TMP_FILE"; pause; fi
     elif [ $RES -eq 2 ]; then
@@ -822,7 +823,6 @@ EOF
             else rm -f "$TMP_FILE"; pause; fi
         else echo -e "${GREEN}Up to date.${RESET}"; rm -f "$TMP_FILE"; pause; fi
     fi
-	send_analytics "update"
 }
 
 # --- SYSTEM SETUP ---
@@ -837,8 +837,8 @@ setup_system() {
         echo -e "${RED}Stopped${RESET}"; echo -n " -> Start Cron? (y/n): "; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then /opt/etc/init.d/S10cron start; echo -e "    ${GREEN}Started.${RESET}"; fi
     fi
-    sanitize_and_reload_cron
 	send_analytics "install"
+    sanitize_and_reload_cron
     echo ""; echo -e "${BOLD}System Ready.${RESET}"; pause
 }
 
