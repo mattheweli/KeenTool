@@ -55,7 +55,7 @@ T_DASH="Main Dashboard|$WEB_ROOT/index.html|KeenTool|index.html"
 T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|Script/traffic_manager.sh"
 T_PING="Ping Monitor|$BIN_DIR/pingtool.sh|keenetic-pingtool|scripts/pingtool.sh"
 T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|Script/smb_backup_tool.sh"
-T_MAILMOD="Email Module|$BIN_DIR/email_sender.mod|KeenTool|scripts/email_sender.mod"
+T_MAILMOD="Email Module|$BIN_DIR/email_sender.mod|KeenTool|email_sender.mod"
 FW_CORE_LOCAL="$BIN_DIR/firewall_manager.sh"
 FW_REPO="keenetic-firewall"
 
@@ -120,16 +120,21 @@ get_md5() {
 }
 
 get_device_id() {
-    if [ ! -f "$ID_FILE" ]; then
-        cat /proc/sys/kernel/random/uuid > "$ID_FILE"
+    if [ ! -s "$ID_FILE" ]; then
+        if [ -f /proc/sys/kernel/random/uuid ]; then
+            cat /proc/sys/kernel/random/uuid > "$ID_FILE"
+        else
+            echo "$(date +%s)$RANDOM" | md5sum | awk '{print $1}' > "$ID_FILE"
+        fi
     fi
-    cat "$ID_FILE"
+    cat "$ID_FILE" | tr -d '[:space:]'
 }
 
 send_analytics() {
     TYPE=$1
     UUID=$(get_device_id)
-    curl -s "${AS_URL}/track/${TYPE}?uid=${UUID}" >/dev/null 2>&1 &
+    if [ -z "$UUID" ]; then return; fi
+    curl -m 5 -s "${AS_URL}/track/${TYPE}?uid=${UUID}" >/dev/null 2>&1 &
 }
 
 ver_compare() { 
