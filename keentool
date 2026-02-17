@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # ==============================================================================
-#KEENTOOL MANAGER v0.6.24 (BETA)
+#KEENTOOL MANAGER v0.6.25 (BETA)
 # Author: MatthewEli
-# Changelog v0.6.24:
+# Changelog v0.6.25:
+#   - FIX: Boot check for email external module
 #   - FIX: Completely rewritten cron menu functions
 #   - NEW: External email module
 #   - FIX: Lighttpd dependency for Dashboard
@@ -90,7 +91,7 @@ UPD_SMB=""; UPD_SELF=""
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.24 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.25 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -267,31 +268,56 @@ configure_email() {
     # 1. Check/Install Module Dependency
     if [ ! -f "/opt/bin/email_sender.mod" ]; then
         echo " -> Installing Email Module..."
-        # Downloads the module if it's missing
-        smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "scripts/email_sender.mod"
+        # Downloads the module if it's missing using the smart_process helper
+        smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "email_sender.mod"
     fi
-	mkdir -p "$EMAIL_DIR"
+    mkdir -p "$EMAIL_DIR"
     
     header
     echo -e "${BOLD}Email Notifications Setup${RESET}"
     echo -e "Requires: ${CYAN}openssl-util${RESET} (for password encryption)."
     echo ""
     
+    # --- EMAIL MANAGEMENT MENU (If configuration exists) ---
     if [ -f "$EMAIL_CONF" ]; then
         . "$EMAIL_CONF"
         echo -e "Status: ${GREEN}Configured${RESET}"
         echo "Server: $SMTP_SERVER"
         echo "Recipient: $TO_ADDRESS"
         echo ""
-        echo -n "Do you want to re-configure? (y/n): "
-        read -r ans
-        if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then return; fi
+        echo " 1. Send Test Email"
+        echo " 2. Re-configure Settings"
+        echo " 0. Back"
+        echo ""
+        echo -n "Select option: "
+        read -r em_opt
+        
+        case $em_opt in
+            1) 
+                echo ""
+                echo -n "Sending Test Email to $TO_ADDRESS..."
+                # Call the external module to send the test
+                if /opt/bin/email_sender.mod "Test Email" "This is a test notification from your Keenetic Router (KeenTool Manager)."; then
+                    echo -e " ${GREEN}Success!${RESET}"
+                else
+                    echo -e " ${RED}Failed.${RESET} Check /opt/var/log/messages or your SMTP settings."
+                fi
+                pause
+                return 
+                ;;
+            2) 
+                echo ""
+                echo "Re-configuring..." 
+                ;; # Continues below to the input section
+            *) return ;;
+        esac
     fi
+    # -----------------------------------------------------
 
     echo ""
     echo "Enter SMTP Details (e.g. Gmail, Outlook):"
     echo "----------------------------------------"
-    sleep 1 
+    sleep 0.5
     
     echo -n "SMTP Server (e.g. smtp.gmail.com): "
     read -r SMTP_SERVER
@@ -311,7 +337,7 @@ configure_email() {
     echo -n "Recipient Email (To): "
     read -r TO_ADDRESS
     
-    # SMART DETECTION
+    # SMART DETECTION OF PROTOCOL
     DEF_PROTO="smtps"
     if [ "$SMTP_PORT" = "587" ] || [ "$SMTP_PORT" = "25" ]; then
         DEF_PROTO="smtp"
@@ -321,7 +347,7 @@ configure_email() {
     read -r PROTOCOL
     [ -z "$PROTOCOL" ] && PROTOCOL="$DEF_PROTO"
 
-    # Save Config
+    # Save Configuration to file
     echo "# KeenTool Email Config" > "$EMAIL_CONF"
     echo "SMTP_SERVER=\"$SMTP_SERVER\"" >> "$EMAIL_CONF"
     echo "SMTP_PORT=\"$SMTP_PORT\"" >> "$EMAIL_CONF"
@@ -330,28 +356,26 @@ configure_email() {
     echo "TO_ADDRESS=\"$TO_ADDRESS\"" >> "$EMAIL_CONF"
     echo "PROTOCOL=\"$PROTOCOL\"" >> "$EMAIL_CONF"
 
-    # Encrypt Password
+    # Encrypt Password using OpenSSL
     echo -n "$SMTP_PASS" | /opt/bin/openssl aes-256-cbc -pbkdf2 -out "$EMAIL_PW_FILE" -pass pass:$EMAIL_ENC_KEY
     
+    # Secure permissions
     chmod 600 "$EMAIL_CONF"
     chmod 600 "$EMAIL_PW_FILE"
 
     echo ""
     echo -e "${GREEN}Configuration saved.${RESET}"
     
+    # Immediate Test prompt after configuration
     echo -n "Send a test email now? (y/n): "
     read -r test_ans
     if [ "$test_ans" = "y" ] || [ "$test_ans" = "Y" ]; then
         echo -n "Sending..."
-        
-        # --- CHANGED: Use External Module ---
         if /opt/bin/email_sender.mod "Test Email" "This is a test notification from your Keenetic Router."; then
             echo -e " ${GREEN}Success!${RESET}"
         else
             echo -e " ${RED}Failed (Check /opt/var/log/messages)${RESET}"
         fi
-        # ------------------------------------
-        
         pause
     fi
 }
@@ -1263,6 +1287,22 @@ manage_cron_menu() {
     done
 }
 
+boot_check() {
+      if [ ! -f "/opt/bin/email_sender.mod" ]; then
+        curl -s -L "$BASE_URL/KeenTool/main/scripts/email_sender.mod" -o "/opt/bin/email_sender.mod"
+        if [ -s "/opt/bin/email_sender.mod" ]; then
+            chmod +x "/opt/bin/email_sender.mod"
+        else
+            rm -f "/opt/bin/email_sender.mod"
+        fi
+    fi
+
+    if [ ! -s "$ID_FILE" ]; then
+        get_device_id >/dev/null
+        send_analytics "update"
+    fi
+}
+
 # --- ACTIONS ---
 action_ping() {
     IFS='|' read -r N P R F <<EOF
@@ -1558,6 +1598,7 @@ action_firewall() {
 }
 
 # --- MAIN MENU ---
+boot_check
 while true; do
     # Check Core Deps silently for menu display
     SYS_MSG="${GREEN}OK${RESET}"
