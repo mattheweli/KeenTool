@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # ==============================================================================
-#KEENTOOL MANAGER v0.6.25 (BETA)
+#KEENTOOL MANAGER v0.6.26 (BETA)
 # Author: MatthewEli
-# Changelog v0.6.25:
+# Changelog v0.6.26:
+#   - NEW: email module update management
 #   - FIX: Boot check for email external module
 #   - FIX: Completely rewritten cron menu functions
 #   - NEW: External email module
@@ -268,8 +269,8 @@ configure_email() {
     # 1. Check/Install Module Dependency
     if [ ! -f "/opt/bin/email_sender.mod" ]; then
         echo " -> Installing Email Module..."
-        # Downloads the module if it's missing using the smart_process helper
-        smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "email_sender.mod"
+        # Utilizziamo scripts/email_sender.mod per allinearci al boot_check
+        smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "scripts/email_sender.mod"
     fi
     mkdir -p "$EMAIL_DIR"
     
@@ -281,12 +282,18 @@ configure_email() {
     # --- EMAIL MANAGEMENT MENU (If configuration exists) ---
     if [ -f "$EMAIL_CONF" ]; then
         . "$EMAIL_CONF"
+        
+        # Get current module version for display
+        MOD_VER=$(get_version "/opt/bin/email_sender.mod")
+        
         echo -e "Status: ${GREEN}Configured${RESET}"
         echo "Server: $SMTP_SERVER"
         echo "Recipient: $TO_ADDRESS"
+        echo "Module: v$MOD_VER"
         echo ""
         echo " 1. Send Test Email"
         echo " 2. Re-configure Settings"
+        echo " 3. Update Email Module"
         echo " 0. Back"
         echo ""
         echo -n "Select option: "
@@ -309,6 +316,13 @@ configure_email() {
                 echo ""
                 echo "Re-configuring..." 
                 ;; # Continues below to the input section
+            3)
+                echo ""
+                # Check and apply updates for the module using smart_process
+                smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "scripts/email_sender.mod"
+                pause
+                return
+                ;;
             *) return ;;
         esac
     fi
