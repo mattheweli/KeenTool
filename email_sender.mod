@@ -1,6 +1,6 @@
 #!/bin/sh
 # ==============================================================================
-# KEENTOOL EMAIL MODULE v1.0.1
+# KEENTOOL EMAIL MODULE v1.0.3
 # Description: Shared utility to send email notifications via curl.
 # Usage: email_sender.mod "Subject" "Message Body"
 # ==============================================================================
@@ -15,6 +15,9 @@ KEY="keentool_internal_secret"
 
 # 1. Check if configuration exists
 if [ -f "$CONF" ] && [ -f "$PASS_FILE" ]; then
+    
+    # PULIZIA: Rimuove eventuali caratteri invisibili di Windows
+    sed -i 's/\r$//' "$CONF"
     . "$CONF"
     
     # 2. Decrypt Password
@@ -25,9 +28,17 @@ if [ -f "$CONF" ] && [ -f "$PASS_FILE" ]; then
         exit 1
     fi
     
-    # 3. Prepare Email Content
+    # 3. Prepare Email Content (Strict RFC 5322 CRLF compliance)
     MAIL_FILE="/tmp/keentool_mail_out.txt"
-    echo -e "Subject: [Keenetic] $SUBJECT\r\nFrom: \"KeenTool\" <$FROM_ADDRESS>\r\nTo: <$TO_ADDRESS>\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n$BODY" > "$MAIL_FILE"
+    
+    {
+        printf "Subject: [Keenetic] %s\r\n" "$SUBJECT"
+        printf "From: \"KeenTool\" <%s>\r\n" "$FROM_ADDRESS"
+        printf "To: <%s>\r\n" "$TO_ADDRESS"
+        printf "Content-Type: text/plain; charset=UTF-8\r\n"
+        printf "\r\n"
+        printf "%b\r\n" "$BODY"
+    } > "$MAIL_FILE"
     
     # 4. Send via cURL
     curl --url "$PROTOCOL://$SMTP_SERVER:$SMTP_PORT" \
