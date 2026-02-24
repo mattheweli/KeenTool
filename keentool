@@ -1,9 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-#KEENTOOL MANAGER v0.6.26 (BETA)
+#KEENTOOL MANAGER v0.6.27 (BETA)
 # Author: MatthewEli
-# Changelog v0.6.26:
+# Changelog v0.6.27:
+#   - UI: Pixel-perfect KeeneticOS native UI applied to all Dashboards.
+#   - UI: "Terminal-style" dark theme for the main system log viewer.
+#   - FIX: Forced HTML regeneration (cache wipe) on Traffic & Ping updates.
 #   - NEW: email module update management
 #   - FIX: Boot check for email external module
 #   - FIX: Completely rewritten cron menu functions
@@ -92,7 +95,7 @@ UPD_SMB=""; UPD_SELF=""
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.26 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.27 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -1332,8 +1335,13 @@ EOF
         echo ""; echo " 0. Back"; echo "";
         echo -n "Select: "; read -r op
         case $op in
-            1) header; check_and_install_deps "$DEPS_PING"; smart_process "$N" "$P" "$R" "$F"; sanitize_and_reload_cron; 
-               if [ -n "$CMD_PING_BASE" ]; then manage_cron_menu "$CMD_PING_BASE $CMD_PING_ARGS"; fi; pause ;;
+            1) 
+    header; check_and_install_deps "$DEPS_PING"; 
+    smart_process "$N" "$P" "$R" "$F"; sanitize_and_reload_cron; 
+    rm -f /opt/var/www/ping/index.html
+    if [ -n "$CMD_PING_BASE" ]; then manage_cron_menu "$CMD_PING_BASE $CMD_PING_ARGS"; fi
+    pause 
+    ;;
             2) manage_cron_menu "$CMD_PING_BASE $CMD_PING_ARGS"; ;;
             3) configure_pingtool ;;
             4) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove file and cron? (y/n): "; read -r ans
@@ -1355,7 +1363,13 @@ EOF
         echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Configure Interface (Dashboard/DB)"; echo " 4. Uninstall"; echo "";
         echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
         case $op in
-            1) header; check_and_install_deps "$DEPS_VNSTAT"; smart_process "$N" "$P" "$R" "$F"; if [ -n "$CMD_VNSTAT" ]; then manage_cron_menu "$CMD_VNSTAT"; fi; pause ;;
+            1) 
+    			header; check_and_install_deps "$DEPS_VNSTAT"; 
+    			smart_process "$N" "$P" "$R" "$F"
+    			rm -f /opt/var/www/vnstat/*.html
+    			if [ -n "$CMD_VNSTAT" ]; then manage_cron_menu "$CMD_VNSTAT"; fi
+    			pause 
+    			;;
             2) manage_cron_menu "$CMD_VNSTAT"; ;;
             3) configure_traffic ;;
             4) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove file and cron? (y/n): "; read -r ans; if [ "$ans" = "y" ] ||
