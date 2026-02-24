@@ -1,4 +1,4 @@
-<!-- Keenetic Dashboard v1.4.2 (Keenetic Design) -->
+<!-- Keenetic Dashboard v1.4.3 (Keenetic Design) -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -104,8 +104,8 @@
         }
 
         /* GRID & CARDS */
-        /* MODIFICA: align-items: start invece di stretch per evitare box giganti */
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; align-items: start; margin-bottom: 32px; }
+        /* MODIFICA: align-items: stretch per altezze uguali */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; align-items: stretch; margin-bottom: 32px; }
         .card { 
             background: var(--background); 
             border-radius: 8px; 
@@ -155,8 +155,10 @@
         }
         .stat-item:last-child { border-bottom: none; padding-bottom: 0; }
         
-        .stat-label { font-size: 14px; color: var(--text-gray); font-weight: 400; flex: 0 0 160px; }
-        .stat-value { font-size: 14px; font-weight: 400; color: var(--primary-text); flex: 1 1 auto; text-align: left; word-break: break-word; }
+        .stat-label { font-size: 14px; color: var(--text-gray); font-weight: 400; flex: 0 0 130px; }
+        
+        /* MODIFICA: Forzato text-align: right */
+        .stat-value { font-size: 14px; font-weight: 400; color: var(--primary-text); flex: 1 1 auto; text-align: right; word-break: break-word; }
         
         .card-footer {
             padding: 12px 24px; border-top: 1px solid var(--stroke);
@@ -196,7 +198,6 @@
             white-space: pre-wrap; line-height: 1.5; border-top: 1px solid var(--term-border);
         }
 
-        /* MODIFICA: Stile Terminale per il Log Principale */
         .log-viewer.primary-terminal {
             background-color: #12161c !important; /* Quasi nero */
             color: #4af626 !important; /* Verde console */
@@ -275,7 +276,7 @@
                 <div class="stat-item"><span class="stat-label">Latency IPv6</span><span class="stat-value txt-blue" id="ping_v6">-</span></div>
                 <div class="stat-item">
                     <span class="stat-label">Targets</span>
-                    <span class="stat-value" id="ping_target" style="font-size: 12px;">-</span>
+                    <span class="stat-value" id="ping_target" style="font-size: 13px;">-</span>
                 </div>
             </div>
             <div class="card-footer" id="ping_update">Updated: -</div>
@@ -375,7 +376,7 @@
                 document.getElementById('fw_trap').innerText = (t4 + t6);
                 document.getElementById('fw_drops').innerText = d.lifetime || "0";
                 document.getElementById('fw_update').innerText = "Last Update: " + d.updated;
-                setBoxStatus('fw_status', true, "RUNNING"); // MODIFICA: RUNNING
+                setBoxStatus('fw_status', true, "RUNNING");
             } else { setBoxStatus('fw_status', false, "UNAVAILABLE"); }
 
             // 2. TRAFFIC (VNSTAT)
@@ -392,7 +393,6 @@
                     document.getElementById('tr_month').innerText = fmtBytes(monthData.rx + monthData.tx);
                     
                     const u = iface.updated; const pad = (n) => n.toString().padStart(2, '0');
-                    // MODIFICA: Reinseriti i secondi (u.time.second) nel template della stringa
                     const ts = `${pad(u.date.day)}/${pad(u.date.month)}/${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}:${u.time.second !== undefined ? pad(u.time.second) : '00'}`;
                     document.getElementById('tr_meta').innerText = "Last Update: " + ts;
                     setBoxStatus('tr_status', true, "RUNNING"); 
@@ -406,15 +406,15 @@
                     document.getElementById('ping_v4').innerText = cur.v4.ping + " ms";
                     document.getElementById('ping_v6').innerText = cur.v6.ping + " ms";
                     
-                    // MODIFICA: Target scritti sulla stessa riga separati da barra
-                    let tHtml = `v4: ${d.targets.v4}`;
-                    if (d.config && d.config.ipv6) { tHtml += ` &nbsp;|&nbsp; v6: ${d.targets.v6}`; } 
-                    else if (d.targets.v6 && d.targets.v6.length > 5) { tHtml += ` &nbsp;|&nbsp; v6: ${d.targets.v6}`; }
+                    // MODIFICA: Target con ritorno a capo e styling
+                    let tHtml = `<span style="color:var(--text-gray)">v4:</span> ${d.targets.v4}`;
+                    if (d.config && d.config.ipv6) { tHtml += `<br><span style="color:var(--text-gray)">v6:</span> ${d.targets.v6}`; } 
+                    else if (d.targets.v6 && d.targets.v6.length > 5) { tHtml += `<br><span style="color:var(--text-gray)">v6:</span> ${d.targets.v6}`; }
                     
                     document.getElementById('ping_target').innerHTML = tHtml;
                     document.getElementById('ping_update').innerText = "Last Check: " + d.updated;
                     
-                    setBoxStatus('ping_status', (cur.v4.loss < 100), (cur.v4.loss < 100) ? "RUNNING" : "OFFLINE"); // MODIFICA: RUNNING
+                    setBoxStatus('ping_status', (cur.v4.loss < 100), (cur.v4.loss < 100) ? "RUNNING" : "OFFLINE"); 
                 } catch(e) { console.error("Ping Logic Error", e); setBoxStatus('ping_status', false, "ERROR"); }
             } else { setBoxStatus('ping_status', false, "DISABLED"); }
         }
@@ -425,7 +425,6 @@
             container.innerHTML = ''; 
             logConfig.forEach(log => {
                 const isOpen = log.primary ? 'open' : '';
-                // MODIFICA: Aggiunta classe primary-terminal per il log principale
                 const styleClass = log.primary ? 'log-viewer primary-terminal' : 'log-viewer';
                 const titleClass = log.primary ? 'log-title' : 'log-title secondary';
                 const html = `
