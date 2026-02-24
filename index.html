@@ -1,4 +1,4 @@
-<!-- Keenetic Dashboard v1.4.1 (Keenetic Design) -->
+<!-- Keenetic Dashboard v1.4.2 (Keenetic Design) -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -392,9 +392,10 @@
                     document.getElementById('tr_month').innerText = fmtBytes(monthData.rx + monthData.tx);
                     
                     const u = iface.updated; const pad = (n) => n.toString().padStart(2, '0');
-                    const ts = `${pad(u.date.day)}/${pad(u.date.month)}/${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}`;
+                    // MODIFICA: Reinseriti i secondi (u.time.second) nel template della stringa
+                    const ts = `${pad(u.date.day)}/${pad(u.date.month)}/${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}:${u.time.second !== undefined ? pad(u.time.second) : '00'}`;
                     document.getElementById('tr_meta').innerText = "Last Update: " + ts;
-                    setBoxStatus('tr_status', true, "RUNNING"); // MODIFICA: RUNNING
+                    setBoxStatus('tr_status', true, "RUNNING"); 
                 } catch(e) { console.error("VnStat Logic Error", e); setBoxStatus('tr_status', false, "ERROR"); }
             } else { setBoxStatus('tr_status', false, "DISABLED"); }
 
