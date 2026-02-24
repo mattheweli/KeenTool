@@ -1,11 +1,11 @@
-<!-- Keenetic Dashboard v1.4.0 (Keenetic Design) -->
+<!-- Keenetic Dashboard v1.4.1 (Keenetic Design) -->
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Keenetic Dashboard</title>
+    <title>KeeneticOS Web Panel</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
@@ -40,7 +40,7 @@
             :root { 
                 /* === KEENETIC OFFICIAL DARK THEME === */
                 --dashboard-background: #1b2434;
-                --background: #243146; /* Adattato per staccare dal fondo */
+                --background: #243146; 
                 --primary-text: #c2c2c2;
                 --text-gray: #949b9f;
                 --primary-color: #0097dc;
@@ -104,7 +104,8 @@
         }
 
         /* GRID & CARDS */
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; align-items: stretch; margin-bottom: 32px; }
+        /* MODIFICA: align-items: start invece di stretch per evitare box giganti */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; align-items: start; margin-bottom: 32px; }
         .card { 
             background: var(--background); 
             border-radius: 8px; 
@@ -144,7 +145,7 @@
         
         .status-pill.updating { opacity: 0.7; }
 
-        /* DATA GRID (Native Layout) */
+        /* DATA GRID */
         .stat-grid { 
             display: flex; flex-direction: column; padding: 0 24px 24px 24px; flex-grow: 1; 
         }
@@ -168,7 +169,7 @@
         /* LOG VIEWER STYLES */
         .log-container details {
             background: var(--background); border: 1px solid var(--stroke); border-radius: 4px;
-            margin-bottom: 8px;
+            margin-bottom: 8px; overflow: hidden;
         }
         .log-container summary {
             padding: 12px 20px; font-weight: 400; cursor: pointer; list-style: none;
@@ -194,6 +195,14 @@
             padding: 16px 20px; max-height: 400px; overflow-y: auto;
             white-space: pre-wrap; line-height: 1.5; border-top: 1px solid var(--term-border);
         }
+
+        /* MODIFICA: Stile Terminale per il Log Principale */
+        .log-viewer.primary-terminal {
+            background-color: #12161c !important; /* Quasi nero */
+            color: #4af626 !important; /* Verde console */
+            border-top: none;
+        }
+        
         .log-meta { font-size: 12px; color: var(--text-gray); margin-left: 8px; font-weight: 400; }
         
         .footer-copy { margin-top: auto; padding-top: 40px; text-align: center; font-size: 12px; color: var(--text-gray); }
@@ -202,7 +211,7 @@
 <body>
 
     <div class="header">
-        <h1>SYSTEM DASHBOARD</h1>
+        <h1>KEENETIC DASHBOARD</h1>
         <div class="header-controls">
             <span id="global_clock" class="clock-badge">--/--/---- --:--:--</span>
             <div class="refresh-wrapper">
@@ -264,9 +273,9 @@
             <div class="stat-grid">
                 <div class="stat-item"><span class="stat-label">Latency IPv4</span><span class="stat-value txt-blue" id="ping_v4">-</span></div>
                 <div class="stat-item"><span class="stat-label">Latency IPv6</span><span class="stat-value txt-blue" id="ping_v6">-</span></div>
-                <div class="stat-item" style="border-bottom:none; flex-direction:column; gap:4px; padding-top:12px;">
-                    <span class="stat-label" style="font-size:12px;">Targets</span>
-                    <span class="stat-value" id="ping_target" style="font-size: 12px; color:var(--text-gray);">-</span>
+                <div class="stat-item">
+                    <span class="stat-label">Targets</span>
+                    <span class="stat-value" id="ping_target" style="font-size: 12px;">-</span>
                 </div>
             </div>
             <div class="card-footer" id="ping_update">Updated: -</div>
@@ -366,7 +375,7 @@
                 document.getElementById('fw_trap').innerText = (t4 + t6);
                 document.getElementById('fw_drops').innerText = d.lifetime || "0";
                 document.getElementById('fw_update').innerText = "Last Update: " + d.updated;
-                setBoxStatus('fw_status', true, "RUNNING");
+                setBoxStatus('fw_status', true, "RUNNING"); // MODIFICA: RUNNING
             } else { setBoxStatus('fw_status', false, "UNAVAILABLE"); }
 
             // 2. TRAFFIC (VNSTAT)
@@ -385,7 +394,7 @@
                     const u = iface.updated; const pad = (n) => n.toString().padStart(2, '0');
                     const ts = `${pad(u.date.day)}/${pad(u.date.month)}/${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}`;
                     document.getElementById('tr_meta').innerText = "Last Update: " + ts;
-                    setBoxStatus('tr_status', true, "CONNECTED");
+                    setBoxStatus('tr_status', true, "RUNNING"); // MODIFICA: RUNNING
                 } catch(e) { console.error("VnStat Logic Error", e); setBoxStatus('tr_status', false, "ERROR"); }
             } else { setBoxStatus('tr_status', false, "DISABLED"); }
 
@@ -396,14 +405,15 @@
                     document.getElementById('ping_v4').innerText = cur.v4.ping + " ms";
                     document.getElementById('ping_v6').innerText = cur.v6.ping + " ms";
                     
-                    let tHtml = `IPv4: ${d.targets.v4}`;
-                    if (d.config && d.config.ipv6) { tHtml += ` — IPv6: ${d.targets.v6}`; } 
-                    else if (d.targets.v6 && d.targets.v6.length > 5) { tHtml += ` — IPv6: ${d.targets.v6}`; }
+                    // MODIFICA: Target scritti sulla stessa riga separati da barra
+                    let tHtml = `v4: ${d.targets.v4}`;
+                    if (d.config && d.config.ipv6) { tHtml += ` &nbsp;|&nbsp; v6: ${d.targets.v6}`; } 
+                    else if (d.targets.v6 && d.targets.v6.length > 5) { tHtml += ` &nbsp;|&nbsp; v6: ${d.targets.v6}`; }
                     
                     document.getElementById('ping_target').innerHTML = tHtml;
                     document.getElementById('ping_update').innerText = "Last Check: " + d.updated;
                     
-                    setBoxStatus('ping_status', (cur.v4.loss < 100), (cur.v4.loss < 100) ? "CONNECTED" : "OFFLINE");
+                    setBoxStatus('ping_status', (cur.v4.loss < 100), (cur.v4.loss < 100) ? "RUNNING" : "OFFLINE"); // MODIFICA: RUNNING
                 } catch(e) { console.error("Ping Logic Error", e); setBoxStatus('ping_status', false, "ERROR"); }
             } else { setBoxStatus('ping_status', false, "DISABLED"); }
         }
@@ -414,7 +424,8 @@
             container.innerHTML = ''; 
             logConfig.forEach(log => {
                 const isOpen = log.primary ? 'open' : '';
-                const styleClass = log.primary ? 'log-viewer' : 'log-viewer';
+                // MODIFICA: Aggiunta classe primary-terminal per il log principale
+                const styleClass = log.primary ? 'log-viewer primary-terminal' : 'log-viewer';
                 const titleClass = log.primary ? 'log-title' : 'log-title secondary';
                 const html = `
                 <div class="log-container">
