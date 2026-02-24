@@ -1,114 +1,213 @@
-<!-- Keenetic Dashboard v1.3.5 (Granular Refresh) -->
+<!-- Keenetic Dashboard v1.4.0 (Keenetic Design) -->
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Keenetic Home Monitor</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏠</text></svg>">
+    <title>Keenetic Dashboard</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
         :root { 
-            --bg: #f4f7f6; --card: #ffffff; --text: #333; --muted: #6c757d; 
-            --border: #e9ecef; 
-            --blue: #0d6efd; --green: #198754; --red: #dc3545; --orange: #fd7e14; --purple: #6f42c1;
-            --shadow: rgba(0,0,0,0.05); --hover: #f8f9fa;
-            --term-bg: #1e1e1e; --term-text: #00ff00; --term-filter: #aaaaaa;
+            /* === KEENETIC OFFICIAL LIGHT THEME === */
+            --dashboard-background: #EDEEF0;
+            --background: #fff;
+            --primary-text: #000;
+            --text-gray: #6e6e6e;
+            --primary-color: #0097dc;
+            --primary-color-hover: #007ab3;
+            --stroke: #bdb7b7;
+            --box-shadow-1: 0 5px 20px rgb(0 0 0 / 5%);
+            --dashboard-card-border: transparent;
+            
+            --status-success-text: #1e7049;
+            --status-success-border: #cbf2df;
+            --status-success-background: #e4faef;
+            
+            --status-info-text: #686868;
+            --status-info-border: #ededed;
+            --status-info-background: #fafafa;
+            
+            --status-warning-text: #de3d3d;
+            --status-warning-border: #ffded9;
+            --status-warning-background: #ffece9;
+
+            --term-bg: #f0f0f0; --term-text: #333; --term-border: #ebebeb;
         }
+        
         @media (prefers-color-scheme: dark) { 
-            :root { --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --muted: #a0a0a0; --border: #2c2c2c; --shadow: rgba(0,0,0,0.5); --hover: #2a2a2a; } 
+            :root { 
+                /* === KEENETIC OFFICIAL DARK THEME === */
+                --dashboard-background: #1b2434;
+                --background: #243146; /* Adattato per staccare dal fondo */
+                --primary-text: #c2c2c2;
+                --text-gray: #949b9f;
+                --primary-color: #0097dc;
+                --primary-color-hover: #007ab3;
+                --stroke: #4d545f;
+                --box-shadow-1: 0 0 18px 0 #06080b;
+                --dashboard-card-border: #4d545f;
+                
+                --status-success-text: #25c478;
+                --status-success-border: #3a634f;
+                --status-success-background: #40484f;
+                
+                --status-info-text: #c8c8c8;
+                --status-info-border: #767676;
+                --status-info-background: #444851;
+                
+                --status-warning-text: #ff6565;
+                --status-warning-border: #705551;
+                --status-warning-background: #45464e;
+
+                --term-bg: #161c27; --term-text: #c2c2c2; --term-border: #2e3d57;
+            } 
         }
 
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 20px; max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; min-height: 95vh; }
+        body { 
+            font-family: 'Roboto', sans-serif; 
+            font-size: 14px;
+            line-height: 22px;
+            background: var(--dashboard-background); 
+            color: var(--primary-text); 
+            padding: 24px; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            display: flex; 
+            flex-direction: column; 
+            min-height: 95vh; 
+            -webkit-font-smoothing: antialiased;
+        }
         
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding: 0 5px; flex-wrap: wrap; gap: 15px; }
-        .header h1 { font-size: 1.6rem; margin: 0; font-weight: 800; letter-spacing: -0.5px; }
-        .header-controls { display: flex; align-items: center; gap: 10px; }
-        .clock-badge { font-size: 0.85rem; color: var(--muted); background: var(--card); padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); font-weight: 600; min-width: 80px; text-align: center; }
+        /* HEADER */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 15px; }
+        .header h1 { font-size: 20px; margin: 0; font-weight: 700; text-transform: uppercase; color: var(--primary-text); }
+        .header-controls { display: flex; align-items: center; gap: 16px; }
+        
+        .clock-badge { font-size: 14px; color: var(--text-gray); font-weight: 400; }
         
         /* Styled Dropdown */
-        .refresh-wrapper { position: relative; }
+        .refresh-wrapper { position: relative; display: inline-flex; }
         .refresh-select { 
             appearance: none; -webkit-appearance: none; 
-            background: var(--card); color: var(--text); 
-            border: 1px solid var(--border); padding: 6px 30px 6px 12px; 
-            border-radius: 20px; font-size: 0.8rem; font-weight: 600; 
-            cursor: pointer; outline: none; transition: border-color 0.2s; 
-            min-width: 140px; text-align: center;
+            background: var(--background); color: var(--text-gray); 
+            border: 1px solid var(--stroke); padding: 4px 28px 4px 12px; 
+            border-radius: 4px; font-size: 14px; font-family: 'Roboto', sans-serif;
+            cursor: pointer; outline: none; transition: border-color 0.1s; 
+            min-width: 130px;
         }
-        .refresh-select:hover { border-color: var(--blue); }
+        .refresh-select:hover, .refresh-select:focus { border-color: var(--primary-color); color: var(--primary-text); }
         .refresh-arrow {
-            position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-            pointer-events: none; font-size: 0.7rem; color: var(--muted);
+            position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            pointer-events: none; font-size: 10px; color: var(--stroke);
         }
-        optgroup { font-weight: 700; color: var(--muted); font-style: italic; }
-        option { font-weight: 500; color: var(--text); font-style: normal; padding: 5px; }
 
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; align-items: stretch; margin-bottom: 30px; }
-        .card { background: var(--card); border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px var(--shadow); border: 1px solid var(--border); transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; cursor: pointer; display: flex; flex-direction: column; height: 100%; box-sizing: border-box; }
-        .card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px var(--shadow); border-color: var(--blue); }
-        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-        .card-header h3 { margin: 0; font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .card-header h3::before { content: ''; display: block; width: 4px; height: 16px; border-radius: 2px; flex-shrink: 0; }
-        .card-fw h3::before { background: var(--red); }
-        .card-tr h3::before { background: var(--blue); }
-        .card-ping h3::before { background: var(--green); }
+        /* GRID & CARDS */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; align-items: stretch; margin-bottom: 32px; }
+        .card { 
+            background: var(--background); 
+            border-radius: 8px; 
+            box-shadow: var(--box-shadow-1); 
+            border: 1px solid var(--dashboard-card-border); 
+            display: flex; flex-direction: column; 
+            box-sizing: border-box;
+            transition: box-shadow 0.2s ease;
+        }
+        .card:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.08); }
         
-        .status-dot { height: 8px; width: 8px; border-radius: 50%; background-color: var(--muted); display: inline-block; box-shadow: 0 0 5px currentColor; opacity: 0.5; transition: all 0.3s ease; }
-        .status-dot.online { background-color: var(--green); color: var(--green); opacity: 1; }
-        .status-dot.offline { background-color: var(--red); color: var(--red); opacity: 1; }
-        .status-dot.updating { transform: scale(1.5); opacity: 0.8; }
+        .card-header { 
+            padding: 24px 24px 16px 24px; 
+            display: flex; justify-content: space-between; align-items: center; 
+        }
+        .card-header h3 { 
+            margin: 0; font-size: 16px; font-weight: 700; 
+            text-transform: uppercase; letter-spacing: 0px; 
+            color: var(--primary-text); cursor: pointer; transition: color 0.1s;
+        }
+        .card-header h3:hover { text-decoration: underline; color: var(--primary-color); }
+        
+        /* Keenetic Status Pill */
+        .status-pill {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 12px; font-weight: 400; text-transform: uppercase;
+            padding: 2px 10px; border-radius: 4px; border: 1px solid var(--status-info-border);
+            background-color: var(--status-info-background); color: var(--status-info-text);
+        }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; background-color: var(--status-info-text); }
+        
+        .status-pill.online { color: var(--status-success-text); background: var(--status-success-background); border-color: var(--status-success-border); }
+        .status-pill.online .status-dot { background-color: var(--status-success-text); }
+        
+        .status-pill.offline { color: var(--status-warning-text); background: var(--status-warning-background); border-color: var(--status-warning-border); }
+        .status-pill.offline .status-dot { background-color: var(--status-warning-text); }
+        
+        .status-pill.updating { opacity: 0.7; }
 
-        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex-grow: 1; margin-bottom: 15px; }
-        .stat-item { background: var(--hover); padding: 10px 12px; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
-        .stat-label { font-size: 0.7rem; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .stat-value { font-size: 1.1rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; transition: color 0.3s; }
-        .sub-text { font-size: 0.75rem; color: var(--muted); margin-top: auto; font-weight: 400; text-align: right; opacity: 0.8; }
+        /* DATA GRID (Native Layout) */
+        .stat-grid { 
+            display: flex; flex-direction: column; padding: 0 24px 24px 24px; flex-grow: 1; 
+        }
+        .stat-item { 
+            display: flex; justify-content: space-between; align-items: flex-start;
+            padding: 6px 0; border-bottom: 1px solid var(--stroke);
+        }
+        .stat-item:last-child { border-bottom: none; padding-bottom: 0; }
         
-        .txt-red { color: var(--red); } .txt-blue { color: var(--blue); } .txt-green { color: var(--green); } .txt-orange { color: var(--orange); } .txt-purple { color: var(--purple); }
+        .stat-label { font-size: 14px; color: var(--text-gray); font-weight: 400; flex: 0 0 160px; }
+        .stat-value { font-size: 14px; font-weight: 400; color: var(--primary-text); flex: 1 1 auto; text-align: left; word-break: break-word; }
+        
+        .card-footer {
+            padding: 12px 24px; border-top: 1px solid var(--stroke);
+            font-size: 12px; color: var(--text-gray);
+            background: transparent; margin-top: auto;
+        }
+        
+        .txt-blue { color: var(--primary-color); } 
         
         /* LOG VIEWER STYLES */
         .log-container details {
-            background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-            box-shadow: 0 4px 15px var(--shadow); overflow: hidden;
-            transition: all 0.3s ease; margin-bottom: 15px;
+            background: var(--background); border: 1px solid var(--stroke); border-radius: 4px;
+            margin-bottom: 8px;
         }
         .log-container summary {
-            padding: 15px 20px; font-weight: 700; cursor: pointer; list-style: none;
+            padding: 12px 20px; font-weight: 400; cursor: pointer; list-style: none;
             display: flex; justify-content: space-between; align-items: center;
-            background: var(--card); color: var(--text);
+            color: var(--primary-text); font-size: 14px; transition: background 0.1s;
         }
         .log-container summary::-webkit-details-marker { display: none; }
-        .log-container summary:hover { background: var(--hover); }
-        .log-title { display: flex; align-items: center; gap: 10px; font-size: 1rem; text-transform: uppercase; }
-        .log-controls { display: flex; gap: 10px; }
+        .log-container summary:hover { background: rgba(0,0,0,0.02); }
+        .log-title { display: flex; align-items: center; gap: 8px; color: var(--primary-color); font-weight: 500;}
+        .log-title.secondary { color: var(--primary-text); font-weight: 400; }
+        
+        .log-controls { display: flex; gap: 16px; align-items: center; }
         .btn-log {
-            padding: 5px 12px; font-size: 0.75rem; border-radius: 4px; border: 1px solid var(--border);
-            background: var(--bg); color: var(--text); cursor: pointer; font-weight: 600;
+            padding: 0; font-size: 14px; border: none; background: transparent; 
+            color: var(--primary-color); cursor: pointer; font-weight: 400;
+            font-family: inherit; text-decoration: none;
         }
-        .btn-log:hover { background: var(--blue); color: white; border-color: var(--blue); }
+        .btn-log:hover { text-decoration: underline; }
         
         .log-viewer {
             background: var(--term-bg); color: var(--term-text);
-            font-family: 'Courier New', Courier, monospace; font-size: 0.8rem;
-            padding: 15px; max-height: 400px; overflow-y: auto;
-            white-space: pre-wrap; line-height: 1.4; border-top: 1px solid var(--border);
+            font-family: 'Courier New', Courier, monospace; font-size: 12px;
+            padding: 16px 20px; max-height: 400px; overflow-y: auto;
+            white-space: pre-wrap; line-height: 1.5; border-top: 1px solid var(--term-border);
         }
-        .log-viewer.secondary { color: var(--term-filter); }
-        .log-meta { font-size: 0.75rem; color: var(--muted); margin-left: 10px; font-weight: 400; }
-        .footer-copy { margin-top: auto; padding-top: 40px; text-align: center; font-size: 0.75rem; color: var(--muted); opacity: 0.6; }
+        .log-meta { font-size: 12px; color: var(--text-gray); margin-left: 8px; font-weight: 400; }
+        
+        .footer-copy { margin-top: auto; padding-top: 40px; text-align: center; font-size: 12px; color: var(--text-gray); }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h1>🏠 Keenetic Dashboard</h1>
+        <h1>SYSTEM DASHBOARD</h1>
         <div class="header-controls">
-            
+            <span id="global_clock" class="clock-badge">--/--/---- --:--:--</span>
             <div class="refresh-wrapper">
                 <select id="refresh_timer" class="refresh-select" onchange="changeRefreshRate(this.value)">
-                    <option value="0">⏹ Auto-Refresh: OFF</option>
-                    
+                    <option value="0">Auto-refresh: Off</option>
                     <optgroup label="Seconds">
                         <option value="1000">1 sec</option>
                         <option value="3000">3 sec</option>
@@ -116,87 +215,94 @@
                         <option value="10000">10 sec</option>
                         <option value="30000">30 sec</option>
                     </optgroup>
-                    
                     <optgroup label="Minutes">
                         <option value="60000">1 min</option>
                         <option value="180000">3 min</option>
                         <option value="300000">5 min</option>
-                        <option value="600000">10 min</option>
-                        <option value="1800000">30 min</option>
-                    </optgroup>
-
-                    <optgroup label="Hours">
-                        <option value="3600000">1 hour</option>
                     </optgroup>
                 </select>
                 <span class="refresh-arrow">▼</span>
             </div>
-
-            <span id="global_clock" class="clock-badge">Loading...</span>
         </div>
     </div>
 
     <div class="grid">
-        <div class="card card-fw" onclick="location.href='firewall/index.html'">
-            <div class="card-header"><h3>🛡️ Keenetic Firewall</h3><span class="status-dot" id="fw_status"></span></div>
+        <div class="card">
+            <div class="card-header">
+                <h3 onclick="location.href='firewall/index.html'">Firewall Details</h3>
+                <div class="status-pill" id="fw_status_box"><span class="status-dot"></span><span id="fw_status_txt">LOADING</span></div>
+            </div>
             <div class="stat-grid">
-                <div class="stat-item"><span class="stat-label">IPv4 Entries</span><span class="stat-value txt-red" id="fw_v4">-</span></div>
-                <div class="stat-item"><span class="stat-label">IPv6 Entries</span><span class="stat-value txt-purple" id="fw_v6">-</span></div>
-                <div class="stat-item"><span class="stat-label">VPN Entries</span><span class="stat-value txt-orange" id="fw_vpn">-</span></div>
+                <div class="stat-item"><span class="stat-label">Total Drops</span><span class="stat-value txt-blue" id="fw_drops">-</span></div>
                 <div class="stat-item"><span class="stat-label">Trap Entries</span><span class="stat-value" id="fw_trap">-</span></div>
-                <div class="stat-item" style="grid-column: 1 / -1;"><span class="stat-label">Total Drops</span><span class="stat-value txt-blue" id="fw_drops">-</span></div>
+                <div class="stat-item"><span class="stat-label">IPv4 Blacklist</span><span class="stat-value" id="fw_v4">-</span></div>
+                <div class="stat-item"><span class="stat-label">IPv6 Blacklist</span><span class="stat-value" id="fw_v6">-</span></div>
+                <div class="stat-item"><span class="stat-label">VPN Scanners</span><span class="stat-value" id="fw_vpn">-</span></div>
             </div>
-            <div class="sub-text" id="fw_update">Updated: -</div>
+            <div class="card-footer" id="fw_update">Updated: -</div>
         </div>
 
-        <div class="card card-tr" onclick="location.href='vnstat/ppp0-vnstat.html'">
-            <div class="card-header"><h3>📊 Keenetic Traffic Analyzer</h3><span class="status-dot" id="tr_status"></span></div>
-            <div class="stat-grid">
-                <div class="stat-item" style="grid-column: 1 / -1;"><span class="stat-label">Interface</span><span class="stat-value" id="tr_iface">-</span></div>
-                <div class="stat-item"><span class="stat-label">Today</span><span class="stat-value txt-green" id="tr_today">-</span></div>
-                <div class="stat-item"><span class="stat-label">Month</span><span class="stat-value txt-blue" id="tr_month">-</span></div>
+        <div class="card">
+            <div class="card-header">
+                <h3 onclick="location.href='vnstat/ppp0-vnstat.html'">Traffic Monitor</h3>
+                <div class="status-pill" id="tr_status_box"><span class="status-dot"></span><span id="tr_status_txt">LOADING</span></div>
             </div>
-            <div class="sub-text" id="tr_meta">Source: vnStat</div>
+            <div class="stat-grid">
+                <div class="stat-item"><span class="stat-label">Interface</span><span class="stat-value txt-blue" id="tr_iface">-</span></div>
+                <div class="stat-item"><span class="stat-label">Received Today</span><span class="stat-value" id="tr_today_rx">-</span></div>
+                <div class="stat-item"><span class="stat-label">Sent Today</span><span class="stat-value" id="tr_today_tx">-</span></div>
+                <div class="stat-item"><span class="stat-label">Total This Month</span><span class="stat-value" id="tr_month">-</span></div>
+            </div>
+            <div class="card-footer" id="tr_meta">Source: vnStat</div>
         </div>
 
-        <div class="card card-ping" onclick="location.href='ping/index.html'">
-            <div class="card-header"><h3>⚡ Keenetic Ping Monitor</h3><span class="status-dot" id="ping_status"></span></div>
-            <div class="stat-grid">
-                <div class="stat-item"><span class="stat-label">Ping IPv4</span><span class="stat-value txt-green" id="ping_v4">-</span></div>
-                <div class="stat-item"><span class="stat-label">Ping IPv6</span><span class="stat-value txt-purple" id="ping_v6">-</span></div>
-                <div class="stat-item" style="grid-column: 1 / -1;"><span class="stat-label">Targets</span><span class="stat-value" style="font-size: 0.85rem; font-weight:500;" id="ping_target">-</span></div>
+        <div class="card">
+            <div class="card-header">
+                <h3 onclick="location.href='ping/index.html'">Connection Monitor</h3>
+                <div class="status-pill" id="ping_status_box"><span class="status-dot"></span><span id="ping_status_txt">LOADING</span></div>
             </div>
-            <div class="sub-text" id="ping_update">Updated: -</div>
+            <div class="stat-grid">
+                <div class="stat-item"><span class="stat-label">Latency IPv4</span><span class="stat-value txt-blue" id="ping_v4">-</span></div>
+                <div class="stat-item"><span class="stat-label">Latency IPv6</span><span class="stat-value txt-blue" id="ping_v6">-</span></div>
+                <div class="stat-item" style="border-bottom:none; flex-direction:column; gap:4px; padding-top:12px;">
+                    <span class="stat-label" style="font-size:12px;">Targets</span>
+                    <span class="stat-value" id="ping_target" style="font-size: 12px; color:var(--text-gray);">-</span>
+                </div>
+            </div>
+            <div class="card-footer" id="ping_update">Updated: -</div>
         </div>
     </div>
 
     <div id="log_container_root"></div>
 
-    <div class="footer-copy">Copyright &copy; <span id="year"></span> mattheweli</div>
+    <div class="footer-copy">KeenTool Dashboard &copy; <span id="year"></span> mattheweli</div>
 
     <script>
         // === CONFIGURATION ===
-    const logConfig = [
-        { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true },
-        { id: 'ulogd', file: 'ulogd.log', label: '🔥 ULOGD Firewall', primary: false },
-        { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false },
-        { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false },
-        { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false },
-        { id: 'dns', file: 'dns_proxy.log', label: '🌍 DNS Proxy Errors', primary: false },
-        { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false },
-        { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false },
-    ];
+        const logConfig = [
+            { id: 'main', file: 'messages.log', label: 'System log', primary: true },
+            { id: 'ulogd', file: 'ulogd.log', label: 'ULOGD firewall', primary: false },
+            { id: 'vpn', file: 'vpn.log', label: 'VPN events', primary: false },
+            { id: 'proxy', file: 'nginx_proxy.log', label: 'Reverse proxy (Nginx)', primary: false },
+            { id: 'scripts', file: 'keentool.log', label: 'Keentool scripts', primary: false },
+            { id: 'dns', file: 'dns_proxy.log', label: 'DNS proxy errors', primary: false },
+            { id: 'wifi', file: 'wifi_monitor.log', label: 'Wi-Fi monitor spam', primary: false },
+            { id: 'dhcp', file: 'ndhcps.log', label: 'DHCP events', primary: false },
+        ];
 
         // === UTILS ===
         const fmtBytes = (b) => { if (!b) return "0 B"; const u = ['B','KB','MB','GB','TB']; let i = 0; while(b >= 1024 && i < u.length-1){ b/=1024; i++; } return b.toFixed(2) + ' ' + u[i]; };
-        const updateClock = () => { document.getElementById('global_clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}); };
+        const updateClock = () => { 
+            const d = new Date();
+            const dateStr = d.toLocaleDateString([], {month:'2-digit', day:'2-digit', year:'numeric'});
+            const timeStr = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+            document.getElementById('global_clock').innerText = dateStr + " " + timeStr; 
+        };
         
         let logsLoadedStatus = {};
         let refreshIntervalId = null;
 
         // === CORE LOGIC ===
-
-        // Function to reload a JS data file dynamically
         async function loadScriptData(url) {
             try {
                 const response = await fetch(url + '?t=' + Date.now());
@@ -210,18 +316,15 @@
             }
         }
 
-        // Main update function (AJAX)
         async function updateDashboard() {
-            document.querySelectorAll('.status-dot.online').forEach(el => el.classList.add('updating'));
+            document.querySelectorAll('.status-pill').forEach(el => el.classList.add('updating'));
 
-            // 1. DATA REFRESH
             const dataPromise = Promise.all([
                 loadScriptData('firewall/firewall_data.js'),
                 loadScriptData('vnstat/vnstat_data.js'),
                 loadScriptData('ping/data.js')
             ]);
 
-            // 2. LOG REFRESH (ALL logs, forced)
             const logsPromise = Promise.all(
                 logConfig.map(log => fetchLog(log.id, log.file, true))
             );
@@ -231,8 +334,23 @@
             renderCards();
 
             setTimeout(() => {
-                document.querySelectorAll('.status-dot').forEach(el => el.classList.remove('updating'));
+                document.querySelectorAll('.status-pill').forEach(el => el.classList.remove('updating'));
             }, 500);
+        }
+
+        function setBoxStatus(idPrefix, isOnline, customText = null) {
+            const box = document.getElementById(idPrefix + '_box');
+            const txt = document.getElementById(idPrefix + '_txt');
+            
+            box.classList.remove('online', 'offline', 'updating');
+            
+            if(isOnline) { 
+                box.classList.add('online'); 
+                txt.innerText = customText ? customText : "ACTIVE"; 
+            } else { 
+                box.classList.add('offline'); 
+                txt.innerText = customText ? customText : "OFFLINE"; 
+            }
         }
 
         function renderCards() {
@@ -242,14 +360,14 @@
                 document.getElementById('fw_v4').innerText = d.lists.main || "0";
                 document.getElementById('fw_v6').innerText = d.lists.main6 || "0";
                 document.getElementById('fw_vpn').innerText = d.lists.vpn || "0";
-                // UPDATE: Lettura Trap (Somma v4 + v6)
-				const t4 = parseInt(d.lists.trap_ips) || 0;
-				const t6 = parseInt(d.lists.trap6_ips) || 0;
-				document.getElementById('fw_trap').innerText = (t4 + t6);
+                
+                const t4 = parseInt(d.lists.trap_ips) || 0;
+                const t6 = parseInt(d.lists.trap6_ips) || 0;
+                document.getElementById('fw_trap').innerText = (t4 + t6);
                 document.getElementById('fw_drops').innerText = d.lifetime || "0";
                 document.getElementById('fw_update').innerText = "Last Update: " + d.updated;
-                setBoxStatus('fw_status', true);
-            } else { setBoxStatus('fw_status', false); }
+                setBoxStatus('fw_status', true, "RUNNING");
+            } else { setBoxStatus('fw_status', false, "UNAVAILABLE"); }
 
             // 2. TRAFFIC (VNSTAT)
             if (typeof window.TRAFFIC_RAW !== 'undefined') {
@@ -260,15 +378,16 @@
                     const monthData = tr.month[tr.month.length - 1] || {rx:0, tx:0};
                     
                     document.getElementById('tr_iface').innerText = iface.name || iface.id;
-                    document.getElementById('tr_today').innerText = fmtBytes(dayData.rx + dayData.tx);
+                    document.getElementById('tr_today_rx').innerText = fmtBytes(dayData.rx);
+                    document.getElementById('tr_today_tx').innerText = fmtBytes(dayData.tx);
                     document.getElementById('tr_month').innerText = fmtBytes(monthData.rx + monthData.tx);
                     
                     const u = iface.updated; const pad = (n) => n.toString().padStart(2, '0');
-                    const ts = `${pad(u.date.day)}-${pad(u.date.month)}-${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}:${u.time.second ? pad(u.time.second) : '00'}`;
+                    const ts = `${pad(u.date.day)}/${pad(u.date.month)}/${u.date.year} ${pad(u.time.hour)}:${pad(u.time.minute)}`;
                     document.getElementById('tr_meta').innerText = "Last Update: " + ts;
-                    setBoxStatus('tr_status', true);
-                } catch(e) { console.error("VnStat Logic Error", e); setBoxStatus('tr_status', false); }
-            } else { setBoxStatus('tr_status', false); }
+                    setBoxStatus('tr_status', true, "CONNECTED");
+                } catch(e) { console.error("VnStat Logic Error", e); setBoxStatus('tr_status', false, "ERROR"); }
+            } else { setBoxStatus('tr_status', false, "DISABLED"); }
 
             // 3. PING
             if (typeof window.PING_DATA !== 'undefined') {
@@ -277,22 +396,16 @@
                     document.getElementById('ping_v4').innerText = cur.v4.ping + " ms";
                     document.getElementById('ping_v6').innerText = cur.v6.ping + " ms";
                     
-                    let tHtml = `<span style='opacity:0.6'>v4:</span> ${d.targets.v4}`;
-                    if (d.config && d.config.ipv6) { tHtml += ` &nbsp; <span style='opacity:0.6'>v6:</span> ${d.targets.v6}`; } 
-                    else if (d.targets.v6 && d.targets.v6.length > 5) { tHtml += ` &nbsp; <span style='opacity:0.6'>v6:</span> ${d.targets.v6}`; }
+                    let tHtml = `IPv4: ${d.targets.v4}`;
+                    if (d.config && d.config.ipv6) { tHtml += ` — IPv6: ${d.targets.v6}`; } 
+                    else if (d.targets.v6 && d.targets.v6.length > 5) { tHtml += ` — IPv6: ${d.targets.v6}`; }
                     
                     document.getElementById('ping_target').innerHTML = tHtml;
-                    document.getElementById('ping_update').innerText = "Last Update: " + d.updated;
+                    document.getElementById('ping_update').innerText = "Last Check: " + d.updated;
                     
-                    setBoxStatus('ping_status', (cur.v4.loss < 100));
-                } catch(e) { console.error("Ping Logic Error", e); setBoxStatus('ping_status', false); }
-            } else { setBoxStatus('ping_status', false); }
-        }
-
-        function setBoxStatus(id, isOnline) {
-            const el = document.getElementById(id);
-            if(isOnline) { el.classList.add('online'); el.classList.remove('offline'); }
-            else { el.classList.add('offline'); el.classList.remove('online'); }
+                    setBoxStatus('ping_status', (cur.v4.loss < 100), (cur.v4.loss < 100) ? "CONNECTED" : "OFFLINE");
+                } catch(e) { console.error("Ping Logic Error", e); setBoxStatus('ping_status', false, "ERROR"); }
+            } else { setBoxStatus('ping_status', false, "DISABLED"); }
         }
 
         // === LOG LOGIC ===
@@ -301,20 +414,23 @@
             container.innerHTML = ''; 
             logConfig.forEach(log => {
                 const isOpen = log.primary ? 'open' : '';
-                const styleClass = log.primary ? 'log-viewer' : 'log-viewer secondary';
-                const labelStyle = log.primary ? '' : 'style="color:var(--muted)"';
+                const styleClass = log.primary ? 'log-viewer' : 'log-viewer';
+                const titleClass = log.primary ? 'log-title' : 'log-title secondary';
                 const html = `
                 <div class="log-container">
                     <details id="details_${log.id}" ${isOpen}>
                         <summary onclick="fetchLog('${log.id}', '${log.file}')">
-                            <div class="log-title"><span ${labelStyle}>${log.label}</span><span id="size_${log.id}" class="log-meta"></span></div>
+                            <div class="${titleClass}">
+                                <span>${log.label}</span>
+                                <span id="size_${log.id}" class="log-meta"></span>
+                            </div>
                             <div class="log-controls">
-                                <button class="btn-log" onclick="downloadLog('${log.id}', '${log.file}', event)">💾 Save</button>
-                                <button class="btn-log" onclick="fetchLog('${log.id}', '${log.file}', true, event)">🔄 Reload</button>
-                                <span>▾</span>
+                                <button class="btn-log" onclick="downloadLog('${log.id}', '${log.file}', event)">Save to file</button>
+                                <button class="btn-log" onclick="fetchLog('${log.id}', '${log.file}', true, event)">Refresh</button>
+                                <span style="color:var(--stroke); font-size:10px;">▼</span>
                             </div>
                         </summary>
-                        <div class="${styleClass}" id="content_${log.id}">Click to load...</div>
+                        <div class="${styleClass}" id="content_${log.id}">Loading data...</div>
                     </details>
                 </div>`;
                 container.insertAdjacentHTML('beforeend', html);
@@ -327,39 +443,27 @@
             const viewer = document.getElementById(`content_${id}`);
             const sizeLabel = document.getElementById(`size_${id}`);
             
-            // PRELOAD LOGIC:
-            // Allow if force=true (auto-refresh or init)
-            // Allow if clicked (event exists)
-            // Ignore if closed and not forced
             if (!details.open && !force && !event) return;
             if (logsLoadedStatus[id] && !force) return;
-
-            // Only show "Loading..." if it's a manual action or first load
-            if (!logsLoadedStatus[id] || event) {
-                // Optional: viewer.innerText = "Loading..."; 
-                // Better: keep old content until new arrives for smoothness
-            }
 
             try {
                 const response = await fetch(filename + '?t=' + Date.now());
                 if (!response.ok) throw new Error("Empty/Missing");
                 const text = await response.text();
                 
-                // Smart Scroll: Only scroll to bottom if already at bottom
                 const wasAtBottom = (viewer.scrollHeight - viewer.scrollTop <= viewer.clientHeight + 50);
                 
                 viewer.innerText = text;
                 sizeLabel.innerText = "(" + fmtBytes(text.length) + ")";
                 
-                // First load OR was at bottom -> Auto Scroll
                 if (!logsLoadedStatus[id] || wasAtBottom) {
                     viewer.scrollTop = viewer.scrollHeight;
                 }
                 
                 logsLoadedStatus[id] = true;
             } catch (err) {
-                viewer.innerText = "Log unavailable.";
-                sizeLabel.innerText = "(0 B)";
+                viewer.innerText = "Log file is empty or unavailable.";
+                sizeLabel.innerText = "";
             }
         }
 
@@ -367,7 +471,7 @@
             event.stopPropagation();
             const viewer = document.getElementById(`content_${id}`);
             const content = viewer.innerText;
-            if (!content || content.startsWith("Loading") || content.startsWith("Log un")) { alert("Load log first."); return; }
+            if (!content || content.startsWith("Loading") || content.startsWith("Log file")) { alert("Load log first."); return; }
             const url = window.URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
             const a = document.createElement('a'); a.href = url;
             a.download = id + "_" + new Date().toISOString().slice(0,10) + ".log";
@@ -389,12 +493,10 @@
             setInterval(updateClock, 1000); updateClock();
             
             renderLogs();
-            updateDashboard(); // First data load
+            updateDashboard(); 
             
-            // PRELOAD ALL LOGS (Force Fetch to show sizes immediately)
             logConfig.forEach(l => fetchLog(l.id, l.file, true));
 
-            // Restore Saved Refresh Rate
             const savedMs = localStorage.getItem('dash_refresh_rate') || "0";
             document.getElementById('refresh_timer').value = savedMs;
             changeRefreshRate(savedMs);
