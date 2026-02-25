@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # ==============================================================================
-#KEENTOOL MANAGER v0.6.27 (BETA)
+#KEENTOOL MANAGER v0.6.28 (BETA)
 # Author: MatthewEli
-# Changelog v0.6.27:
+# Changelog v0.6.28:
+#   - FIX: email module management for firewall stats
 #   - UI: Pixel-perfect KeeneticOS native UI applied to all Dashboards.
 #   - UI: "Terminal-style" dark theme for the main system log viewer.
 #   - FIX: Forced HTML regeneration (cache wipe) on Traffic & Ping updates.
@@ -75,7 +76,10 @@ CMD_PING_ARGS=">> /opt/var/log/connmon.log 2>&1"
 CMD_FW_STAT="root /opt/bin/firewall_stats.sh > /dev/null 2>&1"
 CMD_FW_UPD="root /opt/bin/update_blocklist.sh > /dev/null 2>&1"
 CMD_FW_VPN="root /opt/bin/vpn_scan.sh > /dev/null 2>&1"
-CMD_FW_REPORT="root /opt/bin/firewall_stats.sh -report > /dev/null 2>&1"
+CMD_FW_REPORT_AUTO="root /opt/bin/firewall_stats.sh -report auto > /dev/null 2>&1"
+CMD_FW_REPORT_DAILY="root /opt/bin/firewall_stats.sh -report daily > /dev/null 2>&1"
+CMD_FW_REPORT_WEEKLY="root /opt/bin/firewall_stats.sh -report weekly > /dev/null 2>&1"
+CMD_FW_REPORT_MONTHLY="root /opt/bin/firewall_stats.sh -report monthly > /dev/null 2>&1"
 CMD_SMB="/opt/bin/smb_backup_tool.sh -run"
 CMD_ABUSE="root /opt/bin/abuse_reporter.sh > /dev/null 2>&1"
 CMD_LOGROTATE="root /opt/sbin/logrotate /opt/etc/logrotate.conf"
@@ -95,7 +99,7 @@ UPD_SMB=""; UPD_SELF=""
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.27 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.28 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -1553,14 +1557,12 @@ action_firewall() {
         echo -n "Select: "; read -r op
         case $op in
             1) header; 
-               # 1. Controllo dipendenze base
                check_and_install_deps "$DEPS_FW"; RES_DEPS=$?
                if [ $RES_DEPS -ne 0 ]; then 
                    echo -n " -> Base deps missing. Continue? (y/n): "; read -r ans
                    if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then pause; break; fi
                fi
                
-               # 2. Controllo Specifico NUOVA SUITE (ULOGD/Moduli)
                verify_new_firewall_reqs
                if [ $? -ne 0 ]; then
                    echo ""
@@ -1568,11 +1570,9 @@ action_firewall() {
                    pause; break
                fi
                
-               # ... (Il resto del codice esistente KEY HANDLING rimane uguale) ...
                EXISTING_KEY=""
                if [ -s "$KEY_FILE" ]; then EXISTING_KEY=$(cat "$KEY_FILE" | tr -d '[:space:]'); fi
                
-               # --- KEY HANDLING ---
                EXISTING_KEY=""
                if [ -s "$KEY_FILE" ]; then EXISTING_KEY=$(cat "$KEY_FILE" | tr -d '[:space:]'); fi
                
@@ -1606,7 +1606,7 @@ action_firewall() {
                
                sanitize_and_reload_cron
                pause ;;
-            2) manage_cron_menu "$CMD_FW_STAT" "$CMD_FW_UPD" "$CMD_FW_VPN" "$CMD_ABUSE" "$CMD_FW_REPORT"; ;;
+            2) manage_cron_menu "$CMD_FW_STAT" "$CMD_FW_UPD" "$CMD_FW_VPN" "$CMD_ABUSE" "$CMD_FW_REPORT_AUTO" "$CMD_FW_REPORT_DAILY" "$CMD_FW_REPORT_WEEKLY" "$CMD_FW_REPORT_MONTHLY"; ;;
             3) [ -f "$BIN_DIR/firewall_manager.sh" ] && run_protected "$BIN_DIR/firewall_manager.sh" || { echo "Missing"; sleep 1; };;
             4) [ -f "$BIN_DIR/firewall_monitor" ] && run_protected "$BIN_DIR/firewall_monitor" || { echo "Missing"; sleep 1; };;
             5) header; echo -e "${BOLD}Uninstall Firewall Suite${RESET}"; echo -n " -> Remove ALL scripts and cron jobs? (y/n): "; read -r ans
@@ -1618,6 +1618,7 @@ action_firewall() {
                        echo -e "    Removed Firewall Web UI ($FW_WEB_ROOT)"
                    fi
                    remove_cron_cmd "$CMD_FW_STAT"; remove_cron_cmd "$CMD_FW_UPD"; remove_cron_cmd "$CMD_FW_VPN"; remove_cron_cmd "$CMD_ABUSE";
+                   remove_cron_cmd "root /opt/bin/firewall_stats.sh -report"
                    echo -e "${GREEN}Uninstalled.${RESET}"
                fi; pause ;;
             0) return ;;
