@@ -1322,6 +1322,12 @@ boot_check() {
         get_device_id >/dev/null
         send_analytics "update"
     fi
+
+	# --- LEGACY CLEANUP ---
+    if grep -qF "firewall_stats.sh -report >" "$CRON_FILE"; then
+        grep -vF "firewall_stats.sh -report >" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
+        sanitize_and_reload_cron
+    fi
 }
 
 # --- ACTIONS ---
