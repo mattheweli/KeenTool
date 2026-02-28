@@ -1,28 +1,19 @@
 #!/bin/sh
 
 # ==============================================================================
-#KEENTOOL MANAGER v0.6.28 (BETA)
+# KEENTOOL MANAGER v0.6.29 (BETA)
 # Author: MatthewEli
-# Changelog v0.6.28:
-#   - FIX: email module management for firewall stats
+# Changelog v0.6.29:
+#   - FIX: MD5 update loop ignored for auto-modifying scripts (Ping & Traffic).
+#   - UI: Polished grid layouts & responsive wrapping for Dashboards.
+#   - FIX: Email module management for firewall stats.
 #   - UI: Pixel-perfect KeeneticOS native UI applied to all Dashboards.
 #   - UI: "Terminal-style" dark theme for the main system log viewer.
 #   - FIX: Forced HTML regeneration (cache wipe) on Traffic & Ping updates.
-#   - NEW: email module update management
-#   - FIX: Boot check for email external module
-#   - FIX: Completely rewritten cron menu functions
-#   - NEW: External email module
-#   - FIX: Lighttpd dependency for Dashboard
-#   - FIX: Update general procedure (u) improved
-#   - FIX: Kernel components check fix for Firewall
-#   - FEAT: Support of separated html and script parts of firewall_stats
-#   - FEAT: Full ULOGD support (conf, init, rotate) for Firewall v2.3+.
-#   - FEAT: Dashboard Config Decoupled (HTML-only update mode added).
-#   - FIX: Dashboard MD5 infinite loop
-#   - FEAT: Dashboard config persists across updates (Smart Re-apply).
-#   - FIX: Firewall suite version synced on Firewall Manager.
-#   - FIX: Syslog-ng crash (removed invalid d_nas destination).
-#   - UX: Auto-Update is now NOTIFY ONLY (Email + Menu Flag).
+#   - NEW: Email module update management.
+#   - FIX: Boot check for email external module.
+#   - FIX: Completely rewritten cron menu functions.
+#   - NEW: External email module.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -99,7 +90,7 @@ UPD_SMB=""; UPD_SELF=""
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.28 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.29 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -898,8 +889,8 @@ perform_global_scan() {
                 sed -i 's/\r$//' "$TMP"
                 local R_VER=$(get_version "$TMP"); ver_compare "$R_VER" "$L_VER"; local RES=$?
                 if [ $RES -eq 1 ]; then eval "${VNAME}=' -> ${MAGENTA}v${R_VER}${RESET}'"
-                # Aggiunta l'eccezione per index.html qui sotto
-                elif [ $RES -eq 0 ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP")" ] && [ "$RFILE" != "index.html" ]; then 
+                # Aggiunta l'eccezione per Dashboard, Ping Monitor e Traffic Manager (file auto-modificanti)
+                elif [ $RES -eq 0 ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP")" ] && [ "$RFILE" != "index.html" ] && [ "$RFILE" != "scripts/pingtool.sh" ] && [ "$RFILE" != "scripts/traffic_manager.sh" ]; then 
                     eval "${VNAME}=' -> ${CYAN}Changed${RESET}'"
                 else eval "${VNAME}=''"; fi
                 rm -f "$TMP"
@@ -1103,8 +1094,8 @@ smart_process() {
     UPDATE_NEEDED=0; MSG=""
     if [ $RES -eq 1 ]; then 
         UPDATE_NEEDED=1; MSG="${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
-    elif [ $RES -eq 0 ] && [ "$NAME" != "Main Dashboard" ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then 
-        # Ignora MD5 check per la Dashboard perché è sempre modificata localmente
+    elif [ $RES -eq 0 ] && [ "$NAME" != "Main Dashboard" ] && [ "$NAME" != "Ping Monitor" ] && [ "$NAME" != "Traffic Manager" ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then 
+        # Ignora MD5 check per i file che si auto-modificano con i settaggi utente
         UPDATE_NEEDED=1; MSG="${CYAN}Content Changed (Patch)${RESET}"
     fi
     if [ $UPDATE_NEEDED -eq 1 ]; then
