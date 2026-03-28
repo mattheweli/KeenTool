@@ -1,9 +1,12 @@
 #!/bin/sh
 
+#!/bin/sh
+
 # ==============================================================================
-# KEENTOOL MANAGER v0.6.29 (BETA)
+# KEENTOOL MANAGER v1.0.0 (Stable)
 # Author: MatthewEli
-# Changelog v0.6.29:
+# Changelog v1.0.0:
+#   - UX: Dashboard updates silently bypass Lighttpd config if already setup.
 #   - FIX: MD5 update loop ignored for auto-modifying scripts (Ping & Traffic).
 #   - UI: Polished grid layouts & responsive wrapping for Dashboards.
 #   - FIX: Email module management for firewall stats.
@@ -14,7 +17,20 @@
 #   - FIX: Boot check for email external module.
 #   - FIX: Completely rewritten cron menu functions.
 #   - NEW: External email module.
+#   - FIX: Lighttpd dependency for Dashboard.
+#   - FIX: Update general procedure (u) improved.
+#   - FIX: Kernel components check fix for Firewall.
+#   - FEAT: Support of separated html and script parts of firewall_stats.
+#   - FEAT: Full ULOGD support (conf, init, rotate) for Firewall v2.3+.
+#   - FEAT: Dashboard Config Decoupled (HTML-only update mode added).
+#   - FIX: Dashboard MD5 infinite loop.
+#   - FEAT: Dashboard config persists across updates (Smart Re-apply).
+#   - FIX: Firewall suite version synced on Firewall Manager.
+#   - FIX: Syslog-ng crash (removed invalid d_nas destination).
+#   - UX: Auto-Update is now NOTIFY ONLY (Email + Menu Flag).
 # ==============================================================================
+
+export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 
@@ -90,7 +106,7 @@ UPD_SMB=""; UPD_SELF=""
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v0.6.29 ${RESET}${YELLOW}(Beta)${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v1.0.0 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -1004,18 +1020,22 @@ check_vnstat_config() {
 check_webserver_config() {
     MODE=$1; CONF="/opt/etc/lighttpd/lighttpd.conf"
     if [ ! -d "$WEB_ROOT" ]; then mkdir -p "$WEB_ROOT"; fi
+    
     if [ ! -f "$WEB_ROOT/index.html" ] || [ "$MODE" = "force" ]; then
          echo -n " -> Downloading Dashboard to $WEB_ROOT... "
          curl -s -L "$BASE_URL/KeenTool/main/index.html" -o "$WEB_ROOT/index.html"
          [ -s "$WEB_ROOT/index.html" ] && chmod 644 "$WEB_ROOT/index.html"
     fi
+    
     if [ -f "$CONF" ]; then
-        if grep -q "server.port.*=.*81" "$CONF" && [ "$MODE" != "force" ]; then return 0; fi
+        if grep -q "/opt/var/www/" "$CONF" && [ "$MODE" != "force" ]; then return 0; fi
     fi
+    
     if [ "$MODE" != "force" ]; then
         echo -n " -> ${YELLOW}Configure Lighttpd (Port 81)? (y/n): ${RESET}"; read -r ans
         [ "$ans" != "y" ] && [ "$ans" != "Y" ] && return 0
     fi
+    
     mkdir -p /opt/etc/lighttpd
     cat > "$CONF" <<EOF
 var.log_root    = "/opt/var/log/lighttpd/"
