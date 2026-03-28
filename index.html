@@ -1,4 +1,4 @@
-<!-- Keenetic Dashboard v1.4.4 (Keenetic Design) -->
+<!-- Keenetic Dashboard v1.5.0 (GeoIP reading) -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -212,7 +212,7 @@
 <body>
 
     <div class="header">
-        <h1>KEENETIC DASHBOARD</h1>
+        <h1>🏠 KEENETIC DASHBOARD</h1>
         <div class="header-controls">
             <span id="global_clock" class="clock-badge">--/--/---- --:--:--</span>
             <div class="refresh-wrapper">
@@ -248,6 +248,7 @@
                 <div class="stat-item"><span class="stat-label">IPv4 Blacklist</span><span class="stat-value" id="fw_v4">-</span></div>
                 <div class="stat-item"><span class="stat-label">IPv6 Blacklist</span><span class="stat-value" id="fw_v6">-</span></div>
                 <div class="stat-item"><span class="stat-label">VPN Scanners</span><span class="stat-value" id="fw_vpn">-</span></div>
+				<div class="stat-item"><span class="stat-label">GeoIP Blocks</span><span class="stat-value" id="fw_geo">-</span></div>
             </div>
             <div class="card-footer" id="fw_update">Updated: -</div>
         </div>
@@ -289,16 +290,15 @@
 
     <script>
         // === CONFIGURATION ===
-        const logConfig = [
-            { id: 'main', file: 'messages.log', label: 'System log', primary: true },
-            { id: 'ulogd', file: 'ulogd.log', label: 'ULOGD firewall', primary: false },
-            { id: 'vpn', file: 'vpn.log', label: 'VPN events', primary: false },
-            { id: 'proxy', file: 'nginx_proxy.log', label: 'Reverse proxy (Nginx)', primary: false },
-            { id: 'scripts', file: 'keentool.log', label: 'Keentool scripts', primary: false },
-            { id: 'dns', file: 'dns_proxy.log', label: 'DNS proxy errors', primary: false },
-            { id: 'wifi', file: 'wifi_monitor.log', label: 'Wi-Fi monitor spam', primary: false },
-            { id: 'dhcp', file: 'ndhcps.log', label: 'DHCP events', primary: false },
-        ];
+    const logConfig = [
+        { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true },
+        { id: 'ulogd', file: 'ulogd.log', label: '🔥 ULOGD Firewall', primary: false },
+        { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false },
+        { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false },
+        { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false },
+        { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false },
+        { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false },
+    ];
 
         // === UTILS ===
         const fmtBytes = (b) => { if (!b) return "0 B"; const u = ['B','KB','MB','GB','TB']; let i = 0; while(b >= 1024 && i < u.length-1){ b/=1024; i++; } return b.toFixed(2) + ' ' + u[i]; };
@@ -374,6 +374,12 @@
                 const t4 = parseInt(d.lists.trap_ips) || 0;
                 const t6 = parseInt(d.lists.trap6_ips) || 0;
                 document.getElementById('fw_trap').innerText = (t4 + t6);
+                
+                // --- Aggiunta lettura GeoIP (v4 + v6) ---
+                const g4 = parseInt(d.lists.geo) || 0;
+                const g6 = parseInt(d.lists.geo6) || 0;
+                document.getElementById('fw_geo').innerText = (g4 + g6);
+                
                 document.getElementById('fw_drops').innerText = d.lifetime || "0";
                 document.getElementById('fw_update').innerText = "Last Update: " + d.updated;
                 setBoxStatus('fw_status', true, "RUNNING");
