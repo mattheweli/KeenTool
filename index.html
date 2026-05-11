@@ -1,4 +1,4 @@
-<!-- Keenetic Dashboard v1.5.0 (GeoIP reading) -->
+<!-- Keenetic Dashboard v1.6.0 (Multi interface for Traffic Manager) -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -255,7 +255,7 @@
 
         <div class="card">
             <div class="card-header">
-                <h3 onclick="location.href='vnstat/ppp0-vnstat.html'">Traffic Monitor</h3>
+                <h3 onclick="location.href='vnstat/index.html'">Traffic Monitor</h3>
                 <div class="status-pill" id="tr_status_box"><span class="status-dot"></span><span id="tr_status_txt">LOADING</span></div>
             </div>
             <div class="stat-grid">
@@ -329,11 +329,28 @@
         async function updateDashboard() {
             document.querySelectorAll('.status-pill').forEach(el => el.classList.add('updating'));
 
-            const dataPromise = Promise.all([
+            // 1. Load the vnStat interfaces index
+            await loadScriptData('vnstat/vnstat_index.js');
+            
+            // 2. Determine the primary interface (the first one in the list)
+            let primaryIface = null;
+            if (typeof window.VNSTAT_INTERFACES !== 'undefined' && window.VNSTAT_INTERFACES.trim() !== "") {
+                primaryIface = window.VNSTAT_INTERFACES.split(" ")[0]; // Takes the first one
+            }
+
+            // 3. Prepare data loads
+            const dataPromises = [
                 loadScriptData('firewall/firewall_data.js'),
-                loadScriptData('vnstat/vnstat_data.js'),
                 loadScriptData('ping/data.js')
-            ]);
+            ];
+
+            // Adds dynamic loading for the vnStat interface (if it exists)
+            if (primaryIface) {
+                window._ACTIVE_VNSTAT_IFACE = primaryIface; // Save the name to use it in the render
+                dataPromises.push(loadScriptData(`vnstat/${primaryIface}_data.js`));
+            }
+
+            const dataPromise = Promise.all(dataPromises);
 
             const logsPromise = Promise.all(
                 logConfig.map(log => fetchLog(log.id, log.file, true))
@@ -386,9 +403,11 @@
             } else { setBoxStatus('fw_status', false, "UNAVAILABLE"); }
 
             // 2. TRAFFIC (VNSTAT)
-            if (typeof window.TRAFFIC_RAW !== 'undefined') {
+            const activeIface = window._ACTIVE_VNSTAT_IFACE;
+            if (activeIface && typeof window['TRAFFIC_' + activeIface] !== 'undefined') {
                 try {
-                    const iface = window.TRAFFIC_RAW.interfaces[0];
+                    const data = window['TRAFFIC_' + activeIface];
+                    const iface = data.interfaces[0];
                     const tr = iface.traffic;
                     const dayData = tr.day[tr.day.length - 1] || {rx:0, tx:0};
                     const monthData = tr.month[tr.month.length - 1] || {rx:0, tx:0};
@@ -403,7 +422,7 @@
                     document.getElementById('tr_meta').innerText = "Last Update: " + ts;
                     setBoxStatus('tr_status', true, "RUNNING"); 
                 } catch(e) { console.error("VnStat Logic Error", e); setBoxStatus('tr_status', false, "ERROR"); }
-            } else { setBoxStatus('tr_status', false, "DISABLED"); }
+            } else { setBoxStatus('tr_status', false, "DISABLED"); document.getElementById('tr_meta').innerText = "No interface configured"; }
 
             // 3. PING
             if (typeof window.PING_DATA !== 'undefined') {
