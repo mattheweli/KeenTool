@@ -1,10 +1,10 @@
 #!/bin/sh
 
-#!/bin/sh
-
 # ==============================================================================
-# KEENTOOL MANAGER v1.0.0 (Stable)
+# KEENTOOL MANAGER v1.1.0 (Stable)
 # Author: MatthewEli
+# Changelog v1.1.0:
+#   - FEAT: Support for Multi-Tab Traffic Manager (multiple interfaces).
 # Changelog v1.0.0:
 #   - UX: Dashboard updates silently bypass Lighttpd config if already setup.
 #   - FIX: MD5 update loop ignored for auto-modifying scripts (Ping & Traffic).
@@ -29,8 +29,6 @@
 #   - FIX: Syslog-ng crash (removed invalid d_nas destination).
 #   - UX: Auto-Update is now NOTIFY ONLY (Email + Menu Flag).
 # ==============================================================================
-
-export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 
@@ -99,14 +97,13 @@ BOLD="${ESC}[1m"
 RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CYAN="${ESC}[36m"; MAGENTA="${ESC}[35m"; DIM="${ESC}[2m"
 
 # GLOBAL STATE
-UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW="";
-UPD_SMB=""; UPD_SELF=""
+UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""
 
 # --- UTILS ---
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v1.0.0 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v1.1.0 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -305,6 +302,7 @@ configure_email() {
         echo "Recipient: $TO_ADDRESS"
         echo "Module: v$MOD_VER"
         echo ""
+  
         echo " 1. Send Test Email"
         echo " 2. Re-configure Settings"
         echo " 3. Update Email Module"
@@ -314,7 +312,8 @@ configure_email() {
         read -r em_opt
         
         case $em_opt in
-            1) 
+    
+        1) 
                 echo ""
                 echo -n "Sending Test Email to $TO_ADDRESS..."
                 # Call the external module to send the test
@@ -326,18 +325,20 @@ configure_email() {
                 pause
                 return 
                 ;;
-            2) 
+        2) 
                 echo ""
                 echo "Re-configuring..." 
-                ;; # Continues below to the input section
+                ;;
+        # Continues below to the input section
             3)
                 echo ""
                 # Check and apply updates for the module using smart_process
                 smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "scripts/email_sender.mod"
                 pause
+   
                 return
                 ;;
-            *) return ;;
+        *) return ;;
         esac
     fi
     # -----------------------------------------------------
@@ -355,7 +356,7 @@ configure_email() {
     
     echo -n "Username (e.g. your@email.com): "
     read -r SMTP_USER
-    
+  
     echo -n "Password (App Password recommended): "
     read -r SMTP_PASS
     
@@ -445,7 +446,6 @@ EOF
     
     ver_compare "$R_VER" "$L_VER"
     RES=$?
-    
     # Se c'è un aggiornamento
     if [ $RES -eq 1 ] || { [ $RES -eq 0 ] && [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; }; then
         # 1. Salviamo la versione disponibile in un file temporaneo per il menu
@@ -611,6 +611,7 @@ EOF
                 echo "/opt/var/log/messages { rotate 4 size 5M missingok notifempty compress postrotate /opt/etc/init.d/S01syslog-ng restart >/dev/null 2>&1 endscript }" > /opt/etc/logrotate.d/syslog-ng
                 
                 SECLOGS=""
+              
                 [ "$EN_DNS" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/dns_proxy.log"
                 [ "$EN_WIFI" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/wifi_monitor.log"
                 [ "$EN_DHCP" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/ndhcps.log"
@@ -626,6 +627,7 @@ EOF
                     echo "    missingok" >> /opt/etc/logrotate.d/syslog-ng
                     echo "    notifempty" >> /opt/etc/logrotate.d/syslog-ng
                     echo "    compress" >> /opt/etc/logrotate.d/syslog-ng
+            
                     echo "    postrotate" >> /opt/etc/logrotate.d/syslog-ng
                     echo "        /opt/etc/init.d/S01syslog-ng restart > /dev/null 2>&1" >> /opt/etc/logrotate.d/syslog-ng
                     echo "    endscript" >> /opt/etc/logrotate.d/syslog-ng
@@ -654,6 +656,7 @@ EOF
 
                 # 5. RESTART
                 echo " -> Restarting Syslog-ng..."
+    
                 /opt/etc/init.d/S01syslog-ng restart >/dev/null 2>&1
                 echo -e "${GREEN}Done. Configuration applied.${RESET}"
                 sleep 1; return ;;
@@ -663,18 +666,17 @@ EOF
 }
 
 configure_traffic() {
-    # 1. Parse current Interface from internal variable (CMD_VNSTAT)
-    CUR_IFACE=$(echo "$CMD_VNSTAT" | grep -o 'traffic_manager.sh [^ ]*' | cut -d' ' -f2)
+    # 1. Safely extracts interfaces (handling quotes used for multiple interfaces)
+    CUR_IFACE=$(echo "$CMD_VNSTAT" | sed -n 's/.*traffic_manager.sh \([^>]*\)>.*/\1/p' | sed "s/['\"]//g" | xargs)
     [ -z "$CUR_IFACE" ] && CUR_IFACE="ppp0"
 
     while true; do
         header
         echo -e "${BOLD}Traffic Manager Configuration${RESET}"
         echo ""
-        echo -e " Current Dashboard Target: ${CYAN}${CUR_IFACE}${RESET}"
+        echo -e " Current Dashboard Targets: ${CYAN}${CUR_IFACE}${RESET}"
         echo ""
         
-        # Get VNStat DB list
         echo -e "${BOLD}Available Interfaces (VNStat DB):${RESET}"
         if command -v vnstat >/dev/null 2>&1; then
             vnstat --iflist 2>/dev/null | awk '{print "  - " $0}'
@@ -683,7 +685,7 @@ configure_traffic() {
         fi
         
         echo ""
-        echo " 1. Set Dashboard Interface (Updates Cron)"
+        echo " 1. Set Dashboard Interfaces (Multi-Tab support)"
         echo " 2. Add New Interface to DB (vnstat --add)"
         echo " 3. Remove Interface from DB (vnstat --remove)"
         echo " 0. Back"
@@ -692,19 +694,26 @@ configure_traffic() {
         
         case $opt in
             1) 
-                echo -n "Enter Interface Name (e.g. ppp0, usb0, eth3): "
+                echo -n "Enter Interfaces (space separated, e.g. ppp0 br0 eth2): "
                 read -r NEW_IF
                 if [ -n "$NEW_IF" ]; then
-                    sed -i "s|traffic_manager.sh [a-zA-Z0-9_.]*|traffic_manager.sh $NEW_IF|" "$0"
+                    # Updates the keentool script itself while preserving the string
+                    sed -i -E "s|traffic_manager.sh .* >/opt/var/log|traffic_manager.sh '$NEW_IF' >/opt/var/log|" "$0"
                     CUR_IFACE="$NEW_IF"
-                    NEW_CMD="root /opt/bin/traffic_manager.sh $NEW_IF >/opt/var/log/t_manager.log 2>&1"
+                    NEW_CMD="root /opt/bin/traffic_manager.sh '$NEW_IF' >/opt/var/log/t_manager.log 2>&1"
+                    
                     if grep -q "traffic_manager.sh" "$CRON_FILE"; then
                         echo " -> Updating Crontab..."
                         grep -v "traffic_manager.sh" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
                         echo "*/10 * * * * $NEW_CMD" >> "$CRON_FILE"
                         sanitize_and_reload_cron
                     fi
-                    echo -e " -> ${GREEN}Target set to $NEW_IF.${RESET}"
+                    
+                    echo " -> Regenerating Dashboard instantly..."
+                    rm -f /opt/var/www/vnstat/index.html
+                    /opt/bin/traffic_manager.sh "$NEW_IF" >/dev/null 2>&1
+                    
+                    echo -e " -> ${GREEN}Targets set to: $NEW_IF${RESET}"
                     sleep 1
                 fi
                 ;;
@@ -754,6 +763,7 @@ configure_pingtool() {
         CUR_MODE=$(grep '^ENABLE_IPV6="' "$P" | cut -d'"' -f2)
         CUR_DUR=$(grep '^PING_DURATION=' "$P" | cut -d'=' -f2)
         CUR_LAT=$(grep '^TRIGGER_LATENCY=' "$P" | cut -d'=' -f2)
+  
         CUR_RET=$(grep '^RETENTION_DAYS=' "$P" | cut -d'=' -f2)
 		CUR_ALERTS=$(grep '^EMAIL_ALERTS="' "$P" | cut -d'"' -f2)
 		
@@ -766,6 +776,7 @@ configure_pingtool() {
         echo -e " 1. Set IPv4 Target      [Current: ${CYAN}$CUR_V4${RESET}]"
         echo -e " 2. Set IPv6 Target      [Current: ${CYAN}$CUR_V6${RESET}]"
         echo -e " 3. Toggle IPv6 Mode     [$LBL_MODE]"
+       
         echo ""
         echo -e " ${BOLD}Parameters:${RESET}"
         echo -e " 4. Ping Duration        [Current: ${CYAN}${CUR_DUR}s${RESET}]"
@@ -773,6 +784,7 @@ configure_pingtool() {
         echo -e " 6. DB Retention Days    [Current: ${CYAN}${CUR_RET} days${RESET}]"
 		echo -e " 7. Email Alerts         [$LBL_MAIL]"
         echo ""
+  
         echo " 0. Back"
         echo ""
         echo -n "Select setting to change: "; read -r opt
@@ -806,7 +818,7 @@ configure_pingtool() {
                    sed -i "s/^RETENTION_DAYS=.*/RETENTION_DAYS=$NEW_VAL/" "$P"
                    echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
                fi ;;
-			7) 
+            7) 
                if [ "$CUR_ALERTS" = "true" ]; then NEW_VAL="false"; else NEW_VAL="true"; fi
                if grep -q "EMAIL_ALERTS=" "$P"; then
                    sed -i 's/^EMAIL_ALERTS=".*"/EMAIL_ALERTS="'$NEW_VAL'"/' "$P"
@@ -814,6 +826,7 @@ configure_pingtool() {
                    sed -i '/^ENABLE_IPV6=/a EMAIL_ALERTS="'$NEW_VAL'"' "$P"
                fi
                echo -e " -> Email Alerts: $NEW_VAL"
+    
                ;;
             0) 
                if [ $NEED_REFRESH -eq 1 ]; then
@@ -821,10 +834,12 @@ configure_pingtool() {
                    echo -e "${YELLOW}You made changes.${RESET}"
                    echo -n " -> Run Pingtool now to update Dashboard data? (Takes ~${CUR_DUR}s) (y/n): "
                    read -r refresh
+   
                    if [ "$refresh" = "y" ] || [ "$refresh" = "Y" ]; then
                        echo "Running Pingtool... Please wait..."
                        run_protected "$P"
                        echo -e "${GREEN}Done. Dashboard updated.${RESET}"
+                 
                        sleep 1
                    fi
                fi
@@ -1146,8 +1161,7 @@ sanitize_and_reload_cron() {
 action_verify_cron() {
     header; echo -e "${BOLD}Verifying Crontab Integrity...${RESET}"
     CRON_PATH="/opt/etc/crontab"
-    if [ ! -f "$CRON_PATH" ]; then echo -n " -> File missing. Creating... "; touch "$CRON_PATH"; echo -e "${GREEN}Created.${RESET}";
-    else echo -e " -> File exists."; fi
+    if [ ! -f "$CRON_PATH" ]; then echo -n " -> File missing. Creating... "; touch "$CRON_PATH"; echo -e "${GREEN}Created.${RESET}"; else echo -e " -> File exists."; fi
     echo -n " -> Cleaning & Fixing Permissions... "
     sanitize_and_reload_cron
     echo -e "${GREEN}Done.${RESET}"
@@ -1193,8 +1207,7 @@ interactive_cron_builder() {
         if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then echo "Operation cancelled."; return; fi
         
         # Remove only lines matching exact command+args
-        grep -vF "$CLEAN_CMD" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE";
-        echo -e "${RED}Old entries removed.${RESET}"
+        grep -vF "$CLEAN_CMD" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; echo -e "${RED}Old entries removed.${RESET}"
     fi
 
     # 3. Schedule Menu
@@ -1234,8 +1247,7 @@ remove_cron_cmd() {
     CLEAN_CMD=$(get_clean_cmd_str "$CMD_TO_REM")
     
     # Inverse grep (-v) on fixed string (-F)
-    grep -vF "$CLEAN_CMD" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE";
-    sanitize_and_reload_cron
+    grep -vF "$CLEAN_CMD" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; sanitize_and_reload_cron
     echo -e "    ${RED}Removed ($CLEAN_CMD) & Cron Reloaded.${RESET}"
 }
 
@@ -1262,19 +1274,19 @@ manage_cron_menu() {
             fi
             
             if cron_cmd_active "$CMD"; then
-                EXISTING=$(get_cron_line "$CMD");
-                RAW_M=$(echo "$EXISTING" | awk '{print $1}')
+                EXISTING=$(get_cron_line "$CMD"); RAW_M=$(echo "$EXISTING" | awk '{print $1}')
                 RAW_H=$(echo "$EXISTING" | awk '{print $2}')
                 RAW_D=$(echo "$EXISTING" | awk '{print $3}')
                 RAW_O=$(echo "$EXISTING" | awk '{print $4}')
                 RAW_W=$(echo "$EXISTING" | awk '{print $5}')
-                
+           
                 READABLE=$(cron_to_human "$RAW_M" "$RAW_H" "$RAW_D" "$RAW_O" "$RAW_W")
                 echo -e " $i. [${GREEN}ON${RESET}] $DISP_NAME (${DIM}$READABLE${RESET})"
             else
                 echo -e " $i. [${RED}OFF${RESET}] $DISP_NAME"
             fi
-            i=$((i+1))
+       
+             i=$((i+1))
         done
     
         echo ""; echo " 0. Back"; echo ""
@@ -1381,8 +1393,7 @@ $T_VNSTAT
 EOF
     while true; do
         header; if [ -f "$P" ]; then VER=$(get_version "$P"); echo -e "$N Status: ${GREEN}Installed (v$VER)${RESET}"; else echo -e "$N Status: ${DIM}Not Installed${RESET}"; fi
-        echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Configure Interface (Dashboard/DB)"; echo " 4. Uninstall"; echo "";
-        echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
+        echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Configure Interface (Dashboard/DB)"; echo " 4. Uninstall"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
         case $op in
             1) 
     			header; check_and_install_deps "$DEPS_VNSTAT"; 
@@ -1417,13 +1428,11 @@ EOF
                if [ "$N" = "Traffic Manager" ]; then check_and_install_deps "$DEPS_VNSTAT"; fi
                if [ "$N" = "Main Dashboard" ]; then 
                    check_and_install_deps "$DEPS_DASH"
-                   smart_process "$N" "$P" "$R" "$F"; 
-                   sanitize_and_reload_cron; 
+                   smart_process "$N" "$P" "$R" "$F"; sanitize_and_reload_cron; 
                    # MODIFICA QUI: Aggiunto "silent"
                    configure_dashboard_extras "silent"
                else
-                   smart_process "$N" "$P" "$R" "$F"; 
-                   sanitize_and_reload_cron
+                   smart_process "$N" "$P" "$R" "$F"; sanitize_and_reload_cron
                fi
                
                if [ -n "$T_CMD" ]; then manage_cron_menu "$T_CMD"; fi; pause ;;
@@ -1440,6 +1449,7 @@ EOF
                        run_protected "$P"
                        pause
                    else
+           
                        echo -e "${RED}Tool not found or not executable.${RESET}"
                        pause
                    fi
@@ -1568,13 +1578,9 @@ EOF
 action_firewall() {
     while true; do
         header; if [ -f "$FW_CORE_LOCAL" ]; then V_CORE=$(get_version "$FW_CORE_LOCAL"); S_MAIN="${GREEN}Installed (v$V_CORE)${RESET}"; else S_MAIN="${DIM}Missing${RESET}"; fi
-        echo -e "Firewall Suite Status: $S_MAIN"; echo "";
-        echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Run Manager";
-        echo " 4. Run Monitor"; echo " 5. Uninstall Suite"; echo ""; echo " 0. Back"; echo "";
-        echo -n "Select: "; read -r op
+        echo -e "Firewall Suite Status: $S_MAIN"; echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Run Manager"; echo " 4. Run Monitor"; echo " 5. Uninstall Suite"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
         case $op in
-            1) header; 
-               check_and_install_deps "$DEPS_FW"; RES_DEPS=$?
+            1) header; check_and_install_deps "$DEPS_FW"; RES_DEPS=$?
                if [ $RES_DEPS -ne 0 ]; then 
                    echo -n " -> Base deps missing. Continue? (y/n): "; read -r ans
                    if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then pause; break; fi
@@ -1603,6 +1609,7 @@ action_firewall() {
                            echo -n "$KEY_TO_SET" > "$KEY_FILE"
                            chmod 600 "$KEY_FILE"
                            echo -e "    ${GREEN}Key Saved to $KEY_FILE${RESET}"
+    
                        fi
                    fi
                fi
@@ -1634,8 +1641,8 @@ action_firewall() {
                        rm -rf "$FW_WEB_ROOT"
                        echo -e "    Removed Firewall Web UI ($FW_WEB_ROOT)"
                    fi
-                   remove_cron_cmd "$CMD_FW_STAT"; remove_cron_cmd "$CMD_FW_UPD"; remove_cron_cmd "$CMD_FW_VPN"; remove_cron_cmd "$CMD_ABUSE";
-                   remove_cron_cmd "root /opt/bin/firewall_stats.sh -report"
+              
+                   remove_cron_cmd "$CMD_FW_STAT"; remove_cron_cmd "$CMD_FW_UPD"; remove_cron_cmd "$CMD_FW_VPN"; remove_cron_cmd "$CMD_ABUSE"; remove_cron_cmd "root /opt/bin/firewall_stats.sh -report"
                    echo -e "${GREEN}Uninstalled.${RESET}"
                fi; pause ;;
             0) return ;;
@@ -1692,6 +1699,7 @@ EOF
         RAW_O=$(echo "$RAW_LINE" | awk '{print $4}')
         RAW_W=$(echo "$RAW_LINE" | awk '{print $5}')
         
+    
         SCHED=$(cron_to_human "$RAW_M" "$RAW_H" "$RAW_D" "$RAW_O" "$RAW_W")
         AU_STATUS="${GREEN}Active${RESET} (${DIM}$SCHED${RESET})"
     else
@@ -1710,26 +1718,22 @@ EOF
     fi
 
     header
-    echo -e " ${BOLD}System:${RESET}";
-    echo -e " 0. ${CYAN}System Setup${RESET}           [$SYS_MSG]"
+    echo -e " ${BOLD}System:${RESET}"; echo -e " 0. ${CYAN}System Setup${RESET}           [$SYS_MSG]"
     echo -e " e. ${CYAN}Email Notifications${RESET}    [$EM_STATUS]"
-    echo "";
-    echo -e " ${BOLD}Tools:${RESET}"
+    echo ""; echo -e " ${BOLD}Tools:${RESET}"
     echo -e " 1. Traffic Manager      [$L1]$UPD_VNSTAT"
     echo -e " 2. Ping Monitor         [$L2]$UPD_PING"
     echo -e " 3. Firewall Suite       [$L3]$UPD_FW"
     echo -e " 4. SMB Backup Tool      [$L4]$UPD_SMB"
     echo -e " 5. Main Dashboard       [$L5]$UPD_DASH"
-    echo "";
-    echo -e " ${BOLD}Global:${RESET}"
+    echo ""; echo -e " ${BOLD}Global:${RESET}"
     echo -e " u. Check for Updates (Tools)"
     echo -e " s. ${MAGENTA}Update Keentool (Self)${RESET} $UPD_SELF"
     echo -e " a. ${CYAN}Auto-Update${RESET}          [$AU_STATUS]"
     echo -e " c. View Crontab"
     echo -e " v. ${CYAN}Verify/Fix Crontab${RESET}"
     echo -e " q. Quit"
-    echo "";
-    echo -n "Select: "; read choice
+    echo ""; echo -n "Select: "; read choice
     case $choice in
         0) setup_system ;;
         e) configure_email ;;
@@ -1739,7 +1743,6 @@ EOF
         2) action_ping; UPD_PING="" ;; 
         3) action_firewall; UPD_FW="" ;;
         4) action_generic "$T_SMB" "$CMD_SMB" "yes"; UPD_SMB="" ;;
-        
         5) 
             while true; do
                 header
@@ -1759,7 +1762,6 @@ EOF
             done
 			UPD_DASH=""
             ;;
-
         u) perform_global_scan ;;
         s) action_self_update ;;
         a) manage_cron_menu "$CMD_SELF_UPD"; pause ;;
