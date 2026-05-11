@@ -1,9 +1,9 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v1.1.0 (Stable)
+# KEENTOOL MANAGER v1.1.1 (Stable)
 # Author: MatthewEli
-# Changelog v1.1.0:
+# Changelog v1.1.1:
 #   - FEAT: Support for Multi-Tab Traffic Manager (multiple interfaces).
 # Changelog v1.0.0:
 #   - UX: Dashboard updates silently bypass Lighttpd config if already setup.
@@ -103,7 +103,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v1.1.0 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v1.1.1 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -346,7 +346,7 @@ configure_email() {
     echo ""
     echo "Enter SMTP Details (e.g. Gmail, Outlook):"
     echo "----------------------------------------"
-    sleep 0.5
+    sleep 1
     
     echo -n "SMTP Server (e.g. smtp.gmail.com): "
     read -r SMTP_SERVER
@@ -845,7 +845,7 @@ configure_pingtool() {
                fi
                return ;;
         esac
-        sleep 0.5
+        sleep 1
     done
 }
 
@@ -990,7 +990,7 @@ $T_SELF
 EOF
     check_tool_status "UPD_SELF" "$P" "$R" "$F"
 
-    echo " Done."; sleep 0.5
+    echo " Done."; sleep 1
 }
 
 # --- DEPENDENCY & INSTALL ---
