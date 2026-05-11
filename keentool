@@ -1427,6 +1427,11 @@ EOF
                 fi
                 pause 
                 ;;
+            2) manage_cron_menu "$CMD_VNSTAT"; ;;
+            3) configure_traffic ;;
+            4) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove file and cron? (y/n): "; read -r ans; if [ "$ans" = "y" ] ||
+            [ "$ans" = "Y" ]; then if [ -f "$P" ]; then rm -f "$P"; echo -e "    File removed."; fi; remove_cron_cmd "$CMD_VNSTAT"; echo -e "${GREEN}Done.${RESET}"; fi; pause ;;
+            0) return ;;
         esac
     done
 }
