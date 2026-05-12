@@ -1,35 +1,15 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v1.1.3 (Stable)
+# KEENTOOL MANAGER v1.2.0 (Stable)
 # Author: MatthewEli
+# Changelog v1.2.0:
+#   - FEAT: Added native Telegram Notifications support and configuration menu.
+#   - NEW: External telegram_sender.mod integration.
 # Changelog v1.1.3:
 #   - FEAT: Support for Multi-Tab Traffic Manager (multiple interfaces).
-#	- FIX: Traffic Manager HTML regeneration on update
+#   - FIX: Traffic Manager HTML regeneration on update
 #   - FIX: Cron job preserved on update for Traffic Manager
-# Changelog v1.0.0:
-#   - UX: Dashboard updates silently bypass Lighttpd config if already setup.
-#   - FIX: MD5 update loop ignored for auto-modifying scripts (Ping & Traffic).
-#   - UI: Polished grid layouts & responsive wrapping for Dashboards.
-#   - FIX: Email module management for firewall stats.
-#   - UI: Pixel-perfect KeeneticOS native UI applied to all Dashboards.
-#   - UI: "Terminal-style" dark theme for the main system log viewer.
-#   - FIX: Forced HTML regeneration (cache wipe) on Traffic & Ping updates.
-#   - NEW: Email module update management.
-#   - FIX: Boot check for email external module.
-#   - FIX: Completely rewritten cron menu functions.
-#   - NEW: External email module.
-#   - FIX: Lighttpd dependency for Dashboard.
-#   - FIX: Update general procedure (u) improved.
-#   - FIX: Kernel components check fix for Firewall.
-#   - FEAT: Support of separated html and script parts of firewall_stats.
-#   - FEAT: Full ULOGD support (conf, init, rotate) for Firewall v2.3+.
-#   - FEAT: Dashboard Config Decoupled (HTML-only update mode added).
-#   - FIX: Dashboard MD5 infinite loop.
-#   - FEAT: Dashboard config persists across updates (Smart Re-apply).
-#   - FIX: Firewall suite version synced on Firewall Manager.
-#   - FIX: Syslog-ng crash (removed invalid d_nas destination).
-#   - UX: Auto-Update is now NOTIFY ONLY (Email + Menu Flag).
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -54,6 +34,10 @@ EMAIL_CONF="$EMAIL_DIR/email.conf"
 EMAIL_PW_FILE="$EMAIL_DIR/emailpw.enc"
 EMAIL_ENC_KEY="keentool_internal_secret"
 
+# TELEGRAM CONFIGURATION
+TELEGRAM_DIR="/opt/etc/keentool/telegram"
+TELEGRAM_CONF="$TELEGRAM_DIR/telegram.conf"
+
 # --- DEPENDENCY LISTS ---
 DEPS_CORE="lighttpd bash curl wget-ssl cron openssl-util"
 DEPS_VNSTAT="vnstat2 grep awk"
@@ -68,7 +52,8 @@ T_DASH="Main Dashboard|$WEB_ROOT/index.html|KeenTool|index.html"
 T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|Script/traffic_manager.sh"
 T_PING="Ping Monitor|$BIN_DIR/pingtool.sh|keenetic-pingtool|scripts/pingtool.sh"
 T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|Script/smb_backup_tool.sh"
-T_MAILMOD="Email Module|$BIN_DIR/email_sender.mod|KeenTool|email_sender.mod"
+T_MAILMOD="Email Module|$BIN_DIR/email_sender.mod|KeenTool|scripts/email_sender.mod"
+T_TGMOD="Telegram Module|$BIN_DIR/telegram_sender.mod|KeenTool|scripts/telegram_sender.mod"
 FW_CORE_LOCAL="$BIN_DIR/firewall_manager.sh"
 FW_REPO="keenetic-firewall"
 
@@ -99,13 +84,13 @@ BOLD="${ESC}[1m"
 RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CYAN="${ESC}[36m"; MAGENTA="${ESC}[35m"; DIM="${ESC}[2m"
 
 # GLOBAL STATE
-UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""
+UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD_MAILMOD=""; UPD_TGMOD=""
 
 # --- UTILS ---
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v1.1.3 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v1.2.0 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -179,10 +164,10 @@ reapply_dashboard_config() {
     EN_VPN="no"; EN_SCRIPTS="no"; EN_DNS="no"; EN_WIFI="no"; EN_DHCP="no"; EN_PROXY="no"; EN_ULOGD="no"
     
     if [ -f "$DASH_CONF" ]; then
-        # Metodo Nuovo: Leggi dal file di stato (Disaccoppiato)
+        # New Method: Read from state file (Decoupled)
         . "$DASH_CONF"
     elif [ -f "$SYSLOG_CONF" ]; then
-        # Metodo Legacy: Indovina da Syslog-ng
+        # Legacy Method: Guess from Syslog-ng
         grep -q "filter(f_vpn); destination(d_vpn);" "$SYSLOG_CONF" && EN_VPN="yes"
         grep -q "filter(f_scripts); destination(d_scripts);" "$SYSLOG_CONF" && EN_SCRIPTS="yes"
         grep -q "filter(f_dns); destination(d_dns);" "$SYSLOG_CONF" && EN_DNS="yes"
@@ -262,10 +247,9 @@ cron_to_human() {
     echo "$m $h $dom $mon $dow"
 }
 
-# --- EMAIL HELPERS ---
+# --- EMAIL/TELEGRAM HELPERS ---
 
 send_email_notification() {
-    # Usage: send_email_notification "Subject" "Body content"
     SUBJECT="$1"
     BODY="$2"
     EMAIL_MOD="/opt/bin/email_sender.mod"
@@ -278,11 +262,100 @@ send_email_notification() {
     fi
 }
 
+configure_telegram() {
+    if [ ! -f "/opt/bin/telegram_sender.mod" ]; then
+        echo " -> Installing Telegram Module..."
+        smart_process "Telegram Module" "/opt/bin/telegram_sender.mod" "KeenTool" "scripts/telegram_sender.mod"
+    fi
+    mkdir -p "$TELEGRAM_DIR"
+    
+    header
+    echo -e "${BOLD}Telegram Notifications Setup${RESET}"
+    echo ""
+    
+    if [ -f "$TELEGRAM_CONF" ]; then
+        . "$TELEGRAM_CONF"
+        
+        MOD_VER=$(get_version "/opt/bin/telegram_sender.mod")
+        
+        echo -e "Status: ${GREEN}Configured${RESET}"
+        echo "Chat ID: $TG_CHAT_ID"
+        echo "Module: v$MOD_VER"
+        echo ""
+  
+        echo " 1. Send Test Message"
+        echo " 2. Re-configure Settings"
+        echo " 3. Update Telegram Module"
+        echo " 0. Back"
+        echo ""
+        echo -n "Select option: "
+        read -r tg_opt
+        
+        case $tg_opt in
+            1) 
+                echo ""
+                echo -n "Sending Test Message..."
+                if /opt/bin/telegram_sender.mod "Test Message" "This is a test notification from your Keenetic Router (KeenTool Manager)."; then
+                    echo -e " ${GREEN}Success!${RESET}"
+                else
+                    echo -e " ${RED}Failed.${RESET} Check your Bot Token and Chat ID."
+                fi
+                pause
+                return 
+                ;;
+            2) 
+                echo ""
+                echo "Re-configuring..." 
+                ;;
+            3)
+                echo ""
+                smart_process "Telegram Module" "/opt/bin/telegram_sender.mod" "KeenTool" "scripts/telegram_sender.mod"
+                pause
+                return
+                ;;
+            *) return ;;
+        esac
+    fi
+
+    echo ""
+    echo "Enter Telegram Bot Details:"
+    echo "----------------------------------------"
+    echo -n "Bot Token (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11): "
+    read -r TG_BOT_TOKEN
+    
+    echo -n "Chat ID (e.g. 123456789 or -100123456789): "
+    read -r TG_CHAT_ID
+    
+    if [ -n "$TG_BOT_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
+        echo "# KeenTool Telegram Config" > "$TELEGRAM_CONF"
+        echo "TG_BOT_TOKEN=\"$TG_BOT_TOKEN\"" >> "$TELEGRAM_CONF"
+        echo "TG_CHAT_ID=\"$TG_CHAT_ID\"" >> "$TELEGRAM_CONF"
+        chmod 600 "$TELEGRAM_CONF"
+
+        echo ""
+        echo -e "${GREEN}Configuration saved.${RESET}"
+        
+        echo -n "Send a test message now? (y/n): "
+        read -r test_ans
+        if [ "$test_ans" = "y" ] || [ "$test_ans" = "Y" ]; then
+            echo -n "Sending..."
+            if /opt/bin/telegram_sender.mod "Test Message" "This is a test notification from your Keenetic Router."; then
+                echo -e " ${GREEN}Success!${RESET}"
+            else
+                echo -e " ${RED}Failed${RESET}"
+            fi
+            pause
+        fi
+    else
+        echo -e "${RED}Configuration aborted. Token and Chat ID are required.${RESET}"
+        pause
+    fi
+}
+
 configure_email() {
     # 1. Check/Install Module Dependency
     if [ ! -f "/opt/bin/email_sender.mod" ]; then
         echo " -> Installing Email Module..."
-        # Utilizziamo scripts/email_sender.mod per allinearci al boot_check
         smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "scripts/email_sender.mod"
     fi
     mkdir -p "$EMAIL_DIR"
@@ -314,11 +387,9 @@ configure_email() {
         read -r em_opt
         
         case $em_opt in
-    
         1) 
                 echo ""
                 echo -n "Sending Test Email to $TO_ADDRESS..."
-                # Call the external module to send the test
                 if /opt/bin/email_sender.mod "Test Email" "This is a test notification from your Keenetic Router (KeenTool Manager)."; then
                     echo -e " ${GREEN}Success!${RESET}"
                 else
@@ -331,19 +402,15 @@ configure_email() {
                 echo ""
                 echo "Re-configuring..." 
                 ;;
-        # Continues below to the input section
             3)
                 echo ""
-                # Check and apply updates for the module using smart_process
                 smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "scripts/email_sender.mod"
                 pause
-   
                 return
                 ;;
         *) return ;;
         esac
     fi
-    # -----------------------------------------------------
 
     echo ""
     echo "Enter SMTP Details (e.g. Gmail, Outlook):"
@@ -448,16 +515,16 @@ EOF
     
     ver_compare "$R_VER" "$L_VER"
     RES=$?
-    # Se c'è un aggiornamento
+    # If an update is available
     if [ $RES -eq 1 ] || { [ $RES -eq 0 ] && [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; }; then
-        # 1. Salviamo la versione disponibile in un file temporaneo per il menu
+        # 1. Save the available version to a temporary file for the menu
         echo "$R_VER" > "/tmp/keentool_new_ver"
         
         MSG="Update Available: KeenTool v$R_VER is available. Check menu option 's'."
         logger -t "KeenTool" "$MSG"
         /opt/bin/email_sender.mod "KeenTool Update Available" "$MSG" &
     else
-        # Se siamo aggiornati, rimuoviamo eventuali avvisi vecchi
+        # If up to date, remove any old warning flags
         rm -f "/tmp/keentool_new_ver"
     fi
     
@@ -494,7 +561,7 @@ configure_logging_modules() {
     CONF="/opt/etc/syslog-ng.conf"
     DASH_CONF="/opt/etc/keentool/dashboard.conf"
     
-    # Rilevamento Stato (Priorità: Dashboard Conf > Syslog Conf)
+    # State Detection (Priority: Dashboard Conf > Syslog Conf)
     if [ -f "$DASH_CONF" ]; then
         . "$DASH_CONF"
     elif [ -f "$CONF" ]; then
@@ -506,18 +573,18 @@ configure_logging_modules() {
         grep -q "filter(f_proxy); destination(d_proxy);" "$CONF" || EN_PROXY="no"
         grep -q "# ulogd_enabled" "$CONF" && EN_ULOGD="yes"
     fi
-    # Auto-enable ULOGD se il file di log esiste ed è la prima configurazione
+    # Auto-enable ULOGD if the log file exists and it is the first setup
     if [ ! -f "$CONF" ] && [ -f "/opt/var/log/ulogd.log" ]; then EN_ULOGD="yes"; fi
 
-    # Helper function per i Symlink (usata sia in 'a' che in 'h')
+    # Helper function for Symlinks (used in both 'a' and 'h' options)
     sync_symlinks() {
         mkdir -p "$WEB_ROOT"
         LOG_LIST="vpn keentool dns_proxy wifi_monitor ndhcps nginx_proxy ulogd"
         for L in $LOG_LIST; do
-            # Crea il file vuoto se non esiste (evita errori broken link)
+            # Create empty file if it doesn't exist (prevents broken link errors)
             if [ ! -f "/opt/var/log/${L}.log" ]; then touch "/opt/var/log/${L}.log"; fi
             chmod 644 "/opt/var/log/${L}.log"
-            # Crea il link se manca
+            # Create the link if missing
             if [ ! -L "$WEB_ROOT/${L}.log" ]; then ln -sf "/opt/var/log/${L}.log" "$WEB_ROOT/${L}.log"; fi
         done
         # Main syslog
@@ -606,7 +673,7 @@ EOF
                 [ "$EN_SCRIPTS" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_scripts); destination(d_scripts); };' >> /opt/etc/syslog-ng.conf
                 [ "$EN_PROXY" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_proxy); destination(d_proxy); };' >> /opt/etc/syslog-ng.conf
                 
-                # ULOGD Marker (per compatibilità futura se il file dash.conf viene perso)
+                # ULOGD Marker (for future compatibility if dash.conf is lost)
                 if [ "$EN_ULOGD" = "yes" ]; then echo "" >> /opt/etc/syslog-ng.conf; echo "# ulogd_enabled" >> /opt/etc/syslog-ng.conf; fi
 
                 # 3. GENERATE LOGROTATE (Syslog)
@@ -636,7 +703,7 @@ EOF
                     echo "}" >> /opt/etc/logrotate.d/syslog-ng
                 fi
 
-                # Logrotate ULOGD (Blocco Separato)
+                # Logrotate ULOGD (Separate Block)
                 if [ -f "/opt/var/log/ulogd.log" ]; then
                     cat >> /opt/etc/logrotate.d/syslog-ng <<EOF
 
@@ -837,7 +904,7 @@ configure_pingtool() {
                    echo -n " -> Run Pingtool now to update Dashboard data? (Takes ~${CUR_DUR}s) (y/n): "
                    read -r refresh
    
-                   if [ "$refresh" = "y" ] || [ "$refresh" = "Y" ]; then
+                  if [ "$refresh" = "y" ] || [ "$refresh" = "Y" ]; then
                        echo "Running Pingtool... Please wait..."
                        run_protected "$P"
                        echo -e "${GREEN}Done. Dashboard updated.${RESET}"
@@ -847,7 +914,7 @@ configure_pingtool() {
                fi
                return ;;
         esac
-        sleep 1
+        sleep 0.5
     done
 }
 
@@ -922,7 +989,7 @@ perform_global_scan() {
                 sed -i 's/\r$//' "$TMP"
                 local R_VER=$(get_version "$TMP"); ver_compare "$R_VER" "$L_VER"; local RES=$?
                 if [ $RES -eq 1 ]; then eval "${VNAME}=' -> ${MAGENTA}v${R_VER}${RESET}'"
-                # Aggiunta l'eccezione per Dashboard, Ping Monitor e Traffic Manager (file auto-modificanti)
+                # Added exception for Dashboard, Ping Monitor and Traffic Manager (auto-modifying files)
                 elif [ $RES -eq 0 ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP")" ] && [ "$RFILE" != "index.html" ] && [ "$RFILE" != "scripts/pingtool.sh" ] && [ "$RFILE" != "scripts/traffic_manager.sh" ]; then 
                     eval "${VNAME}=' -> ${CYAN}Changed${RESET}'"
                 else eval "${VNAME}=''"; fi
@@ -985,6 +1052,12 @@ EOF
 $T_MAILMOD
 EOF
     check_tool_status "UPD_MAILMOD" "$P" "$R" "$F"
+
+    # NEW: Check Telegram Module
+    IFS='|' read -r N P R F <<EOF
+$T_TGMOD
+EOF
+    check_tool_status "UPD_TGMOD" "$P" "$R" "$F"
     
     # Check Self (Keentool)
     IFS='|' read -r N P R F <<EOF
@@ -992,7 +1065,7 @@ $T_SELF
 EOF
     check_tool_status "UPD_SELF" "$P" "$R" "$F"
 
-    echo " Done."; sleep 1
+    echo " Done."; sleep 0.5
 }
 
 # --- DEPENDENCY & INSTALL ---
@@ -1043,16 +1116,13 @@ check_webserver_config() {
          curl -s -L "$BASE_URL/KeenTool/main/index.html" -o "$WEB_ROOT/index.html"
          [ -s "$WEB_ROOT/index.html" ] && chmod 644 "$WEB_ROOT/index.html"
     fi
-    
     if [ -f "$CONF" ]; then
         if grep -q "/opt/var/www/" "$CONF" && [ "$MODE" != "force" ]; then return 0; fi
     fi
-    
     if [ "$MODE" != "force" ]; then
         echo -n " -> ${YELLOW}Configure Lighttpd (Port 81)? (y/n): ${RESET}"; read -r ans
         [ "$ans" != "y" ] && [ "$ans" != "Y" ] && return 0
     fi
-    
     mkdir -p /opt/etc/lighttpd
     cat > "$CONF" <<EOF
 var.log_root    = "/opt/var/log/lighttpd/"
@@ -1132,7 +1202,7 @@ smart_process() {
     if [ $RES -eq 1 ]; then 
         UPDATE_NEEDED=1; MSG="${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
     elif [ $RES -eq 0 ] && [ "$NAME" != "Main Dashboard" ] && [ "$NAME" != "Ping Monitor" ] && [ "$NAME" != "Traffic Manager" ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then 
-        # Ignora MD5 check per i file che si auto-modificano con i settaggi utente
+        # Ignore MD5 check for files that auto-modify via user settings
         UPDATE_NEEDED=1; MSG="${CYAN}Content Changed (Patch)${RESET}"
     fi
     if [ $UPDATE_NEEDED -eq 1 ]; then
@@ -1435,7 +1505,6 @@ EOF
         esac
     done
 }
-
 action_generic() {
     T_DEF="$1"; T_CMD="$2"; RUN_OPT="$3"
     IFS='|' read -r N P R F <<EOF
@@ -1454,7 +1523,6 @@ EOF
                if [ "$N" = "Main Dashboard" ]; then 
                    check_and_install_deps "$DEPS_DASH"
                    smart_process "$N" "$P" "$R" "$F"; sanitize_and_reload_cron; 
-                   # MODIFICA QUI: Aggiunto "silent"
                    configure_dashboard_extras "silent"
                else
                    smart_process "$N" "$P" "$R" "$F"; sanitize_and_reload_cron
@@ -1736,14 +1804,14 @@ EOF
     # 3. CHECK UPDATE FLAG (Per visualizzazione istantanea)
     if [ -f "/tmp/keentool_new_ver" ]; then
         NEW_V=$(cat "/tmp/keentool_new_ver")
-        # Se non è già stato popolato dallo scan manuale ('u'), usiamo il file
+        # If not already populated by manual scan ('u'), use the file
         if [ -z "$UPD_SELF" ]; then
             UPD_SELF=" -> ${MAGENTA}v${NEW_V}${RESET}"
         fi
     fi
 
     header
-    echo -e " ${BOLD}System:${RESET}"; echo -e " 0. ${CYAN}System Setup${RESET}           [$SYS_MSG]"
+    echo -e " ${BOLD}System:${RESET}"; echo -e " 0. ${CYAN}System Setup${RESET}            [$SYS_MSG]"
     echo -e " e. ${CYAN}Email Notifications${RESET}    [$EM_STATUS]"
     echo ""; echo -e " ${BOLD}Tools:${RESET}"
     echo -e " 1. Traffic Manager      [$L1]$UPD_VNSTAT"
@@ -1763,7 +1831,7 @@ EOF
         0) setup_system ;;
         e) configure_email ;;
         
-        # Aggiunto il reset della variabile UPD_... dopo ogni azione
+        # Added reset of the UPD_... variables after each action
         1) action_traffic; UPD_VNSTAT="" ;;
         2) action_ping; UPD_PING="" ;; 
         3) action_firewall; UPD_FW="" ;;
@@ -1795,3 +1863,4 @@ EOF
         q) exit 0 ;;
     esac
 done
+}
