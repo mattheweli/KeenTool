@@ -1,9 +1,11 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v1.2.2 (Stable)
+# KEENTOOL MANAGER v1.2.3 (Stable)
 # Author: MatthewEli
-# Changelog v1.2.1:
+# Changelog v1.2.3:
+#   - FIX: File permission fixed also for .mod files
+#   - FIX: .mod path fix
 #   - FEAT: Added native Telegram Notifications support and configuration menu.
 #   - NEW: External telegram_sender.mod integration.
 #   - NEW: Added the possibility of configuring the name of interfaces in Traffic Manager
@@ -54,8 +56,8 @@ T_DASH="Main Dashboard|$WEB_ROOT/index.html|KeenTool|index.html"
 T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|Script/traffic_manager.sh"
 T_PING="Ping Monitor|$BIN_DIR/pingtool.sh|keenetic-pingtool|scripts/pingtool.sh"
 T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|Script/smb_backup_tool.sh"
-T_MAILMOD="Email Module|$BIN_DIR/email_sender.mod|KeenTool|scripts/email_sender.mod"
-T_TGMOD="Telegram Module|$BIN_DIR/telegram_sender.mod|KeenTool|scripts/telegram_sender.mod"
+T_MAILMOD="Email Module|$BIN_DIR/email_sender.mod|KeenTool|email_sender.mod"
+T_TGMOD="Telegram Module|$BIN_DIR/telegram_sender.mod|KeenTool|telegram_sender.mod"
 FW_CORE_LOCAL="$BIN_DIR/firewall_manager.sh"
 FW_REPO="keenetic-firewall"
 
@@ -92,7 +94,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v1.2.1 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v1.2.3 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -267,7 +269,7 @@ send_email_notification() {
 configure_telegram() {
     if [ ! -f "/opt/bin/telegram_sender.mod" ]; then
         echo " -> Installing Telegram Module..."
-        smart_process "Telegram Module" "/opt/bin/telegram_sender.mod" "KeenTool" "scripts/telegram_sender.mod"
+        smart_process "Telegram Module" "/opt/bin/telegram_sender.mod" "KeenTool" "telegram_sender.mod"
     fi
     mkdir -p "$TELEGRAM_DIR"
     
@@ -358,7 +360,7 @@ configure_email() {
     # 1. Check/Install Module Dependency
     if [ ! -f "/opt/bin/email_sender.mod" ]; then
         echo " -> Installing Email Module..."
-        smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "scripts/email_sender.mod"
+        smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "email_sender.mod"
     fi
     mkdir -p "$EMAIL_DIR"
     
@@ -484,13 +486,13 @@ configure_email() {
 apply_perms() {
     FILE=$1
     sed -i 's/\r$//' "$FILE"
-    if [ "${FILE##*.}" = "sh" ] || [ "$(basename "$FILE")" = "firewall_monitor" ] || [ "$(basename "$FILE")" = "keentool" ]; then
+    # Added .mod extension to executable files
+    if [ "${FILE##*.}" = "sh" ] || [ "${FILE##*.}" = "mod" ] || [ "$(basename "$FILE")" = "firewall_monitor" ] || [ "$(basename "$FILE")" = "keentool" ]; then
         chmod +x "$FILE"
     elif [ "${FILE##*.}" = "html" ] || [ "${FILE##*.}" = "conf" ]; then
         chmod 644 "$FILE"
     fi
 }
-
 run_protected() {
     # Fixes Ctrl+C killing the parent script
     trap ':' INT
@@ -1441,7 +1443,7 @@ manage_cron_menu() {
 
 boot_check() {
       if [ ! -f "/opt/bin/email_sender.mod" ]; then
-        curl -s -L "$BASE_URL/KeenTool/main/scripts/email_sender.mod" -o "/opt/bin/email_sender.mod"
+        curl -s -L "$BASE_URL/KeenTool/main/email_sender.mod" -o "/opt/bin/email_sender.mod"
         if [ -s "/opt/bin/email_sender.mod" ]; then
             chmod +x "/opt/bin/email_sender.mod"
         else
