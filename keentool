@@ -1,12 +1,13 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v1.2.1 (Stable)
+# KEENTOOL MANAGER v1.2.2 (Stable)
 # Author: MatthewEli
 # Changelog v1.2.1:
 #   - FEAT: Added native Telegram Notifications support and configuration menu.
 #   - NEW: External telegram_sender.mod integration.
 #   - NEW: Added the possibility of configuring the name of interfaces in Traffic Manager
+#   - FIX: Added the T menu for Telegram
 # Changelog v1.1.3:
 #   - FEAT: Support for Multi-Tab Traffic Manager (multiple interfaces).
 #   - FIX: Traffic Manager HTML regeneration on update
@@ -1817,7 +1818,14 @@ EOF
         EM_STATUS="${RED}Not Set${RESET}"
     fi
 
-    # 2. Auto-Update Status (Check Cron)
+    # 2. Telegram Status
+    if [ -f "$TELEGRAM_CONF" ]; then
+        TG_STATUS="${GREEN}Configured${RESET}"
+    else
+        TG_STATUS="${RED}Not Set${RESET}"
+    fi
+
+    # 3. Auto-Update Status (Check Cron)
     if cron_cmd_active "$CMD_SELF_UPD"; then
         RAW_LINE=$(get_cron_line "$CMD_SELF_UPD")
         # Extract first 5 fields (the schedule)
@@ -1827,7 +1835,6 @@ EOF
         RAW_O=$(echo "$RAW_LINE" | awk '{print $4}')
         RAW_W=$(echo "$RAW_LINE" | awk '{print $5}')
         
-    
         SCHED=$(cron_to_human "$RAW_M" "$RAW_H" "$RAW_D" "$RAW_O" "$RAW_W")
         AU_STATUS="${GREEN}Active${RESET} (${DIM}$SCHED${RESET})"
     else
@@ -1836,7 +1843,7 @@ EOF
 
     sanitize_and_reload_cron
 
-    # 3. CHECK UPDATE FLAG (Per visualizzazione istantanea)
+    # 4. Check Update Flag (For instant display)
     if [ -f "/tmp/keentool_new_ver" ]; then
         NEW_V=$(cat "/tmp/keentool_new_ver")
         # If not already populated by manual scan ('u'), use the file
@@ -1848,6 +1855,7 @@ EOF
     header
     echo -e " ${BOLD}System:${RESET}"; echo -e " 0. ${CYAN}System Setup${RESET}            [$SYS_MSG]"
     echo -e " e. ${CYAN}Email Notifications${RESET}    [$EM_STATUS]"
+    echo -e " t. ${CYAN}Telegram Notifications${RESET} [$TG_STATUS]"
     echo ""; echo -e " ${BOLD}Tools:${RESET}"
     echo -e " 1. Traffic Manager      [$L1]$UPD_VNSTAT"
     echo -e " 2. Ping Monitor         [$L2]$UPD_PING"
@@ -1865,6 +1873,7 @@ EOF
     case $choice in
         0) setup_system ;;
         e) configure_email ;;
+        t) configure_telegram ;;
         
         # Added reset of the UPD_... variables after each action
         1) action_traffic; UPD_VNSTAT="" ;;
@@ -1888,7 +1897,7 @@ EOF
                     0) break ;;
                 esac
             done
-			UPD_DASH=""
+            UPD_DASH=""
             ;;
         u) perform_global_scan ;;
         s) action_self_update ;;
