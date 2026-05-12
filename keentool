@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v1.2.3 (Stable)
+# KEENTOOL MANAGER v1.2.4 (Stable)
 # Author: MatthewEli
-# Changelog v1.2.3:
+# Changelog v1.2.4:
+#   - FIX: sleep 0.5 --> set to 1
 #   - FIX: File permission fixed also for .mod files
 #   - FIX: .mod path fix
 #   - FEAT: Added native Telegram Notifications support and configuration menu.
@@ -94,7 +95,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v1.2.3 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v1.2.4 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -952,7 +953,7 @@ configure_pingtool() {
                fi
                return ;;
         esac
-        sleep 0.5
+        sleep 1
     done
 }
 
@@ -1103,7 +1104,7 @@ $T_SELF
 EOF
     check_tool_status "UPD_SELF" "$P" "$R" "$F"
 
-    echo " Done."; sleep 0.5
+    echo " Done."; sleep 1
 }
 
 # --- DEPENDENCY & INSTALL ---
