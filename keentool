@@ -1,20 +1,20 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v1.2.4 (Stable)
+# KEENTOOL MANAGER v1.2.5 (Stable)
 # Author: MatthewEli
-# Changelog v1.2.4:
-#   - FIX: sleep 0.5 --> set to 1
-#   - FIX: File permission fixed also for .mod files
-#   - FIX: .mod path fix
+# Changelog v1.2.5:
+#   - FEAT: Added Enable/Disable toggle for Email and Telegram modules.
+#   - FEAT: Added complete Uninstall option for notification modules.
+#   - FIX: Fixed executable permissions for .mod extensions (apply_perms).
+#   - UX: Main menu now reflects "Disabled" state for notifications.
+# Changelog v1.2.0:
 #   - FEAT: Added native Telegram Notifications support and configuration menu.
 #   - NEW: External telegram_sender.mod integration.
-#   - NEW: Added the possibility of configuring the name of interfaces in Traffic Manager
-#   - FIX: Added the T menu for Telegram
 # Changelog v1.1.3:
 #   - FEAT: Support for Multi-Tab Traffic Manager (multiple interfaces).
-#   - FIX: Traffic Manager HTML regeneration on update
-#   - FIX: Cron job preserved on update for Traffic Manager
+#   - FIX: Traffic Manager HTML regeneration on update.
+#   - FIX: Cron job preserved on update for Traffic Manager.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -95,7 +95,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v1.2.4 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v1.2.5 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -268,22 +268,31 @@ send_email_notification() {
 }
 
 configure_telegram() {
-    if [ ! -f "/opt/bin/telegram_sender.mod" ]; then
-        echo " -> Installing Telegram Module..."
-        smart_process "Telegram Module" "/opt/bin/telegram_sender.mod" "KeenTool" "telegram_sender.mod"
-    fi
     mkdir -p "$TELEGRAM_DIR"
     
-    header
-    echo -e "${BOLD}Telegram Notifications Setup${RESET}"
-    echo ""
-    
-    if [ -f "$TELEGRAM_CONF" ]; then
-        . "$TELEGRAM_CONF"
+    # --- TELEGRAM MANAGEMENT MENU (If configuration exists or is disabled) ---
+    if [ -f "$TELEGRAM_CONF" ] || [ -f "${TELEGRAM_CONF}.disabled" ]; then
+        if [ ! -f "/opt/bin/telegram_sender.mod" ]; then
+            smart_process "Telegram Module" "/opt/bin/telegram_sender.mod" "KeenTool" "telegram_sender.mod"
+        fi
+        
+        header
+        echo -e "${BOLD}Telegram Notifications Setup${RESET}"
+        echo ""
+        
+        if [ -f "$TELEGRAM_CONF" ]; then
+            . "$TELEGRAM_CONF"
+            TG_STATE="${GREEN}Active${RESET}"
+            TOGGLE_BTN="Disable Telegram Notifications"
+        else
+            . "${TELEGRAM_CONF}.disabled"
+            TG_STATE="${YELLOW}Disabled${RESET}"
+            TOGGLE_BTN="Enable Telegram Notifications"
+        fi
         
         MOD_VER=$(get_version "/opt/bin/telegram_sender.mod")
         
-        echo -e "Status: ${GREEN}Configured${RESET}"
+        echo -e "Status: $TG_STATE"
         echo "Chat ID: $TG_CHAT_ID"
         echo "Module: v$MOD_VER"
         echo ""
@@ -291,6 +300,8 @@ configure_telegram() {
         echo " 1. Send Test Message"
         echo " 2. Re-configure Settings"
         echo " 3. Update Telegram Module"
+        echo " 4. $TOGGLE_BTN"
+        echo " 5. Uninstall Completely"
         echo " 0. Back"
         echo ""
         echo -n "Select option: "
@@ -298,6 +309,9 @@ configure_telegram() {
         
         case $tg_opt in
             1) 
+                if [ -f "${TELEGRAM_CONF}.disabled" ]; then
+                    echo -e "\n ${RED}Module is disabled. Enable it first.${RESET}"; pause; return
+                fi
                 echo ""
                 echo -n "Sending Test Message..."
                 if /opt/bin/telegram_sender.mod "Test Message" "This is a test notification from your Keenetic Router (KeenTool Manager)."; then
@@ -305,21 +319,44 @@ configure_telegram() {
                 else
                     echo -e " ${RED}Failed.${RESET} Check your Bot Token and Chat ID."
                 fi
-                pause
-                return 
-                ;;
+                pause; return ;;
             2) 
                 echo ""
                 echo "Re-configuring..." 
+                if [ -f "${TELEGRAM_CONF}.disabled" ]; then mv "${TELEGRAM_CONF}.disabled" "$TELEGRAM_CONF"; fi
                 ;;
             3)
                 echo ""
-                smart_process "Telegram Module" "/opt/bin/telegram_sender.mod" "KeenTool" "scripts/telegram_sender.mod"
-                pause
-                return
-                ;;
+                smart_process "Telegram Module" "/opt/bin/telegram_sender.mod" "KeenTool" "telegram_sender.mod"
+                pause; return ;;
+            4)
+                if [ -f "$TELEGRAM_CONF" ]; then
+                    mv "$TELEGRAM_CONF" "${TELEGRAM_CONF}.disabled"
+                    echo -e "\n -> ${YELLOW}Telegram Notifications Disabled.${RESET}"
+                else
+                    mv "${TELEGRAM_CONF}.disabled" "$TELEGRAM_CONF"
+                    echo -e "\n -> ${GREEN}Telegram Notifications Enabled.${RESET}"
+                fi
+                pause; return ;;
+            5)
+                echo -e "\n${BOLD}Uninstall Telegram Module${RESET}"
+                echo -n " -> Remove module and ALL settings? (y/n): "
+                read -r ans
+                if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                    rm -f "/opt/bin/telegram_sender.mod"
+                    rm -rf "$TELEGRAM_DIR"
+                    echo -e "    ${GREEN}Uninstalled.${RESET}"
+                fi
+                pause; return ;;
             *) return ;;
         esac
+    else
+        if [ ! -f "/opt/bin/telegram_sender.mod" ]; then
+            echo " -> Installing Telegram Module..."
+            smart_process "Telegram Module" "/opt/bin/telegram_sender.mod" "KeenTool" "telegram_sender.mod"
+        fi
+        header
+        echo -e "${BOLD}Telegram Notifications Setup${RESET}"
     fi
 
     echo ""
@@ -358,26 +395,31 @@ configure_telegram() {
 }
 
 configure_email() {
-    # 1. Check/Install Module Dependency
-    if [ ! -f "/opt/bin/email_sender.mod" ]; then
-        echo " -> Installing Email Module..."
-        smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "email_sender.mod"
-    fi
     mkdir -p "$EMAIL_DIR"
     
-    header
-    echo -e "${BOLD}Email Notifications Setup${RESET}"
-    echo -e "Requires: ${CYAN}openssl-util${RESET} (for password encryption)."
-    echo ""
-    
-    # --- EMAIL MANAGEMENT MENU (If configuration exists) ---
-    if [ -f "$EMAIL_CONF" ]; then
-        . "$EMAIL_CONF"
+    # --- EMAIL MANAGEMENT MENU (If configuration exists or is disabled) ---
+    if [ -f "$EMAIL_CONF" ] || [ -f "${EMAIL_CONF}.disabled" ]; then
+        if [ ! -f "/opt/bin/email_sender.mod" ]; then
+            smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "email_sender.mod"
+        fi
         
-        # Get current module version for display
+        header
+        echo -e "${BOLD}Email Notifications Setup${RESET}"
+        echo ""
+        
+        if [ -f "$EMAIL_CONF" ]; then
+            . "$EMAIL_CONF"
+            EM_STATE="${GREEN}Active${RESET}"
+            TOGGLE_BTN="Disable Email Notifications"
+        else
+            . "${EMAIL_CONF}.disabled"
+            EM_STATE="${YELLOW}Disabled${RESET}"
+            TOGGLE_BTN="Enable Email Notifications"
+        fi
+        
         MOD_VER=$(get_version "/opt/bin/email_sender.mod")
         
-        echo -e "Status: ${GREEN}Configured${RESET}"
+        echo -e "Status: $EM_STATE"
         echo "Server: $SMTP_SERVER"
         echo "Recipient: $TO_ADDRESS"
         echo "Module: v$MOD_VER"
@@ -386,13 +428,18 @@ configure_email() {
         echo " 1. Send Test Email"
         echo " 2. Re-configure Settings"
         echo " 3. Update Email Module"
+        echo " 4. $TOGGLE_BTN"
+        echo " 5. Uninstall Completely"
         echo " 0. Back"
         echo ""
         echo -n "Select option: "
         read -r em_opt
         
         case $em_opt in
-        1) 
+            1) 
+                if [ -f "${EMAIL_CONF}.disabled" ]; then
+                    echo -e "\n ${RED}Module is disabled. Enable it first.${RESET}"; pause; return
+                fi
                 echo ""
                 echo -n "Sending Test Email to $TO_ADDRESS..."
                 if /opt/bin/email_sender.mod "Test Email" "This is a test notification from your Keenetic Router (KeenTool Manager)."; then
@@ -400,21 +447,45 @@ configure_email() {
                 else
                     echo -e " ${RED}Failed.${RESET} Check /opt/var/log/messages or your SMTP settings."
                 fi
-                pause
-                return 
-                ;;
-        2) 
+                pause; return ;;
+            2) 
                 echo ""
                 echo "Re-configuring..." 
-                ;;
+                if [ -f "${EMAIL_CONF}.disabled" ]; then mv "${EMAIL_CONF}.disabled" "$EMAIL_CONF"; fi
+                ;; 
             3)
                 echo ""
-                smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "scripts/email_sender.mod"
-                pause
-                return
-                ;;
-        *) return ;;
+                smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "email_sender.mod"
+                pause; return ;;
+            4)
+                if [ -f "$EMAIL_CONF" ]; then
+                    mv "$EMAIL_CONF" "${EMAIL_CONF}.disabled"
+                    echo -e "\n -> ${YELLOW}Email Notifications Disabled.${RESET}"
+                else
+                    mv "${EMAIL_CONF}.disabled" "$EMAIL_CONF"
+                    echo -e "\n -> ${GREEN}Email Notifications Enabled.${RESET}"
+                fi
+                pause; return ;;
+            5)
+                echo -e "\n${BOLD}Uninstall Email Module${RESET}"
+                echo -n " -> Remove module and ALL settings? (y/n): "
+                read -r ans
+                if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                    rm -f "/opt/bin/email_sender.mod"
+                    rm -rf "$EMAIL_DIR"
+                    echo -e "    ${GREEN}Uninstalled.${RESET}"
+                fi
+                pause; return ;;
+            *) return ;;
         esac
+    else
+        if [ ! -f "/opt/bin/email_sender.mod" ]; then
+            echo " -> Installing Email Module..."
+            smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "email_sender.mod"
+        fi
+        header
+        echo -e "${BOLD}Email Notifications Setup${RESET}"
+        echo -e "Requires: ${CYAN}openssl-util${RESET} (for password encryption)."
     fi
 
     echo ""
@@ -1816,16 +1887,20 @@ EOF
     
     # 1. Email Status
     if [ -f "$EMAIL_CONF" ] && [ -f "$EMAIL_PW_FILE" ]; then
-        EM_STATUS="${GREEN}Configured${RESET}"
+        EM_STATUS="${GREEN}Active${RESET}"
+    elif [ -f "${EMAIL_CONF}.disabled" ]; then
+        EM_STATUS="${YELLOW}Disabled${RESET}"
     else
-        EM_STATUS="${RED}Not Set${RESET}"
+        EM_STATUS="${DIM}Not Set${RESET}"
     fi
 
     # 2. Telegram Status
     if [ -f "$TELEGRAM_CONF" ]; then
-        TG_STATUS="${GREEN}Configured${RESET}"
+        TG_STATUS="${GREEN}Active${RESET}"
+    elif [ -f "${TELEGRAM_CONF}.disabled" ]; then
+        TG_STATUS="${YELLOW}Disabled${RESET}"
     else
-        TG_STATUS="${RED}Not Set${RESET}"
+        TG_STATUS="${DIM}Not Set${RESET}"
     fi
 
     # 3. Auto-Update Status (Check Cron)
