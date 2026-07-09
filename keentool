@@ -1,8 +1,12 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v1.2.5 (Stable)
+# KEENTOOL MANAGER v1.3.0 (Stable)
 # Author: MatthewEli
+# Changelog v1.3.0:
+#   - FEAT: Added full PHP Environment support (php8-cgi, lighttpd-mod-fastcgi).
+#   - FEAT: Firewall API (firewall_api.php) dynamic installation and update.
+#   - FIX: Lighttpd auto-patching for FastCGI & PHP execution.
 # Changelog v1.2.5:
 #   - FEAT: Added Enable/Disable toggle for Email and Telegram modules.
 #   - FEAT: Added complete Uninstall option for notification modules.
@@ -11,10 +15,6 @@
 # Changelog v1.2.0:
 #   - FEAT: Added native Telegram Notifications support and configuration menu.
 #   - NEW: External telegram_sender.mod integration.
-# Changelog v1.1.3:
-#   - FEAT: Support for Multi-Tab Traffic Manager (multiple interfaces).
-#   - FIX: Traffic Manager HTML regeneration on update.
-#   - FIX: Cron job preserved on update for Traffic Manager.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -47,7 +47,7 @@ TELEGRAM_CONF="$TELEGRAM_DIR/telegram.conf"
 DEPS_CORE="lighttpd bash curl wget-ssl cron openssl-util"
 DEPS_VNSTAT="vnstat2 grep awk"
 DEPS_PING="sqlite3-cli iputils-ping mtr grep awk"
-DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed iprange tcpdump bind-tools"
+DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed iprange tcpdump bind-tools php8-cgi lighttpd-mod-fastcgi"
 DEPS_SMB="bash tar samba4-client coreutils-date"
 DEPS_DASH="lighttpd syslog-ng logrotate"
 
@@ -67,7 +67,7 @@ CRON_FILE="/opt/etc/crontab"
 CRON_SPOOL_DIR="/opt/var/spool/cron/crontabs"
 CRON_SPOOL_FILE="$CRON_SPOOL_DIR/root"
 
-CMD_VNSTAT="root /opt/bin/traffic_manager.sh ppp0 >/opt/var/log/t_manager.log 2>&1"
+CMD_VNSTAT="root /opt/bin/traffic_manager.sh 'ppp0' >/opt/var/log/t_manager.log 2>&1"
 CMD_PING_BASE="root /opt/bin/pingtool.sh"
 CMD_PING_ARGS=">> /opt/var/log/connmon.log 2>&1"
 CMD_FW_STAT="root /opt/bin/firewall_stats.sh > /dev/null 2>&1"
@@ -77,7 +77,7 @@ CMD_FW_REPORT_AUTO="root /opt/bin/firewall_stats.sh -report auto > /dev/null 2>&
 CMD_FW_REPORT_DAILY="root /opt/bin/firewall_stats.sh -report daily > /dev/null 2>&1"
 CMD_FW_REPORT_WEEKLY="root /opt/bin/firewall_stats.sh -report weekly > /dev/null 2>&1"
 CMD_FW_REPORT_MONTHLY="root /opt/bin/firewall_stats.sh -report monthly > /dev/null 2>&1"
-CMD_SMB="/opt/bin/smb_backup_tool.sh -run"
+CMD_SMB="root /opt/bin/smb_backup_tool.sh -run"
 CMD_ABUSE="root /opt/bin/abuse_reporter.sh > /dev/null 2>&1"
 CMD_LOGROTATE="root /opt/sbin/logrotate /opt/etc/logrotate.conf"
 CMD_SELF_UPD="root /opt/bin/keentool -update >/dev/null 2>&1"
@@ -95,7 +95,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v1.2.5 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v1.3.0 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -561,10 +561,11 @@ apply_perms() {
     # Added .mod extension to executable files
     if [ "${FILE##*.}" = "sh" ] || [ "${FILE##*.}" = "mod" ] || [ "$(basename "$FILE")" = "firewall_monitor" ] || [ "$(basename "$FILE")" = "keentool" ]; then
         chmod +x "$FILE"
-    elif [ "${FILE##*.}" = "html" ] || [ "${FILE##*.}" = "conf" ]; then
+    elif [ "${FILE##*.}" = "html" ] || [ "${FILE##*.}" = "conf" ] || [ "${FILE##*.}" = "php" ] || [ "${FILE##*.}" = "ini" ]; then
         chmod 644 "$FILE"
     fi
 }
+
 run_protected() {
     # Fixes Ctrl+C killing the parent script
     trap ':' INT
@@ -639,8 +640,10 @@ configure_logging_modules() {
     
     # State Detection (Priority: Dashboard Conf > Syslog Conf)
     if [ -f "$DASH_CONF" ]; then
+        # New Method: Read from state file (Decoupled)
         . "$DASH_CONF"
     elif [ -f "$CONF" ]; then
+        # Legacy Method: Guess from Syslog-ng
         grep -q "filter(f_vpn); destination(d_vpn);" "$CONF" || EN_VPN="no"
         grep -q "filter(f_scripts); destination(d_scripts);" "$CONF" || EN_SCRIPTS="no"
         grep -q "filter(f_dns); destination(d_dns);" "$CONF" || EN_DNS="no"
@@ -815,21 +818,11 @@ configure_traffic() {
     CUR_IFACE=$(echo "$CMD_VNSTAT" | sed -n 's/.*traffic_manager.sh \([^>]*\)>.*/\1/p' | sed "s/['\"]//g" | xargs)
     [ -z "$CUR_IFACE" ] && CUR_IFACE="ppp0"
 
-    # Load saved aliases (if they exist)
-    DASH_CONF="/opt/etc/keentool/dashboard.conf"
-    VNSTAT_ALIASES=""
-    if [ -f "$DASH_CONF" ]; then
-        . "$DASH_CONF"
-    fi
-
     while true; do
         header
         echo -e "${BOLD}Traffic Manager Configuration${RESET}"
         echo ""
         echo -e " Current Dashboard Targets: ${CYAN}${CUR_IFACE}${RESET}"
-        if [ -n "$VNSTAT_ALIASES" ]; then
-            echo -e " Current Custom Aliases:    ${CYAN}${VNSTAT_ALIASES}${RESET}"
-        fi
         echo ""
         
         echo -e "${BOLD}Available Interfaces (VNStat DB):${RESET}"
@@ -841,9 +834,8 @@ configure_traffic() {
         
         echo ""
         echo " 1. Set Dashboard Interfaces (Multi-Tab support)"
-        echo " 2. Set Interface Aliases (e.g., WAN LAN)"
-        echo " 3. Add New Interface to DB (vnstat --add)"
-        echo " 4. Remove Interface from DB (vnstat --remove)"
+        echo " 2. Add New Interface to DB (vnstat --add)"
+        echo " 3. Remove Interface from DB (vnstat --remove)"
         echo " 0. Back"
         echo ""
         echo -n "Select option: "; read -r opt
@@ -874,29 +866,6 @@ configure_traffic() {
                 fi
                 ;;
             2)
-                echo "Enter a custom name (Alias) for each configured interface."
-                echo "Separate them with spaces, IN THE SAME ORDER as your targets."
-                echo "Example: If targets are 'ppp0 br0', type 'WAN LAN'"
-                echo -n "Aliases: "
-                read -r NEW_ALIASES
-                
-                if [ -n "$NEW_ALIASES" ]; then
-                    VNSTAT_ALIASES="$NEW_ALIASES"
-                    # Save to the configuration file (preserving other variables)
-                    if grep -q "^VNSTAT_ALIASES=" "$DASH_CONF" 2>/dev/null; then
-                        sed -i "s/^VNSTAT_ALIASES=.*/VNSTAT_ALIASES=\"$VNSTAT_ALIASES\"/" "$DASH_CONF"
-                    else
-                        echo "VNSTAT_ALIASES=\"$VNSTAT_ALIASES\"" >> "$DASH_CONF"
-                    fi
-                    
-                    echo " -> Regenerating Dashboard to apply aliases..."
-                    rm -f /opt/var/www/vnstat/index.html
-                    /opt/bin/traffic_manager.sh "$CUR_IFACE" >/dev/null 2>&1
-                    echo -e " -> ${GREEN}Aliases Saved!${RESET}"
-                    pause
-                fi
-                ;;
-            3)
                 echo -n "Enter Interface to ADD (e.g. usb0): "
                 read -r ADD_IF
                 if [ -n "$ADD_IF" ]; then
@@ -907,7 +876,7 @@ configure_traffic() {
                     pause
                 fi
                 ;;
-            4)
+            3)
                 echo -n "Enter Interface to REMOVE (e.g. eth0): "
                 read -r DEL_IF
                 if [ -n "$DEL_IF" ]; then
@@ -1024,7 +993,7 @@ configure_pingtool() {
                fi
                return ;;
         esac
-        sleep 1
+        sleep 0.5
     done
 }
 
@@ -1134,7 +1103,10 @@ $BIN_DIR/vpn_scan.sh|scripts/vpn_scan.sh
 $BIN_DIR/abuse_reporter.sh|scripts/abuse_reporter.sh
 $NDM_DIR/100-firewall.sh|scripts/100-firewall.sh
 $INIT_DIR/S00ipset-load|scripts/S00ipset-load
-$FW_WEB_ROOT/index.html|www/index.html"
+$FW_WEB_ROOT/index.html|www/index.html
+$FW_WEB_ROOT/firewall_api.php|www/firewall_api.php
+/opt/etc/lighttpd/conf.d/30-fastcgi.conf|www/30-fastcgi.conf
+/opt/etc/php.ini|www/php.ini"
 
         IFS=$'\n'; for ROW in $FW_SUBS; do
             local SUB_L=$(echo "$ROW" | cut -d'|' -f1); local SUB_R=$(echo "$ROW" | cut -d'|' -f2)
@@ -1145,7 +1117,8 @@ $FW_WEB_ROOT/index.html|www/index.html"
                     sed -i 's/\r$//' "$STMP"
                     local SR_VER=$(get_version "$STMP"); ver_compare "$SR_VER" "$SL_VER"; local RES=$?
                     if [ $RES -eq 1 ]; then UPD_FW=" -> ${MAGENTA}Patch${RESET}"; rm -f "$STMP"; break; fi
-                    if [ $RES -eq 0 ] && [ "$(get_md5 "$SUB_L")" != "$(get_md5 "$STMP")" ]; then UPD_FW=" -> ${CYAN}Patch${RESET}"; rm -f "$STMP"; break; fi
+                    # Ignore MD5 check for files that auto-modify via user settings
+                    if [ $RES -eq 0 ] && [ "$(get_md5 "$SUB_L")" != "$(get_md5 "$STMP")" ] && [ "$SUB_R" != "www/php.ini" ] && [ "$SUB_R" != "www/30-fastcgi.conf" ]; then UPD_FW=" -> ${CYAN}Patch${RESET}"; rm -f "$STMP"; break; fi
                 fi
                 rm -f "$STMP"
             fi
@@ -1175,7 +1148,7 @@ $T_SELF
 EOF
     check_tool_status "UPD_SELF" "$P" "$R" "$F"
 
-    echo " Done."; sleep 1
+    echo " Done."; sleep 0.5
 }
 
 # --- DEPENDENCY & INSTALL ---
@@ -1230,7 +1203,7 @@ check_webserver_config() {
         if grep -q "/opt/var/www/" "$CONF" && [ "$MODE" != "force" ]; then return 0; fi
     fi
     if [ "$MODE" != "force" ]; then
-        echo -n " -> ${YELLOW}Configure Lighttpd (Port 81)? (y/n): ${RESET}"; read -r ans
+        echo -n " -> ${YELLOW}Configure Lighttpd (Port 8080)? (y/n): ${RESET}"; read -r ans
         [ "$ans" != "y" ] && [ "$ans" != "Y" ] && return 0
     fi
     mkdir -p /opt/etc/lighttpd
@@ -1249,7 +1222,14 @@ server.errorlog = log_root + "error.log"
 server.pid-file = state_dir + "lighttpd.pid"
 server.port = 81
 index-file.names = ( "index.php", "index.html", "index.htm" )
-static-file.exclude-extensions = ( ".php", ".pl", ".fcgi" )
+static-file.exclude-extensions = ( ".pl", ".fcgi", ".cgi" )
+
+server.modules = (
+    "mod_access",
+    "mod_alias",
+    "mod_fastcgi"
+)
+
 include "/opt/etc/lighttpd/mime.conf"
 include "/opt/etc/lighttpd/conf.d/*.conf"
 EOF
@@ -1333,10 +1313,12 @@ sanitize_and_reload_cron() {
     awk 'length($0) == 0 || !seen[$0]++' "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
     if [ -s "$CRON_FILE" ] && [ "$(tail -c 1 "$CRON_FILE")" != "" ]; then echo "" >> "$CRON_FILE"; fi
     chmod 600 "$CRON_FILE"
-    if [ -d "$CRON_SPOOL_DIR" ]; then 
-        cp "$CRON_FILE" "$CRON_SPOOL_FILE"
-        chmod 600 "$CRON_SPOOL_FILE"
+    
+    # Fix: Remove user spool to avoid duplicate executions
+    if [ -f "$CRON_SPOOL_FILE" ]; then 
+        rm -f "$CRON_SPOOL_FILE"
     fi
+    
     if [ -x /opt/etc/init.d/S10cron ]; then /opt/etc/init.d/S10cron restart >/dev/null 2>&1; fi
 }
 
@@ -1515,7 +1497,7 @@ manage_cron_menu() {
 
 boot_check() {
       if [ ! -f "/opt/bin/email_sender.mod" ]; then
-        curl -s -L "$BASE_URL/KeenTool/main/email_sender.mod" -o "/opt/bin/email_sender.mod"
+        curl -s -L "$BASE_URL/KeenTool/main/scripts/email_sender.mod" -o "/opt/bin/email_sender.mod"
         if [ -s "/opt/bin/email_sender.mod" ]; then
             chmod +x "/opt/bin/email_sender.mod"
         else
@@ -1578,35 +1560,12 @@ EOF
         echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Configure Interface (Dashboard/DB)"; echo " 4. Uninstall"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
         case $op in
             1) 
-                header; check_and_install_deps "$DEPS_VNSTAT"; 
-                smart_process "$N" "$P" "$R" "$F"
-                
-                # Remove old HTML files
-                rm -f /opt/var/www/vnstat/*.html
-                
-                # Extract currently configured interfaces from crontab/variable
-                CUR_IFACE=$(echo "$CMD_VNSTAT" | sed -n 's/.*traffic_manager.sh \([^>]*\)>.*/\1/p' | sed "s/['\"]//g" | xargs)
-                [ -z "$CUR_IFACE" ] && CUR_IFACE="ppp0"
-                
-                # Instantly regenerate HTML
-                echo " -> Regenerating HTML for targets: $CUR_IFACE..."
-                /opt/bin/traffic_manager.sh "$CUR_IFACE" >/dev/null 2>&1
-                echo -e "    ${GREEN}Dashboard Updated.${RESET}"
-                
-                # Preserve cron if exists, otherwise ask
-                if cron_cmd_active "$CMD_VNSTAT"; then
-                    echo -e "    ${GREEN}Cron job preserved.${RESET}"
-                else
-                    echo -n " -> Enable Traffic Manager in cron? (y/n): "
-                    read -r c_ans
-                    if [ "$c_ans" = "y" ] || [ "$c_ans" = "Y" ]; then
-                        echo "*/10 * * * * $CMD_VNSTAT" >> "$CRON_FILE"
-                        sanitize_and_reload_cron
-                        echo -e "    ${GREEN}Cron enabled.${RESET}"
-                    fi
-                fi
-                pause 
-                ;;
+    			header; check_and_install_deps "$DEPS_VNSTAT"; 
+    			smart_process "$N" "$P" "$R" "$F"
+    			rm -f /opt/var/www/vnstat/*.html
+    			if [ -n "$CMD_VNSTAT" ]; then manage_cron_menu "$CMD_VNSTAT"; fi
+    			pause 
+    			;;
             2) manage_cron_menu "$CMD_VNSTAT"; ;;
             3) configure_traffic ;;
             4) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove file and cron? (y/n): "; read -r ans; if [ "$ans" = "y" ] ||
@@ -1615,6 +1574,7 @@ EOF
         esac
     done
 }
+
 action_generic() {
     T_DEF="$1"; T_CMD="$2"; RUN_OPT="$3"
     IFS='|' read -r N P R F <<EOF
@@ -1720,7 +1680,7 @@ verify_new_firewall_reqs() {
     rm -f "$TMP_HOOK"
 
     if [ "$IS_NEW_SUITE" -eq 1 ]; then
-        # A. Verifica/Installa pacchetti ulogd completi (NFlog + PCAP)
+        # A. ULOGD Installation (NFlog + PCAP)
         if ! opkg list-installed | grep -q "^ulogd-mod-pcap"; then
             echo -n "    -> New suite requires ${BOLD}ulogd (nflog/pcap)${RESET}. Installing... "
             opkg update >/dev/null 2>&1
@@ -1728,7 +1688,7 @@ verify_new_firewall_reqs() {
             if [ $? -eq 0 ]; then echo -e "${GREEN}Installed${RESET}"; else echo -e "${RED}Failed${RESET}"; return 1; fi
         fi
 
-        # B. Configurazione ULOGD (Sovrascrittura)
+        # B. ULOGD Settings
         echo -n "    -> Configuring ulogd... "
         cat > /opt/etc/ulogd.conf <<EOF
 [global]
@@ -1749,7 +1709,7 @@ EOF
         chmod 644 /opt/etc/ulogd.conf
         echo -e "${GREEN}Done${RESET}"
 
-        # C. Script di avvio S11ulogd
+        # C. Script S11ulogd
         if [ ! -f "/opt/etc/init.d/S11ulogd" ]; then
             echo -n "    -> Creating startup script (S11ulogd)... "
             cat > /opt/etc/init.d/S11ulogd <<EOF
@@ -1799,9 +1759,6 @@ action_firewall() {
                EXISTING_KEY=""
                if [ -s "$KEY_FILE" ]; then EXISTING_KEY=$(cat "$KEY_FILE" | tr -d '[:space:]'); fi
                
-               EXISTING_KEY=""
-               if [ -s "$KEY_FILE" ]; then EXISTING_KEY=$(cat "$KEY_FILE" | tr -d '[:space:]'); fi
-               
                if [ -n "$EXISTING_KEY" ]; then
                    echo -e " -> Found AbuseIPDB Key: ${CYAN}${EXISTING_KEY:0:5}...${RESET} (Preserving)"
                else
@@ -1824,12 +1781,99 @@ action_firewall() {
 			   
                if [ ! -d "$FW_WEB_ROOT" ]; then mkdir -p "$FW_WEB_ROOT"; fi
                smart_process "Dash UI" "$FW_WEB_ROOT/index.html" $REPO "www/index.html"
+               smart_process "Dash API" "$FW_WEB_ROOT/firewall_api.php" $REPO "www/firewall_api.php"
+               
+               # Generate 30-fastcgi.conf locally
+               if [ ! -d "/opt/etc/lighttpd/conf.d" ]; then mkdir -p "/opt/etc/lighttpd/conf.d"; fi
+               echo -n " -> Configuring FastCGI environment... "
+               cat > "/opt/etc/lighttpd/conf.d/30-fastcgi.conf" <<'EOF'
+server.modules += ( "mod_fastcgi" )
+fastcgi.server = ( ".php" =>
+                   ( "php-local" =>
+                     (
+                       "socket" => socket_dir + "/php-fastcgi-1.socket",
+                       "bin-path" => "/opt/bin/php-cgi",
+                       "max-procs" => 1,
+                       "broken-scriptfilename" => "enable",
+                     )
+                   )
+                 )
+EOF
+               chmod 644 "/opt/etc/lighttpd/conf.d/30-fastcgi.conf"
+               
+               # Generate php.ini locally
+               cat > "/opt/etc/php.ini" <<'EOF'
+[PHP]
+engine = On
+precision = 12
+output_buffering = Off
+zlib.output_compression = Off
+implicit_flush = Off
+serialize_precision = 100
+expose_php = On
+max_execution_time = 30
+max_input_time = 60
+memory_limit = 128M
+error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT
+display_errors = Off
+display_startup_errors = Off
+log_errors = On
+log_errors_max_len = 1024
+ignore_repeated_errors = Off
+ignore_repeated_source = Off
+report_memleaks = On
+track_errors = Off
+variables_order = "EGPCS"
+request_order = "GP"
+register_argc_argv = On
+auto_globals_jit = On
+post_max_size = 8M
+default_mimetype = "text/html"
+extension_dir = "/opt/lib/php8"
+enable_dl = On
+file_uploads = On
+upload_max_filesize = 2M
+max_file_uploads = 20
+allow_url_fopen = On
+allow_url_include = Off
+default_socket_timeout = 60
+[CLI Server]
+cli_server.color = On
+[Date]
+date.timezone = "Europe/Rome"
+[Session]
+session.save_handler = files
+session.use_strict_mode = 0
+session.use_cookies = 1
+session.use_only_cookies = 1
+session.name = PHPSESSID
+session.auto_start = 0
+session.cookie_lifetime = 0
+session.cookie_path = /
+session.serialize_handler = php
+session.gc_probability = 1
+session.gc_divisor = 100
+session.gc_maxlifetime = 1440
+session.cache_limiter = nocache
+session.cache_expire = 180
+session.use_trans_sid = 0
+session.sid_length = 26
+session.trans_sid_tags = "a=href,area=href,frame=href,form="
+session.sid_bits_per_character = 5
+EOF
+               chmod 644 "/opt/etc/php.ini"
+               echo -e "${GREEN}Done${RESET}"
                
                smart_process "Updater" "$BIN_DIR/update_blocklist.sh" $REPO "scripts/update_blocklist.sh"
                smart_process "VPN Scan" "$BIN_DIR/vpn_scan.sh" $REPO "scripts/vpn_scan.sh"
                smart_process "Reporter" "$BIN_DIR/abuse_reporter.sh" $REPO "scripts/abuse_reporter.sh"
                smart_process "Netfilter" "$NDM_DIR/100-firewall.sh" $REPO "scripts/100-firewall.sh"
                smart_process "Init" "$INIT_DIR/S00ipset-load" $REPO "scripts/S00ipset-load"
+               
+               # Restart Lighttpd to load FastCGI & PHP
+               if [ -x /opt/etc/init.d/S80lighttpd ]; then
+                   /opt/etc/init.d/S80lighttpd restart >/dev/null 2>&1
+               fi
                
                sanitize_and_reload_cron
                pause ;;
@@ -1843,6 +1887,9 @@ action_firewall() {
 				   if [ -d "$FW_WEB_ROOT" ]; then 
                        rm -rf "$FW_WEB_ROOT"
                        echo -e "    Removed Firewall Web UI ($FW_WEB_ROOT)"
+                   fi
+                   if [ -f "/opt/etc/lighttpd/conf.d/30-fastcgi.conf" ]; then
+                       rm -f "/opt/etc/lighttpd/conf.d/30-fastcgi.conf"
                    fi
               
                    remove_cron_cmd "$CMD_FW_STAT"; remove_cron_cmd "$CMD_FW_UPD"; remove_cron_cmd "$CMD_FW_VPN"; remove_cron_cmd "$CMD_ABUSE"; remove_cron_cmd "root /opt/bin/firewall_stats.sh -report"
@@ -1953,7 +2000,7 @@ EOF
         e) configure_email ;;
         t) configure_telegram ;;
         
-        # Added reset of the UPD_... variables after each action
+        # Reset the UPD_... variables after each action
         1) action_traffic; UPD_VNSTAT="" ;;
         2) action_ping; UPD_PING="" ;; 
         3) action_firewall; UPD_FW="" ;;
@@ -1985,4 +2032,3 @@ EOF
         q) exit 0 ;;
     esac
 done
-}
