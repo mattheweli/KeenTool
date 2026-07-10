@@ -994,7 +994,7 @@ configure_pingtool() {
                fi
                return ;;
         esac
-        sleep 0.5
+        sleep 1
     done
 }
 
@@ -1147,7 +1147,7 @@ $T_SELF
 EOF
     check_tool_status "UPD_SELF" "$P" "$R" "$F"
 
-    echo " Done."; sleep 0.5
+    echo " Done."; sleep 1
 }
 
 # --- DEPENDENCY & INSTALL ---
