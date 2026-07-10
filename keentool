@@ -1,8 +1,11 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v1.3.3 (Stable)
+# KEENTOOL MANAGER v1.3.4 (Stable)
 # Author: MatthewEli
+# Changelog v1.3.4:
+#   - FIX: Improved cron job matching (get_clean_cmd_str) to preserve quotes.
+#   - FIX: Fixed Traffic Manager cron job generation and tracking for multiple interfaces.
 # Changelog v1.3.3:
 #   - FIX: PHP installation and integration
 #   - FEAT: Added full PHP Environment support (php8-cgi, lighttpd-mod-fastcgi).
@@ -13,9 +16,6 @@
 #   - FEAT: Added complete Uninstall option for notification modules.
 #   - FIX: Fixed executable permissions for .mod extensions (apply_perms).
 #   - UX: Main menu now reflects "Disabled" state for notifications.
-# Changelog v1.2.0:
-#   - FEAT: Added native Telegram Notifications support and configuration menu.
-#   - NEW: External telegram_sender.mod integration.
 # ==============================================================================
 
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -96,7 +96,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v1.3.3 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v1.3.4 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -815,8 +815,8 @@ EOF
 }
 
 configure_traffic() {
-    # 1. Safely extracts interfaces (handling quotes used for multiple interfaces)
-    CUR_IFACE=$(echo "$CMD_VNSTAT" | sed -n 's/.*traffic_manager.sh \([^>]*\)>.*/\1/p' | sed "s/['\"]//g" | xargs)
+    # 1. Safely extracts interfaces
+    CUR_IFACE=$(echo "$CMD_VNSTAT" | sed -n "s/.*traffic_manager.sh '\([^']*\)'.*/\1/p")
     [ -z "$CUR_IFACE" ] && CUR_IFACE="ppp0"
 
     while true; do
@@ -843,20 +843,28 @@ configure_traffic() {
         
         case $opt in
             1) 
-                echo -n "Enter Interfaces (space separated, e.g. ppp0 br0 eth2): "
+                echo -n "Enter Interfaces (space separated, e.g. ppp0 br0): "
                 read -r NEW_IF
+                # Pulisce spazi multipli o finali
+                NEW_IF=$(echo "$NEW_IF" | xargs)
                 if [ -n "$NEW_IF" ]; then
-                    # Updates the keentool script itself while preserving the string
-                    sed -i -E "s|traffic_manager.sh .* >/opt/var/log|traffic_manager.sh '$NEW_IF' >/opt/var/log|" "$0"
-                    CUR_IFACE="$NEW_IF"
+                    # Aggiorna CMD_VNSTAT per la sessione corrente
                     NEW_CMD="root /opt/bin/traffic_manager.sh '$NEW_IF' >/opt/var/log/t_manager.log 2>&1"
                     
+                    # Aggiorna il file keentool fisico (questo stesso script)
+                    sed -i -E "s|CMD_VNSTAT=\"root /opt/bin/traffic_manager.sh.*\"|CMD_VNSTAT=\"$NEW_CMD\"|" "$0"
+                    
+                    # Cerca e sostituisci nel crontab preservando gli apici
                     if grep -q "traffic_manager.sh" "$CRON_FILE"; then
                         echo " -> Updating Crontab..."
                         grep -v "traffic_manager.sh" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
                         echo "*/10 * * * * $NEW_CMD" >> "$CRON_FILE"
                         sanitize_and_reload_cron
                     fi
+                    
+                    # Aggiorna la variabile globale per il menu
+                    CMD_VNSTAT="$NEW_CMD"
+                    CUR_IFACE="$NEW_IF"
                     
                     echo " -> Regenerating Dashboard instantly..."
                     rm -f /opt/var/www/vnstat/index.html
@@ -1333,9 +1341,10 @@ action_verify_cron() {
 
 # --- HELPER: Extract "pure" command (removes root prefix and redirects) ---
 get_clean_cmd_str() {
-    # Input example: "root /opt/bin/script.sh -arg > /dev/null"
-    # Output: "/opt/bin/script.sh -arg"
-    echo "$1" | sed -E 's/^.*root //; s/ >.*//; s/ >>.*//' | xargs
+    # Input example: "root /opt/bin/script.sh 'ppp0 br0' > /dev/null"
+    # Output: "/opt/bin/script.sh 'ppp0 br0'"
+    # Note: We must preserve the exact quotes for matching
+    echo "$1" | sed -E 's/^.*root //; s/ >.*//; s/ >>.*//' | sed 's/[[:space:]]*$//'
 }
 
 cron_cmd_active() { 
