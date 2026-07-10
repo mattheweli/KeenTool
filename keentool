@@ -1,9 +1,9 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v1.3.2 (Stable)
+# KEENTOOL MANAGER v1.3.3 (Stable)
 # Author: MatthewEli
-# Changelog v1.3.2:
+# Changelog v1.3.3:
 #   - FIX: PHP installation and integration
 #   - FEAT: Added full PHP Environment support (php8-cgi, lighttpd-mod-fastcgi).
 #   - FEAT: Firewall API (firewall_api.php) dynamic installation and update.
@@ -96,7 +96,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v1.3.2 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v1.3.3 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -1943,21 +1943,38 @@ EOF
                chmod 644 "/opt/etc/php.ini"
                echo -e "${GREEN}Done${RESET}"
                
-               CONF="/opt/etc/lighttpd/lighttpd.conf"
-               if [ -f "$CONF" ]; then
-                   echo -n " -> Patching lighttpd.conf... "
-                   
-                   sed -i 's/".php", //' "$CONF"
-                   sed -i 's/".php" //' "$CONF"
-                   
-                   if ! grep -q "\"mod_fastcgi\"" "$CONF"; then
-                       sed -i 's/server.modules = (/server.modules = (\n    "mod_fastcgi",/' "$CONF"
-                   fi
-                   if ! grep -q "\"mod_alias\"" "$CONF"; then
-                       sed -i 's/server.modules = (/server.modules = (\n    "mod_alias",/' "$CONF"
-                   fi
-                   echo -e "${GREEN}Done${RESET}"
-               fi
+               echo -n " -> Updating lighttpd.conf... "
+               cat > "/opt/etc/lighttpd/lighttpd.conf" <<EOF
+var.log_root    = "/opt/var/log/lighttpd/"
+var.server_root = "/opt/var/www/"
+var.state_dir   = "/opt/var/run/"
+var.home_dir    = "/opt/var/lib/lighttpd/"
+var.conf_dir    = "/opt/etc/lighttpd"
+var.vhosts_dir  = server_root + "/vhosts"
+var.cache_dir   = "/opt/var/cache/lighttpd"
+var.socket_dir  = home_dir + "/sockets"
+
+server.document-root = server_root
+server.upload-dirs = ( "/opt/tmp" )
+server.errorlog = log_root + "error.log"
+server.pid-file = state_dir + "lighttpd.pid"
+server.port = 81
+
+index-file.names = ( "index.php", "index.html", "index.htm" )
+
+static-file.exclude-extensions = ( ".pl", ".fcgi", ".cgi" )
+
+server.modules = (
+    "mod_access",
+    "mod_alias",
+    "mod_fastcgi"
+)
+
+include "/opt/etc/lighttpd/mime.conf"
+include "/opt/etc/lighttpd/conf.d/*.conf"
+EOF
+               chmod 644 "/opt/etc/lighttpd/lighttpd.conf"
+               echo -e "${GREEN}Done${RESET}"
                
                smart_process "Updater" "$BIN_DIR/update_blocklist.sh" $REPO "scripts/update_blocklist.sh"
                smart_process "VPN Scan" "$BIN_DIR/vpn_scan.sh" $REPO "scripts/vpn_scan.sh"
