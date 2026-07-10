@@ -1,9 +1,9 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v1.3.1 (Stable)
+# KEENTOOL MANAGER v1.3.2 (Stable)
 # Author: MatthewEli
-# Changelog v1.3.1:
+# Changelog v1.3.2:
 #   - FIX: PHP installation and integration
 #   - FEAT: Added full PHP Environment support (php8-cgi, lighttpd-mod-fastcgi).
 #   - FEAT: Firewall API (firewall_api.php) dynamic installation and update.
@@ -96,7 +96,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v1.3.1 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v1.3.2 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
