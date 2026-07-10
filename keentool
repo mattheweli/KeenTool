@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # ==============================================================================
-# KEENTOOL MANAGER v1.3.0 (Stable)
+# KEENTOOL MANAGER v1.3.1 (Stable)
 # Author: MatthewEli
-# Changelog v1.3.0:
+# Changelog v1.3.1:
+#   - FIX: PHP installation and integration
 #   - FEAT: Added full PHP Environment support (php8-cgi, lighttpd-mod-fastcgi).
 #   - FEAT: Firewall API (firewall_api.php) dynamic installation and update.
 #   - FIX: Lighttpd auto-patching for FastCGI & PHP execution.
@@ -1105,8 +1106,6 @@ $NDM_DIR/100-firewall.sh|scripts/100-firewall.sh
 $INIT_DIR/S00ipset-load|scripts/S00ipset-load
 $FW_WEB_ROOT/index.html|www/index.html
 $FW_WEB_ROOT/firewall_api.php|www/firewall_api.php
-/opt/etc/lighttpd/conf.d/30-fastcgi.conf|www/30-fastcgi.conf
-/opt/etc/php.ini|www/php.ini"
 
         IFS=$'\n'; for ROW in $FW_SUBS; do
             local SUB_L=$(echo "$ROW" | cut -d'|' -f1); local SUB_R=$(echo "$ROW" | cut -d'|' -f2)
@@ -1769,7 +1768,6 @@ action_firewall() {
                            echo -n "$KEY_TO_SET" > "$KEY_FILE"
                            chmod 600 "$KEY_FILE"
                            echo -e "    ${GREEN}Key Saved to $KEY_FILE${RESET}"
-    
                        fi
                    fi
                fi
@@ -1783,9 +1781,9 @@ action_firewall() {
                smart_process "Dash UI" "$FW_WEB_ROOT/index.html" $REPO "www/index.html"
                smart_process "Dash API" "$FW_WEB_ROOT/firewall_api.php" $REPO "www/firewall_api.php"
                
-               # Generate 30-fastcgi.conf locally
+               # --- GENERAZIONE LOCALE E FORZATA (PHP & FASTCGI) ---
+               echo -n " -> Configuring FastCGI & PHP environment... "
                if [ ! -d "/opt/etc/lighttpd/conf.d" ]; then mkdir -p "/opt/etc/lighttpd/conf.d"; fi
-               echo -n " -> Configuring FastCGI environment... "
                cat > "/opt/etc/lighttpd/conf.d/30-fastcgi.conf" <<'EOF'
 server.modules += ( "mod_fastcgi" )
 fastcgi.server = ( ".php" =>
@@ -1801,7 +1799,6 @@ fastcgi.server = ( ".php" =>
 EOF
                chmod 644 "/opt/etc/lighttpd/conf.d/30-fastcgi.conf"
                
-               # Generate php.ini locally
                cat > "/opt/etc/php.ini" <<'EOF'
 [PHP]
 engine = On
@@ -1863,6 +1860,24 @@ session.sid_bits_per_character = 5
 EOF
                chmod 644 "/opt/etc/php.ini"
                echo -e "${GREEN}Done${RESET}"
+               
+               # --- PATCH DINAMICA LIGHTTPD.CONF ---
+               CONF="/opt/etc/lighttpd/lighttpd.conf"
+               if [ -f "$CONF" ]; then
+                   echo -n " -> Patching lighttpd.conf... "
+                   # 1. Rimuove .php dalle esclusioni (se presente)
+                   sed -i 's/".php", //' "$CONF"
+                   sed -i 's/".php" //' "$CONF"
+                   
+                   # 2. Inietta mod_fastcgi e mod_alias se mancano in server.modules
+                   if ! grep -q "\"mod_fastcgi\"" "$CONF"; then
+                       sed -i 's/server.modules = (/server.modules = (\n    "mod_fastcgi",/' "$CONF"
+                   fi
+                   if ! grep -q "\"mod_alias\"" "$CONF"; then
+                       sed -i 's/server.modules = (/server.modules = (\n    "mod_alias",/' "$CONF"
+                   fi
+                   echo -e "${GREEN}Done${RESET}"
+               fi
                
                smart_process "Updater" "$BIN_DIR/update_blocklist.sh" $REPO "scripts/update_blocklist.sh"
                smart_process "VPN Scan" "$BIN_DIR/vpn_scan.sh" $REPO "scripts/vpn_scan.sh"
