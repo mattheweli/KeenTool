@@ -1105,7 +1105,7 @@ $BIN_DIR/abuse_reporter.sh|scripts/abuse_reporter.sh
 $NDM_DIR/100-firewall.sh|scripts/100-firewall.sh
 $INIT_DIR/S00ipset-load|scripts/S00ipset-load
 $FW_WEB_ROOT/index.html|www/index.html
-$FW_WEB_ROOT/firewall_api.php|www/firewall_api.php
+$FW_WEB_ROOT/firewall_api.php|www/firewall_api.php"
 
         IFS=$'\n'; for ROW in $FW_SUBS; do
             local SUB_L=$(echo "$ROW" | cut -d'|' -f1); local SUB_R=$(echo "$ROW" | cut -d'|' -f2)
