@@ -1,5 +1,5 @@
 <?php
-// KeenTool release verification/extraction 1.0.1. CLI only; downloaded code is never evaluated here.
+// KeenTool release verification/extraction 1.0.2. CLI only; downloaded code is never evaluated here.
 if(PHP_SAPI!=='cli')exit(1);
 umask(0077);
 function requireValue($ok,$message){if(!$ok)throw new RuntimeException($message);}
@@ -29,6 +29,44 @@ function metadata($release,$installed,$legacy){
  $digest=$found[$name]['digest']??'';requireValue($digest===''||preg_match('/^sha256:[0-9a-f]{64}$/D',$digest),'Unsupported asset digest');
  $current=currentVersion($installed,$legacy);
  return [$version,$current,newer($version,$current)?'1':'0',$found[$name]['browser_download_url'],$found[$name.'.sha256']['browser_download_url'],$digest?:'-'];
+}
+// Lightweight metadata is bound to the selected published release and GitHub asset digest.
+function overviewAsset($release){
+ $version=substr($release['tag_name'],1);$name='keentool-'.$version.'-manifest.json';$found=null;
+ foreach($release['assets']??[] as $asset){if(($asset['name']??'')!==$name)continue;
+  requireValue($found===null,'Duplicate overview asset');$found=$asset;
+  requireValue(($asset['browser_download_url']??'')==='https://github.com/mattheweli/KeenTool/releases/download/v'.$version.'/'.$name&&($asset['state']??'')==='uploaded','Unexpected overview asset URL/state');
+  requireValue(is_int($asset['size']??null)&&$asset['size']>0&&$asset['size']<=65536,'Overview asset exceeds the download limit');
+  requireValue(preg_match('/^sha256:[0-9a-f]{64}$/D',$asset['digest']??''),'Overview asset needs a GitHub SHA-256 digest');
+ }
+ return $found?[$found['browser_download_url'],$found['digest']]:['-','-'];
+}
+function verifiedOverview($path,$version,$digest){
+ requireValue(hash_equals('sha256:'.hash_file('sha256',$path),$digest),'Overview SHA-256 mismatch');
+ $j=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);
+ requireValue(($j['suite']??'')==='KeenTool'&&($j['version']??'')===$version&&($j['channel']??'')==='stable','Overview release mismatch');
+ foreach(['KeenTool','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'] as $name)requireValue(stableVersion($j['components'][$name]??null),'Missing overview component: '.$name);
+ requireValue($j['components']['KeenTool']===$version,'Inconsistent manager version');
+ foreach($j['changes']??[] as $line)requireValue(is_string($line)&&strlen($line)<=1000&&!preg_match('/[\x00-\x1f\x7f]/',$line),'Unsafe release note');
+ return $j;
+}
+function overviewStatus($j,$installedFile,$legacy,$scope,$selectionOnly=false){
+ $installed=is_file($installedFile)?json_decode(file_get_contents($installedFile),true):[];$current=currentVersion($installedFile,$legacy);
+ $names=['KeenTool','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'];requireValue($scope===''||in_array($scope,$names,true),'Unknown overview scope');$selected=false;$changed=[];$newerComponents=[];
+ foreach($names as $name){$local=$installed['components'][$name]??($name==='KeenTool'?$current:'unknown');requireValue(is_string($local),'Invalid installed component version');
+  $remote=$j['components'][$name];if($local!=='unknown'&&version_compare($local,$remote,'>'))$newerComponents[]=$name;$upgrade=$local==='unknown'||newer($remote,$local);if($upgrade)$changed[]=$name.': '.$local.' -> '.$remote;
+  if(($scope===''||$scope===$name)&&$upgrade)$selected=true;
+  if(!$selectionOnly&&($scope===''||$scope===$name))printf("%-20s installed %-12s available %-12s %s\n",$name,$local,$remote,$upgrade?'UPDATE AVAILABLE':($local===$remote?'CURRENT':'LOCAL VERSION NEWER'));
+ }
+ // A component cannot authorize downgrading a newer coordinated installation.
+ if(version_compare($current,$j['version'],'>')||$newerComponents)$selected=false;
+ if(!$selectionOnly&&$newerComponents)echo 'Coordinated update blocked: newer installed components ('.implode(', ',$newerComponents)."). Downgrades are not permitted.\n";
+ if($selectionOnly){echo $selected?'1':'0';return;}
+ if(!$selected){echo "No update is available for the selected scope.\n";return;}
+ echo "\nChanges in the coordinated installation:\n";foreach($changed as $line)echo ' - '.$line."\n";
+ echo 'Shared runtime and installer: coordinated suite '.$current.' -> '.$j['version'].".\n";
+ echo "Installation applies the complete verified package, including unchanged components, to keep shared files compatible.\n";
+ foreach($j['changes']??[] as $line)echo ' - '.$line."\n";
 }
 function exactRead($stream,$size){$out='';while(strlen($out)<$size&&!feof($stream)){$v=fread($stream,$size-strlen($out));requireValue($v!==false,'Archive read failed');$out.=$v;}requireValue(strlen($out)===$size,'Truncated archive');return $out;}
 function octalNumber($s){$s=trim($s,"\0 ");requireValue($s===''||preg_match('/^[0-7]{1,12}$/D',$s),'Unsupported archive numeric field');return $s===''?0:octdec($s);}
@@ -97,7 +135,16 @@ try{
  $action=$argv[1]??'';
  if($action==='flag'){requireValue(stableVersion($argv[3]??''),'Invalid version flag');$tmp=tempnam(dirname($argv[2]),'.kt-version-');requireValue($tmp!==false,'Cannot stage version flag');try{requireValue(file_put_contents($tmp,$argv[3]."\n")!==false&&chmod($tmp,0600)&&rename($tmp,$argv[2]),'Cannot store version flag');}finally{if(is_file($tmp))unlink($tmp);}}
  elseif($action==='metadata'){echo implode("\t",metadata(json_decode(stream_get_contents(STDIN),true),$argv[2],$argv[3]));}
- elseif($action==='checksum'){
+ elseif($action==='overview-asset'){echo implode("\t",overviewAsset(json_decode(stream_get_contents(STDIN),true,512,JSON_THROW_ON_ERROR)));}
+ elseif($action==='overview'||$action==='selection'){
+  $j=verifiedOverview($argv[2],$argv[3],$argv[4]);overviewStatus($j,$argv[5],$argv[6],$argv[7]??'',$action==='selection');
+ }elseif($action==='overview-safe'){
+  $j=verifiedOverview($argv[2],$argv[3],$argv[4]);$installed=is_file($argv[5])?json_decode(file_get_contents($argv[5]),true):[];
+  foreach($installed['components']??[] as $name=>$local)if(isset($j['components'][$name]))requireValue(is_string($local)&&!version_compare($local,$j['components'][$name],'>'),'Refusing to downgrade installed component: '.$name);
+ }elseif($action==='overview-match'){
+  $j=verifiedOverview($argv[2],$argv[3],$argv[4]);$candidate=json_decode(file_get_contents($argv[5].'/RELEASE.json'),true,512,JSON_THROW_ON_ERROR);
+  requireValue(($candidate['components']??null)==$j['components'],'Archive component versions do not match the approved overview');
+ }elseif($action==='checksum'){
   $s=trim(file_get_contents($argv[2]));$name='keentool-'.$argv[4].'.tar.gz';requireValue(preg_match('/^([0-9a-f]{64})  '.preg_quote($name,'/').'$/D',$s,$m),'Invalid checksum sidecar');$hash=hash_file('sha256',$argv[3]);requireValue(hash_equals($m[1],$hash),'Release archive SHA-256 mismatch');if(($argv[5]??'-')!=='-')requireValue(hash_equals('sha256:'.$hash,$argv[5]),'GitHub asset digest mismatch');echo $hash;
  }elseif($action==='component'){componentStatus($argv[2],$argv[3],$argv[4],$argv[5]??'');}
  elseif($action==='extract'){extractVerified($argv[2],$argv[3]);}

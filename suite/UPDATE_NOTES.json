@@ -1,0 +1,8 @@
+{
+  "changes": [
+    "Check each tool against its own component version; unrelated KeenTool releases do not trigger a tool update.",
+    "Check all updates lists the installed and available versions of all five components.",
+    "Review changes and coordinated installation scope before confirming the package download.",
+    "Verify or repair installed program files separately from ordinary version checks."
+  ]
+}

@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KeenTool stable bootstrap 1.0.1. Downloaded over trusted GitHub HTTPS; verify its source before running.
+# KeenTool stable bootstrap 1.0.2. Downloaded over trusted GitHub HTTPS; verify its source before running.
 set -Eeuo pipefail
 umask 077
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
@@ -135,7 +135,7 @@ kt_dep_ensure() {
 KT_BOOTSTRAP_DEPS
 cat > "$work/release_update.php" <<'KT_BOOTSTRAP_PHP'
 <?php
-// KeenTool release verification/extraction 1.0.1. CLI only; downloaded code is never evaluated here.
+// KeenTool release verification/extraction 1.0.2. CLI only; downloaded code is never evaluated here.
 if(PHP_SAPI!=='cli')exit(1);
 umask(0077);
 function requireValue($ok,$message){if(!$ok)throw new RuntimeException($message);}
@@ -165,6 +165,44 @@ function metadata($release,$installed,$legacy){
  $digest=$found[$name]['digest']??'';requireValue($digest===''||preg_match('/^sha256:[0-9a-f]{64}$/D',$digest),'Unsupported asset digest');
  $current=currentVersion($installed,$legacy);
  return [$version,$current,newer($version,$current)?'1':'0',$found[$name]['browser_download_url'],$found[$name.'.sha256']['browser_download_url'],$digest?:'-'];
+}
+// Lightweight metadata is bound to the selected published release and GitHub asset digest.
+function overviewAsset($release){
+ $version=substr($release['tag_name'],1);$name='keentool-'.$version.'-manifest.json';$found=null;
+ foreach($release['assets']??[] as $asset){if(($asset['name']??'')!==$name)continue;
+  requireValue($found===null,'Duplicate overview asset');$found=$asset;
+  requireValue(($asset['browser_download_url']??'')==='https://github.com/mattheweli/KeenTool/releases/download/v'.$version.'/'.$name&&($asset['state']??'')==='uploaded','Unexpected overview asset URL/state');
+  requireValue(is_int($asset['size']??null)&&$asset['size']>0&&$asset['size']<=65536,'Overview asset exceeds the download limit');
+  requireValue(preg_match('/^sha256:[0-9a-f]{64}$/D',$asset['digest']??''),'Overview asset needs a GitHub SHA-256 digest');
+ }
+ return $found?[$found['browser_download_url'],$found['digest']]:['-','-'];
+}
+function verifiedOverview($path,$version,$digest){
+ requireValue(hash_equals('sha256:'.hash_file('sha256',$path),$digest),'Overview SHA-256 mismatch');
+ $j=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);
+ requireValue(($j['suite']??'')==='KeenTool'&&($j['version']??'')===$version&&($j['channel']??'')==='stable','Overview release mismatch');
+ foreach(['KeenTool','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'] as $name)requireValue(stableVersion($j['components'][$name]??null),'Missing overview component: '.$name);
+ requireValue($j['components']['KeenTool']===$version,'Inconsistent manager version');
+ foreach($j['changes']??[] as $line)requireValue(is_string($line)&&strlen($line)<=1000&&!preg_match('/[\x00-\x1f\x7f]/',$line),'Unsafe release note');
+ return $j;
+}
+function overviewStatus($j,$installedFile,$legacy,$scope,$selectionOnly=false){
+ $installed=is_file($installedFile)?json_decode(file_get_contents($installedFile),true):[];$current=currentVersion($installedFile,$legacy);
+ $names=['KeenTool','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'];requireValue($scope===''||in_array($scope,$names,true),'Unknown overview scope');$selected=false;$changed=[];$newerComponents=[];
+ foreach($names as $name){$local=$installed['components'][$name]??($name==='KeenTool'?$current:'unknown');requireValue(is_string($local),'Invalid installed component version');
+  $remote=$j['components'][$name];if($local!=='unknown'&&version_compare($local,$remote,'>'))$newerComponents[]=$name;$upgrade=$local==='unknown'||newer($remote,$local);if($upgrade)$changed[]=$name.': '.$local.' -> '.$remote;
+  if(($scope===''||$scope===$name)&&$upgrade)$selected=true;
+  if(!$selectionOnly&&($scope===''||$scope===$name))printf("%-20s installed %-12s available %-12s %s\n",$name,$local,$remote,$upgrade?'UPDATE AVAILABLE':($local===$remote?'CURRENT':'LOCAL VERSION NEWER'));
+ }
+ // A component cannot authorize downgrading a newer coordinated installation.
+ if(version_compare($current,$j['version'],'>')||$newerComponents)$selected=false;
+ if(!$selectionOnly&&$newerComponents)echo 'Coordinated update blocked: newer installed components ('.implode(', ',$newerComponents)."). Downgrades are not permitted.\n";
+ if($selectionOnly){echo $selected?'1':'0';return;}
+ if(!$selected){echo "No update is available for the selected scope.\n";return;}
+ echo "\nChanges in the coordinated installation:\n";foreach($changed as $line)echo ' - '.$line."\n";
+ echo 'Shared runtime and installer: coordinated suite '.$current.' -> '.$j['version'].".\n";
+ echo "Installation applies the complete verified package, including unchanged components, to keep shared files compatible.\n";
+ foreach($j['changes']??[] as $line)echo ' - '.$line."\n";
 }
 function exactRead($stream,$size){$out='';while(strlen($out)<$size&&!feof($stream)){$v=fread($stream,$size-strlen($out));requireValue($v!==false,'Archive read failed');$out.=$v;}requireValue(strlen($out)===$size,'Truncated archive');return $out;}
 function octalNumber($s){$s=trim($s,"\0 ");requireValue($s===''||preg_match('/^[0-7]{1,12}$/D',$s),'Unsupported archive numeric field');return $s===''?0:octdec($s);}
@@ -233,7 +271,16 @@ try{
  $action=$argv[1]??'';
  if($action==='flag'){requireValue(stableVersion($argv[3]??''),'Invalid version flag');$tmp=tempnam(dirname($argv[2]),'.kt-version-');requireValue($tmp!==false,'Cannot stage version flag');try{requireValue(file_put_contents($tmp,$argv[3]."\n")!==false&&chmod($tmp,0600)&&rename($tmp,$argv[2]),'Cannot store version flag');}finally{if(is_file($tmp))unlink($tmp);}}
  elseif($action==='metadata'){echo implode("\t",metadata(json_decode(stream_get_contents(STDIN),true),$argv[2],$argv[3]));}
- elseif($action==='checksum'){
+ elseif($action==='overview-asset'){echo implode("\t",overviewAsset(json_decode(stream_get_contents(STDIN),true,512,JSON_THROW_ON_ERROR)));}
+ elseif($action==='overview'||$action==='selection'){
+  $j=verifiedOverview($argv[2],$argv[3],$argv[4]);overviewStatus($j,$argv[5],$argv[6],$argv[7]??'',$action==='selection');
+ }elseif($action==='overview-safe'){
+  $j=verifiedOverview($argv[2],$argv[3],$argv[4]);$installed=is_file($argv[5])?json_decode(file_get_contents($argv[5]),true):[];
+  foreach($installed['components']??[] as $name=>$local)if(isset($j['components'][$name]))requireValue(is_string($local)&&!version_compare($local,$j['components'][$name],'>'),'Refusing to downgrade installed component: '.$name);
+ }elseif($action==='overview-match'){
+  $j=verifiedOverview($argv[2],$argv[3],$argv[4]);$candidate=json_decode(file_get_contents($argv[5].'/RELEASE.json'),true,512,JSON_THROW_ON_ERROR);
+  requireValue(($candidate['components']??null)==$j['components'],'Archive component versions do not match the approved overview');
+ }elseif($action==='checksum'){
   $s=trim(file_get_contents($argv[2]));$name='keentool-'.$argv[4].'.tar.gz';requireValue(preg_match('/^([0-9a-f]{64})  '.preg_quote($name,'/').'$/D',$s,$m),'Invalid checksum sidecar');$hash=hash_file('sha256',$argv[3]);requireValue(hash_equals($m[1],$hash),'Release archive SHA-256 mismatch');if(($argv[5]??'-')!=='-')requireValue(hash_equals('sha256:'.$hash,$argv[5]),'GitHub asset digest mismatch');echo $hash;
  }elseif($action==='component'){componentStatus($argv[2],$argv[3],$argv[4],$argv[5]??'');}
  elseif($action==='extract'){extractVerified($argv[2],$argv[3]);}
@@ -243,13 +290,13 @@ try{
 KT_BOOTSTRAP_PHP
 cat > "$work/keentool_update" <<'KT_BOOTSTRAP_SH'
 #!/opt/bin/bash
-# KeenTool remote release updater 1.0.1 — 2026-10-23.
+# KeenTool remote release updater 1.0.2 — 2026-10-23.
 set -Eeuo pipefail
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 umask 077
-check=false;yes=false;reinstall=false;install_deps=false;component='';local_package=''
+check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false
 while [ "$#" -gt 0 ];do
- case "$1" in --check)check=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path]';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
+ case "$1" in --check)check=true;; --repair)repair=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--repair|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path]';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
 done
 case "$component" in ''|KeenTool|keenetic-firewall|keenetic-pingtool|Traffic_manager|SMB_Backup_tool);;*)echo 'Unknown suite component' >&2;exit 2;;esac
 [ "$check" != true ] || [ "$install_deps" != true ] || { echo '--install-deps cannot be used with --check' >&2;exit 2; }
@@ -278,28 +325,62 @@ if [ "$status" = 404 ];then echo 'No published stable KeenTool release is availa
 [ "$rc" = 0 ] && [ "$status" = 200 ] || { echo "GitHub release check failed (HTTP $status, curl $rc); installed files are unchanged." >&2;exit 1; }
 info=$("$php_cli" "$helper" metadata "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "${KT_UPDATE_LEGACY:-/opt/bin/keentool}" < "$work/release.json")
 IFS=$'\t' read -r version current available archive_url checksum_url digest <<< "$info"
-if [ "$reinstall" = true ] && [ "$current" = "$version" ];then available=1;fi
-if [ "$available" != 1 ] && [ -z "$component" ];then rm -f "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}";echo "KeenTool suite $current is current (latest stable: $version).";exit 0;fi
-if [ -n "$component" ] && "$php_cli" -r 'exit(version_compare($argv[1],$argv[2],">")?0:1);' "$current" "$version";then echo 'Local suite is newer; component repair cannot downgrade it.';exit 0;fi
-[ "$available" != 1 ] || "$php_cli" "$helper" flag "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}" "$version"
-echo "KeenTool suite: installed $current; available $version"
-[ "$check" != true ] || [ -n "$component" ] || exit 0
+# Checks fetch only release metadata and its small component overview; no package audit.
+overview_info=$("$php_cli" "$helper" overview-asset < "$work/release.json")
+IFS=$'\t' read -r overview_url overview_digest <<< "$overview_info"
+[ -n "${overview_url:-}" ] && [ -n "${overview_digest:-}" ] || { echo 'Invalid release overview metadata' >&2;exit 1; }
+if "$php_cli" -r 'exit(version_compare($argv[1],$argv[2],">")?0:1);' "$current" "$version";then
+ echo 'Local suite is newer; this release cannot downgrade it.';exit 0
+fi
+if [ "$overview_url" != '-' ];then
+ curl "${curl_opts[@]}" --max-filesize 65536 "$overview_url" -o "$work/overview.json"
+ "$php_cli" "$helper" overview "$work/overview.json" "$version" "$overview_digest" "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "${KT_UPDATE_LEGACY:-/opt/bin/keentool}" "$component"
+ available=$("$php_cli" "$helper" selection "$work/overview.json" "$version" "$overview_digest" "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "${KT_UPDATE_LEGACY:-/opt/bin/keentool}" "$component")
+else
+ if [ -n "$component" ] && [ "$repair" != true ];then
+  echo 'This older release has no component overview. Use Check all updates or explicitly verify/repair the package.';exit 0
+ fi
+ echo "KeenTool suite: installed $current; available $version"
+ echo 'This release predates component overviews; the complete coordinated suite is selected.'
+fi
+if [ "$available" = 1 ];then "$php_cli" "$helper" flag "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}" "$version";
+elif [ -z "$component" ];then
+ rm -f "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}"
+ [ "$overview_url" != '-' ] || echo "KeenTool suite $current is current (latest stable: $version)."
+fi
+if [ "$check" = true ] && [ "$repair" != true ];then exit 0;fi
+if [ "$available" != 1 ] && [ "$reinstall" != true ] && [ "$repair" != true ];then exit 0;fi
+if [ -f "$work/overview.json" ];then
+ "$php_cli" "$helper" overview-safe "$work/overview.json" "$version" "$overview_digest" "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}"
+fi
+confirm(){
+ [ "$yes" != true ] || return 0
+ [ -t 0 ] || { echo 'Run interactively to confirm, or use --yes explicitly.';return 1; }
+ local answer;read -r -p "$1 [y/N] " answer
+ [[ "$answer" = y || "$answer" = Y ]]
+}
+if [ "$repair" = true ];then
+ echo 'Explicit file verification compares all installed program files with the latest verified package; settings and databases are excluded.'
+ confirm 'Download the complete package for file verification?' || exit 0
+else
+ [ "$reinstall" != true ] || echo 'Explicit reinstall requested: the complete coordinated package will be installed.'
+ confirm 'Apply this coordinated update (download, verify and install)?' || exit 0
+fi
 curl "${curl_opts[@]}" --max-filesize 1024 "$checksum_url" -o "$work/archive.sha256"
 curl "${curl_opts[@]}" --max-filesize 33554432 "$archive_url" -o "$work/archive.tar.gz"
 "$php_cli" "$helper" checksum "$work/archive.sha256" "$work/archive.tar.gz" "$version" "$digest" >/dev/null
 mkdir -m 700 "$work/package"
 # Validate paths/types and every file checksum while extracting into an empty private directory.
 gzip -dc "$work/archive.tar.gz" | "$php_cli" "$helper" extract "$work/package" "$version" >/dev/null
-if [ -n "$component" ];then
-    audit=$("$php_cli" "$helper" component "$work/package" "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "$component" "${KT_INSTALL_ROOT:-}")
-    printf '%s\n' "$audit"
-    if [ "$available" != 1 ] && [ "$reinstall" != true ] && [[ "$audit" = *'All installed package files match the verified release.'* ]];then exit 0;fi
+if [ -f "$work/overview.json" ];then
+ "$php_cli" "$helper" overview-match "$work/overview.json" "$version" "$overview_digest" "$work/package"
 fi
-[ "$check" != true ] || exit 0
-if [ "$yes" != true ];then
- [ -t 0 ] || { echo 'Run keentool --update interactively, or use --yes to install explicitly.';exit 0; }
- read -r -p 'Download, verify and install the complete release? [y/N] ' answer
- [[ "$answer" = y || "$answer" = Y ]] || exit 0
+if [ "$repair" = true ];then
+ audit=$("$php_cli" "$helper" component "$work/package" "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "${component:-KeenTool}" "${KT_INSTALL_ROOT:-}")
+ printf '%s\n' "$audit"
+ [ "$check" != true ] || exit 0
+ [[ "$audit" != *'All installed package files match the verified release.'* ]] || exit 0
+ confirm 'Apply the complete verified package to repair these program files?' || exit 0
 fi
 [ "$(id -u)" = 0 ] || { echo 'Run the upgrade as root' >&2;exit 1; }
 if [ -r "$work/package/support/dependencies.sh" ];then

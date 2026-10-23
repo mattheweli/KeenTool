@@ -1,0 +1,237 @@
+[
+  {
+    "test": "admin-controls.js",
+    "code": 0,
+    "output": "PASS: guest controls, login form, CSRF rotation, protected POST, logout, password-only login, IP panel visibility, no token prompt.\n"
+  },
+  {
+    "test": "dashboard-availability.js",
+    "code": 0,
+    "output": "PASS: missing monitor data differs from disabled service; loaded/down monitors and forbidden log diagnostics.\n"
+  },
+  {
+    "test": "density-controls.js",
+    "code": 0,
+    "output": "PASS: density defaults, switching, persistence across monitor pages, invalid-value fallback, unavailable storage and no irrelevant home control.\n"
+  },
+  {
+    "test": "firewall-indicator.js",
+    "code": 0,
+    "output": "PASS: green only for enabled/linked rules, off on failure/disabled, dot grouping without precision loss.\n"
+  },
+  {
+    "test": "geography.js",
+    "code": 0,
+    "output": "PASS: full numeric counts, unknown excluded from country ranking, percentage denominator, gradient/tooltip, public details, period refresh, no-data and pending export.\n"
+  },
+  {
+    "test": "layout-controls.js",
+    "code": 0,
+    "output": "PASS: menu collapse/persistence, chart resize, timestamp fallback and full-width/responsive layout declarations.\nPASS: Security snapshot waiting/ready/stale/error/missing-time states and immediate asynchronous refresh.\n"
+  },
+  {
+    "test": "log-controls.js",
+    "code": 0,
+    "output": "PASS: readable dates, search/protocol filters, text-only rendering, pause, explicit refresh and follow-tail controls.\n"
+  },
+  {
+    "test": "log-pagination.js",
+    "code": 0,
+    "output": "PASS: full log loads on expansion, automatic continuation without extra controls, closed-pane skipping/cancellation, complete-only publication, auto-refresh, retry/rotation handling and System log open by default.\n"
+  },
+  {
+    "test": "number-format.js",
+    "code": 0,
+    "output": "PASS: 1.234,56 presentation, exact large integers, signed values, size/rate units, strict localized input, shared formatter on every page and live full-width Dashboard security states.\n"
+  },
+  {
+    "test": "port-details.js",
+    "code": 0,
+    "output": "PASS: public port modal opens/loads all entries, copies/downloads/closes, IPv6 filename safe, existing attacker modal retained, path validation and fetch errors.\n"
+  },
+  {
+    "test": "security-page.js",
+    "code": 0,
+    "output": "PASS: standalone Security page, no duplicate IDs/firewall tab, guest write gate, login/logout, absolute same-origin API and CSRF-protected unban.\n"
+  },
+  {
+    "test": "security-ui.js",
+    "code": 0,
+    "output": "PASS: security snapshot/timeline render as text, period deltas, public diagnostic modal, guest unban hidden and policy confirmation lifecycle.\n"
+  },
+  {
+    "test": "settings-ui.js",
+    "code": 0,
+    "output": "PASS: Settings guest gate, typed/schema-safe rendering, changed-values-only writes/revisions, conflict feedback, firewall confirmation controls and clearing private configuration on logout.\n"
+  },
+  {
+    "test": "unified-refresh.js",
+    "code": 0,
+    "output": "PASS: shared cadence/default/Off/manual, navigation persistence, storage synchronization, hidden tabs, overlap prevention, slow refresh with Off, recovery after errors, blocked storage, real Ping/Traffic adapters and removal of old page timers.\n"
+  },
+  {
+    "test": "blocklist-diagnostics-check.py",
+    "code": 0,
+    "output": "PASS: real updater functions with mocked feeds/ipset: HTTP/DNS/timeout/TLS/empty input, cache fallback, capacity/memory/line diagnostics, create/swap/save failures and retained recovery set on rollback failure.\nPASS: IPv6-only GeoIP exclusions are explicit; IPv4 country selection remains intact and the default keeps all configured countries.\n"
+  },
+  {
+    "test": "blocklist-variation-check.py",
+    "code": 0,
+    "output": "PASS: significant valid nightly GeoIP shrink is installed; main-list >75% shrink and empty GeoIP are rejected, previous installed sets retained.\n"
+  },
+  {
+    "test": "bootstrap-dependencies-check.py",
+    "code": 0,
+    "output": "PASS: missing/broken PHP CLI, read-only and noninteractive checks, explicit package consent, combined suite capability report, only missing packages installed, no broad upgrade/config changes and failed-repair verification.\n"
+  },
+  {
+    "test": "cron-bootstrap-check.py",
+    "code": 0,
+    "output": "PASS: real init wrapper: start stopped cron at install/boot, leave active daemon alone, reject ambiguous/missing/failed init and false success; schedules unchanged.\n"
+  },
+  {
+    "test": "email-sender-check.py",
+    "code": 0,
+    "output": "PASS: complete shared layout via real PHP, encoded HTML/plain MIME, two-argument legacy callers, custom security HTML, missing/failed renderer fallback, private temporary files, cleanup and failed SMTP status; transport mocked.\n"
+  },
+  {
+    "test": "entware-worker-check.py",
+    "code": 0,
+    "output": "PASS: actual Entware manager check/dedup, failed index retains list, predownload before reverse stop, ascending restart, upgrade failure returns nonzero and restarts services; all opkg/SMTP/services mocked.\n"
+  },
+  {
+    "test": "firewall-config-check.py",
+    "code": 0,
+    "output": "PASS: atomic manager config replacement preserves logging/list safety/future options, mode 600 and prior file on temp allocation failure.\n"
+  },
+  {
+    "test": "firewall-counter-check.py",
+    "code": 0,
+    "output": "PASS: full DROP totals ignore sampled NFLOG counters, shared legacy manual chain is counted once, scan/connlimit/bruteforce drops are combined.\n"
+  },
+  {
+    "test": "firewall-history-check.py",
+    "code": 0,
+    "output": "PASS: hourly/daily rollup, 23/25-hour DST days, exact IP/list and calendar-day totals, untouched recent samples/ports/reporting/global counters, verified private backup, idempotence, daily cadence, no detail re-expansion, disabled policy, invalid settings, backup/overflow rollback, shared writer lock and PHP core-only portability.\n"
+  },
+  {
+    "test": "firewall-optimize-check.py",
+    "code": 0,
+    "output": "PASS: actual SQLite optimization, verified online backup, exact table preservation incl. full ports/report state, idempotence, backup failure, unexpected-index rejection, no kernel calls and no old-index recreation.\n"
+  },
+  {
+    "test": "firewall-transaction-check.py",
+    "code": 0,
+    "output": "PASS: full hook staging, foreign rules retained, AutoBan OFF, complete health detects missing IPv6 rule, preflight failure, second-family failure rollback with/without prior rules, IPv6 teardown, disable preserves sets.\nPASS: partial list completion, failed restore keeps snapshot and completion marker absent, retry succeeds.\n"
+  },
+  {
+    "test": "geography-check.py",
+    "code": 0,
+    "output": "PASS: complete period totals beyond top-10, IPv6/subnets, unknown metadata, bounded detail rows/ports, historical port fallback, time boundaries and SQLite failure propagation.\n"
+  },
+  {
+    "test": "legacy-migration-check.py",
+    "code": 0,
+    "output": "PASS: actual public updater mv/exec handoff under a TTY, embedded verifier before shared libraries, same-version manager seeding, alpha standalone migration, consent/noninteractive check, cancellation forwarding, no-release/checksum/install failures, readiness/restart and clean staging; GitHub and installer mocked.\n"
+  },
+  {
+    "test": "mail-layout-check.py",
+    "code": 0,
+    "output": "PASS: actual shared renderer for ping/MTR, firewall reports, IPv6 attacker tables, Entware packages/results, PPP, custom security digest, escaped unknown content and quoted-printable round trip; no SMTP.\n"
+  },
+  {
+    "test": "managed-menu-update-check.py",
+    "code": 0,
+    "output": "PASS: single coordinated firewall update, independent suite/component/script versions, real file drift audit, no legacy side effects, receipt-based exec reload, no reload on decline/current/failure and receipt cleanup.\n"
+  },
+  {
+    "test": "ping-history-check.py",
+    "code": 0,
+    "output": "PASS: 1h/24h/MAX boundaries, 70000 samples retained, bounded charts, raw weighted averages, NULL latency, browser preference and range changes.\n"
+  },
+  {
+    "test": "ping-notifications-check.py",
+    "code": 0,
+    "output": "PASS: warning-only email suppression, legacy migration, complete-loss timing, partial recovery, deduplication, IPv4/IPv6 independence, persistent state, target changes, clock errors and WAN labels; no SMTP.\n"
+  },
+  {
+    "test": "ping-settings-check.py",
+    "code": 0,
+    "output": "PASS: menu chart-cap persistence/replacement, invalid values rejected, retention settings and unrelated config preserved.\n"
+  },
+  {
+    "test": "port-details-check.py",
+    "code": 0,
+    "output": "PASS: renderer with strict function-call parsing exports 110 ports; +107 public button/tooltip; rendering failure propagates and removes broken cache.\n"
+  },
+  {
+    "test": "portable-stat-check.py",
+    "code": 0,
+    "output": "PASS: BusyBox stat without -c falls back to PHP core for size, inode, mtime and device/inode identity, including paths with spaces.\n"
+  },
+  {
+    "test": "release-installer-check.py",
+    "code": 0,
+    "output": "PASS: fresh install/TLS/default schedules, upstream inline settings + PCAP migration, alpha settings, database/credentials/schedule preservation, file-mode rollback, automatic rollback on service failure, symlink rejection and corrupt-backup refusal. Service lifecycle commands mocked; PHP/file/TLS transactions real.\n"
+  },
+  {
+    "test": "remote-update-check.py",
+    "code": 0,
+    "output": "PASS: real remote updater, stable-only GitHub metadata/URLs/digests, check versus apply, no downgrade, alpha/public version detection, HTTPS-only curl, 404/403 handling, tar/PAX streaming verification, traversal/symlink/internal checksum rejection, atomic flag and staging cleanup; independent component/all-version overviews, no archive before consent, interactive decline, explicit repair separation, overview digests and archive consistency; GitHub/installer mocked, no network or router writes.\n"
+  },
+  {
+    "test": "security-api-check.py",
+    "code": 0,
+    "output": "PASS: real PHP-CGI with broker transport stub: HTTPS/origin enforcement, guest write/private-audit denial, secure session cookies, password login/rotation, CSRF for ban/confirmation/logout, bounded broker payload and no credentials forwarded.\n"
+  },
+  {
+    "test": "security-digest-check.py",
+    "code": 0,
+    "output": "PASS: size scaling, health colors, cached/rejected/size-warning list outcomes, grouped counts and localized changes, attempt/success dates with timezone, unknown freshness, rejected candidate suppression, HTML escaping/line breaks and neutral Recent events; no SMTP.\n"
+  },
+  {
+    "test": "security-engine-check.py",
+    "code": 0,
+    "output": "PASS: real PHP engine + SQLite, protected client/management/whitelist CIDRs, injection rejection, TTL/permanent bans, expiry/unban/persistence, diagnostics, confirmation/rollback/conflict, GeoIP warnings/baselines, complete comparisons, public/private audit and settings validation.\n"
+  },
+  {
+    "test": "smb-backup-check.py",
+    "code": 0,
+    "output": "PASS: actual SMB backup functions build/test archives and manifest, verify remote readback, rename/purge only after verification; corrupt readback skips retention. SMB transport/router dump mocked.\n"
+  },
+  {
+    "test": "systemlog-pagination-check.py",
+    "code": 0,
+    "output": "PASS: real PHP log pagination reconstructs complete UTF-8/blank/long-line logs, bounded pages without duplicates/gaps, stable append snapshot, rotation/copytruncate reset, cursor/path validation and unchanged private mode.\n"
+  },
+  {
+    "test": "traffic-export-check.py",
+    "code": 0,
+    "output": "PASS: real traffic script multi-interface export, dotted interface names, malformed/nonzero export retains last-good data; JSON CLI is mocked.\n"
+  },
+  {
+    "test": "uninstall-security-check.py",
+    "code": 0,
+    "output": "PASS: uninstall preview does not stop services; apply restores web isolation before broker shutdown/kernel teardown, removes managed sets/helpers and retains security data.\n"
+  },
+  {
+    "test": "vpn-cursor-check.py",
+    "code": 0,
+    "output": "PASS: actual VPN scanner skips history, retries incomplete lines, bans only after threshold, unchanged cursor never recounts failures.\n"
+  },
+  {
+    "test": "wan-service-check.py",
+    "code": 0,
+    "output": "PASS: standalone service start/idempotence/stop/status/disabled config; detects PPP recovery during slow SMTP independently of ping jobs.\n"
+  },
+  {
+    "test": "wan-syslog-check.py",
+    "code": 0,
+    "output": "PASS: initial baseline, actual 23-second PPP outage pattern, repeated-down suppression, IPv6 link-local excluded, unchanged-log dedup, rename rotation, SMTP retry, clock uncertainty, partial lines and interface filtering.\n"
+  },
+  {
+    "test": "web-isolation-check.py",
+    "code": 0,
+    "output": "PASS: web isolation read-only plan, failed config validation restores originals, successful socket/account configuration preserves mode, explicit rollback restores config/permissions; identity, lighttpd and restart mocked.\n"
+  }
+]

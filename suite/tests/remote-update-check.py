@@ -32,7 +32,7 @@ import sys,os,json
 from pathlib import Path
 a=sys.argv[1:];out=Path(a[a.index('-o')+1]);url=next(x for x in a if x.startswith('https://'));code=os.environ.get('KT_TEST_HTTP','200')
 with open(os.environ['KT_TEST_CURL'],'a') as f:f.write(json.dumps(a)+'\\n')
-source=os.environ['KT_TEST_API'] if url.endswith('/latest') else os.environ['KT_TEST_SIDECAR'] if url.endswith('.sha256') else os.environ['KT_TEST_ARCHIVE'];out.write_bytes(Path(source).read_bytes())
+source=os.environ['KT_TEST_API'] if url.endswith('/latest') else os.environ['KT_TEST_SIDECAR'] if url.endswith('.sha256') else os.environ.get('KT_TEST_OVERVIEW',os.environ['KT_TEST_ARCHIVE']) if url.endswith('-manifest.json') else os.environ['KT_TEST_ARCHIVE'];out.write_bytes(Path(source).read_bytes())
 if '-w' in a:print(code,end='')
 sys.exit(0 if code=='200' else 22)
 ''');curl.chmod(0o755)
@@ -61,15 +61,57 @@ sys.exit(0 if code=='200' else 22)
  pack();api.write_text(json.dumps(release()));victim=b/'victim';victim.write_text('keep');flag.unlink(missing_ok=True);flag.symlink_to(victim);r=run('--check');assert r.returncode==0 and victim.read_text()=='keep' and not flag.is_symlink()
  # A receipt is created only after a successful installation, for automatic menu restart.
  receipt=b/'receipt';r=run('--yes',extra={'KT_UPDATE_RECEIPT':str(receipt)});assert r.returncode==0 and receipt.read_text().strip()=='2.0.0';capture.unlink();receipt.unlink()
- # Component checks must compare manifest versions and detect file drift even at the current suite version.
+ # Explicit repair audits source drift; ordinary component checks never audit files.
  candidate=json.loads((payload/'RELEASE.json').read_text());candidate['components']={'keenetic-firewall':'4.0.1'};(payload/'RELEASE.json').write_text(json.dumps(candidate));(payload/'projects/keenetic-firewall/scripts').mkdir(parents=True)
  manifest=[];router=b/'router'
  for name,version in [('firewall_stats.sh','4.0.1'),('firewall_monitor','4.0.0'),('firewall_manager.sh','3.0.0'),('100-firewall.sh','3.0.0')]:
   rel='projects/keenetic-firewall/scripts/'+name;f=payload/rel;f.write_text('# SCRIPT v'+version+'\n');dest=router/'opt/bin'/name;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(f.read_bytes());dest.chmod(0o755);manifest.append(rel+'\t/opt/bin/'+name+'\t755')
  (payload/'INSTALL.tsv').write_text('\n'.join(manifest)+'\n');checksums();pack();api.write_text(json.dumps(release()));installed.write_text(json.dumps(candidate))
- r=run('--component','keenetic-firewall','--yes',extra={'KT_INSTALL_ROOT':str(router)});assert r.returncode==0 and 'All installed package files match' in r.stdout and not capture.exists(),r.stdout+r.stderr
+ r=run('--component','keenetic-firewall','--repair','--yes',extra={'KT_INSTALL_ROOT':str(router)});assert r.returncode==0 and 'All installed package files match' in r.stdout and not capture.exists(),r.stdout+r.stderr
  (router/'opt/bin/firewall_stats.sh').write_text('# SCRIPT v4.0.0\n')
- r=run('--component','keenetic-firewall','--check',extra={'KT_INSTALL_ROOT':str(router)});assert r.returncode==0 and '1 package files are missing, different' in r.stdout and not capture.exists()
- r=run('--component','keenetic-firewall','--yes',extra={'KT_INSTALL_ROOT':str(router),'KT_UPDATE_RECEIPT':str(receipt)});assert r.returncode==0 and 'keenetic-firewall: installed 4.0.1; available 4.0.1' in r.stdout and receipt.exists(),r.stdout+r.stderr;assert len(capture.read_text().splitlines())==2;capture.unlink()
- installed.write_text('{"version":"2.1.0"}');r=run('--component','keenetic-firewall','--yes',extra={'KT_INSTALL_ROOT':str(router)});assert r.returncode==0 and 'cannot downgrade' in r.stdout and not capture.exists()
-print('PASS: real remote updater, stable-only GitHub metadata/URLs/digests, check versus apply, no downgrade, alpha/public version detection, HTTPS-only curl, 404/403 handling, tar/PAX streaming verification, traversal/symlink/internal checksum rejection, atomic flag and staging cleanup; GitHub/installer mocked, no network or router writes.')
+ r=run('--component','keenetic-firewall','--repair','--check','--yes',extra={'KT_INSTALL_ROOT':str(router)});assert r.returncode==0 and '1 package files are missing, different' in r.stdout and not capture.exists()
+ r=run('--component','keenetic-firewall','--repair','--yes',extra={'KT_INSTALL_ROOT':str(router),'KT_UPDATE_RECEIPT':str(receipt)});assert r.returncode==0 and 'keenetic-firewall: installed 4.0.1; available 4.0.1' in r.stdout and receipt.exists(),r.stdout+r.stderr;assert len(capture.read_text().splitlines())==2;capture.unlink()
+ installed.write_text('{"version":"2.1.0"}');r=run('--component','keenetic-firewall','--repair','--yes',extra={'KT_INSTALL_ROOT':str(router)});assert r.returncode==0 and 'cannot downgrade' in r.stdout and not capture.exists()
+ # Lightweight version checks must be independent, verified and download-free before consent.
+ candidate['components']={'KeenTool':'2.0.0','keenetic-firewall':'4.0.1','keenetic-pingtool':'2.0.0','Traffic_manager':'2.0.0','SMB_Backup_tool':'2.0.0'}
+ (payload/'RELEASE.json').write_text(json.dumps(candidate));checksums();pack()
+ overview=b/'overview.json';env['KT_TEST_OVERVIEW']=str(overview)
+ overview.write_text(json.dumps({**candidate,'changes':['Independent component updates and explicit repair.']}))
+ def publish_overview():
+  j=release();j['assets'].append({'name':'keentool-2.0.0-manifest.json','state':'uploaded','size':overview.stat().st_size,'digest':'sha256:'+hashlib.sha256(overview.read_bytes()).hexdigest(),'browser_download_url':'https://github.com/mattheweli/KeenTool/releases/download/v2.0.0/keentool-2.0.0-manifest.json'});api.write_text(json.dumps(j));return j
+ publish_overview();local=copy.deepcopy(candidate);local['version']='1.9.0';local['components']['KeenTool']='1.9.0';installed.write_text(json.dumps(local))
+ def reset_calls():calls.unlink(missing_ok=True)
+ def urls():return [next(x for x in json.loads(line) if x.startswith('https://')) for line in calls.read_text().splitlines()]
+ reset_calls();r=run('--component','keenetic-firewall','--yes');assert r.returncode==0 and 'CURRENT' in r.stdout and 'KeenTool:' not in r.stdout and not capture.exists(),r.stdout+r.stderr
+ assert len(urls())==2 and all(not u.endswith('.tar.gz') for u in urls())
+ reset_calls();r=run('--check');assert r.returncode==0 and all(name in r.stdout for name in candidate['components']) and 'UPDATE AVAILABLE' in r.stdout and 'Shared runtime' in r.stdout and len(urls())==2 and not capture.exists(),r.stdout+r.stderr
+ reset_calls();r=run();assert r.returncode==0 and 'confirm' in r.stdout and len(urls())==2 and not capture.exists(),r.stdout+r.stderr
+ # Declining an interactive prompt never fetches the archive/checksum or installs anything.
+ master,slave=os.openpty();reset_calls()
+ proc=subprocess.Popen(['bash',str(root/'support/keentool_update')],stdin=slave,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,text=True);os.close(slave);os.write(master,b'n\n');out,err=proc.communicate(timeout=20);os.close(master)
+ assert proc.returncode==0 and 'Apply this coordinated update' in err and len(urls())==2 and not capture.exists(),out+err
+ # A real firewall update reports its own change and all coordinated dependencies before apply.
+ local['components']['keenetic-firewall']='4.0.0';installed.write_text(json.dumps(local));reset_calls();r=run('--component','keenetic-firewall','--check')
+ assert r.returncode==0 and 'keenetic-firewall: 4.0.0 -> 4.0.1' in r.stdout and 'KeenTool: 1.9.0 -> 2.0.0' in r.stdout and len(urls())==2,r.stdout+r.stderr
+ r=run('--component','keenetic-firewall','--yes');assert r.returncode==0 and capture.exists(),r.stdout+r.stderr;capture.unlink()
+ # Version checks do not repair stale files at the same declared version.
+ installed.write_text(json.dumps(candidate));reset_calls();r=run('--component','keenetic-firewall','--yes',extra={'KT_INSTALL_ROOT':str(router)})
+ assert r.returncode==0 and 'CURRENT' in r.stdout and 'package files are missing' not in r.stdout and len(urls())==2 and not capture.exists(),r.stdout+r.stderr
+ # A mixed installation with a newer component cannot be downgraded by reinstall/repair.
+ newer_local=copy.deepcopy(local);newer_local['components']['keenetic-firewall']='4.0.2';installed.write_text(json.dumps(newer_local));reset_calls();r=run('--yes','--reinstall')
+ assert r.returncode!=0 and 'Refusing to downgrade installed component' in r.stderr and len(urls())==2 and not capture.exists(),r.stdout+r.stderr
+ installed.write_text(json.dumps(local))
+ # Tampered/foreign/oversized/duplicate overviews must stop before package download.
+ baseline=overview.read_bytes();overview.write_bytes(baseline+b' ');reset_calls();r=run('--yes');assert r.returncode!=0 and 'Overview SHA-256 mismatch' in r.stderr and len(urls())==2
+ overview.write_bytes(baseline)
+ for mutation in ['foreign','size','duplicate','digest']:
+  j=publish_overview()
+  if mutation=='foreign':j['assets'][-1]['browser_download_url']='https://evil.invalid/overview.json'
+  elif mutation=='size':j['assets'][-1]['size']=65537
+  elif mutation=='digest':j['assets'][-1].pop('digest')
+  else:j['assets'].append(copy.deepcopy(j['assets'][-1]))
+  api.write_text(json.dumps(j));reset_calls();r=run('--yes');assert r.returncode!=0 and len(urls())==1 and not capture.exists(),r.stdout+r.stderr
+ publish_overview();local['components']['keenetic-firewall']='4.0.0';installed.write_text(json.dumps(local))
+ # The approved component versions must exactly match the subsequently verified archive.
+ altered=copy.deepcopy(candidate);altered['components']['keenetic-firewall']='4.0.2';(payload/'RELEASE.json').write_text(json.dumps(altered));checksums();pack();publish_overview();r=run('--yes');assert r.returncode!=0 and 'do not match the approved overview' in r.stderr and not capture.exists(),r.stdout+r.stderr
+print('PASS: real remote updater, stable-only GitHub metadata/URLs/digests, check versus apply, no downgrade, alpha/public version detection, HTTPS-only curl, 404/403 handling, tar/PAX streaming verification, traversal/symlink/internal checksum rejection, atomic flag and staging cleanup; independent component/all-version overviews, no archive before consent, interactive decline, explicit repair separation, overview digests and archive consistency; GitHub/installer mocked, no network or router writes.')

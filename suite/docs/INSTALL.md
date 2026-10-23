@@ -91,3 +91,7 @@ The next scheduled firewall statistics run enables the default progressive 7/30-
 ## Bootstrap dependency and menu repair changes in 2.0.2
 
 Read [UPDATE_RECOVERY.md](UPDATE_RECOVERY.md) for interactive missing-dependency installation, read-only checks, explicit --install-deps, verified component repair and the one-time menu reopen needed when upgrading an already-running older menu. Existing firewall history settings and databases are preserved.
+
+## Component overview and separate repair in 2.0.3
+
+The main menu checks all five component versions together; a tool menu checks only that tool. Review component changes and coordinated runtime requirements before consenting to archive download. File verification/repair is explicit (--repair) and separate from version checks. See [UPDATE_RECOVERY.md](UPDATE_RECOVERY.md) for commands and compatibility.
