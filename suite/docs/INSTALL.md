@@ -87,3 +87,7 @@ The offline path remains: `keentool --update --local /absolute/path/to/extracted
 ## Firewall history in 2.0.1
 
 The next scheduled firewall statistics run enables the default progressive 7/30-day policy after a verified baseline backup. Installation itself preserves the database. Configure it in KeenTool → Firewall → History aggregation settings, or authenticated Settings → Firewall history. Read [FIREWALL_HISTORY.md](FIREWALL_HISTORY.md) before restoring a baseline backup: later events are not in that initial copy, and changing thresholds does not recover aggregated time precision.
+
+## Bootstrap dependency and menu repair changes in 2.0.2
+
+Read [UPDATE_RECOVERY.md](UPDATE_RECOVERY.md) for interactive missing-dependency installation, read-only checks, explicit --install-deps, verified component repair and the one-time menu reopen needed when upgrading an already-running older menu. Existing firewall history settings and databases are preserved.

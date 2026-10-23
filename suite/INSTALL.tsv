@@ -51,3 +51,4 @@ rollback.sh	/opt/lib/keentool/rollback.sh	755
 support/release_update.php	/opt/lib/keentool/release_update.php	644
 support/history_engine.php	/opt/lib/keentool/history_engine.php	644
 support/firewall_history	/opt/bin/firewall_history	755
+support/dependencies.sh	/opt/lib/keentool/dependencies.sh	644

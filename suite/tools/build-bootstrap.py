@@ -3,22 +3,27 @@
 from pathlib import Path
 import sys
 root=Path(__file__).resolve().parents[1]
-php=(root/'support/release_update.php').read_text();shell=(root/'support/keentool_update').read_text()
+php=(root/'support/release_update.php').read_text();shell=(root/'support/keentool_update').read_text();dependencies=(root/'support/dependencies.sh').read_text()
 out='''#!/opt/bin/bash
-# KeenTool stable bootstrap 1.0.0. Downloaded over trusted GitHub HTTPS; verify its source before running.
+# KeenTool stable bootstrap 1.0.1. Downloaded over trusted GitHub HTTPS; verify its source before running.
 set -Eeuo pipefail
 umask 077
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+for essential in mktemp cat rm;do
+ command -v "$essential" >/dev/null || { printf 'Missing bootstrap command: %s. Restore the router BusyBox utilities before migration.\n' "$essential" >&2;exit 1; }
+done
 work=$(mktemp -d "${KT_UPDATE_TMP:-/opt/tmp}/keentool-bootstrap.XXXXXX")
 child=''
 trap 'rm -rf "$work"' EXIT
 cancel(){ trap - INT TERM;[ -z "$child" ] || { kill -TERM "$child" 2>/dev/null || :;wait "$child" || :; };exit 143; }
 trap cancel INT TERM
+cat > "$work/dependencies.sh" <<'KT_BOOTSTRAP_DEPS'
+'''+dependencies+'''\nKT_BOOTSTRAP_DEPS
 cat > "$work/release_update.php" <<'KT_BOOTSTRAP_PHP'
 '''+php+'''\nKT_BOOTSTRAP_PHP
 cat > "$work/keentool_update" <<'KT_BOOTSTRAP_SH'
 '''+shell+'''\nKT_BOOTSTRAP_SH
-KT_UPDATE_BOOTSTRAP=true KT_UPDATE_HELPER="$work/release_update.php" "${KT_UPDATE_BASH:-/opt/bin/bash}" "$work/keentool_update" --reinstall "$@" <&0 & child=$!
+KT_UPDATE_BOOTSTRAP=true KT_DEPENDENCIES="$work/dependencies.sh" KT_UPDATE_HELPER="$work/release_update.php" "${KT_UPDATE_BASH:-/opt/bin/bash}" "$work/keentool_update" --reinstall "$@" <&0 & child=$!
 wait "$child";child=''
 trap - INT TERM
 '''

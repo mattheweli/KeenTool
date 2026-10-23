@@ -12,7 +12,7 @@ with tempfile.TemporaryDirectory() as td:
   root=b/name;bin=root/'opt/bin';init=root/'opt/etc/init.d';bin.mkdir(parents=True);init.mkdir(parents=True)
   for n in ['php-cli','php-cgi']:
    p=bin/n;p.write_text('#!/bin/bash\nexec '+str(php)+' -n "$@"\n');p.chmod(0o755)
-  for n in ['ipset','iptables','ip6tables','iptables-save','ip6tables-save','iptables-restore','ip6tables-restore','vnstat','tcpdump','iprange','lighttpd']:
+  for n in ['ipset','iptables','ip6tables','iptables-save','ip6tables-save','iptables-restore','ip6tables-restore','vnstat','tcpdump','iprange','lighttpd','vnstatd','mtr','ulogd','smbclient','crond','ping']:
    p=bin/n;p.write_text('#!/bin/bash\nexit 0\n');p.chmod(0o755)
   (bin/'vnstat').write_text('#!/bin/bash\nprintf \"%s\\n\" \"$*\" >> \"$KT_TEST_VNSTAT\"\n[ \"$1\" != --json ]\n')
   (bin/'sqlite3').symlink_to('/tmp/keentool-security-runtime/root/usr/bin/sqlite3')
