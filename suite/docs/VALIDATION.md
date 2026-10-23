@@ -2,7 +2,7 @@
 
 ## Automated evidence
 
-43/43 isolated checks passed. The machine-readable list is validation-results.json. Run sudo env PATH="$PATH" python3 tools/check-release.py on a Linux host with Node.js, PHP CLI/CGI and sqlite3; the fixture runtime is staged under /tmp/keentool-security-runtime. On Ubuntu 24.04, install php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3 and Node.js first. Installer/rollback fixtures require root, matching the production installer requirement. GitHub workflows preserve the isolated check results as an artifact. Tests create temporary fake router roots and mocked mail/service commands; they do not send SMTP or modify a router.
+44/44 isolated checks passed. The machine-readable list is validation-results.json. Run sudo env PATH="$PATH" python3 tools/check-release.py on a Linux host with Node.js, PHP CLI/CGI and sqlite3; the fixture runtime is staged under /tmp/keentool-security-runtime. On Ubuntu 24.04, install php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3 and Node.js first. Installer/rollback fixtures require root, matching the production installer requirement. GitHub workflows preserve the isolated check results as an artifact. Tests create temporary fake router roots and mocked mail/service commands; they do not send SMTP or modify a router.
 
 - All 14 JavaScript fixtures: administrator visibility/session flow, numeric formatting, health states, missing versus disabled monitors, expandable port lists, geography, settings types/presets/dirty-state preservation, density/navigation and unified refresh behavior.
 - Production PHP/SQLite security integration: bans/expiry, management and whitelist protections, request validation, guarded policy apply/confirm/revert, list events/comparisons, snapshots, settings revisions and HTML/plain digest queue/retry.
@@ -14,6 +14,8 @@
 - New BusyBox metadata fixture forces stat -c to fail and verifies PHP core size/inode/mtime/device identity fallback, including filenames with spaces.
 
 - Remote updater fixture: stable-only API metadata and canonical asset URLs, SHA-256/GitHub digest checks, alpha/public version detection, check versus apply, no downgrade, explicit reinstall, HTTP 404/403 handling, safe streamed TAR/PAX extraction, rejection of traversal/links/internal checksum failures, atomic cache flags and staging cleanup. Transport and install command are mocked; the verifier/extractor are production code.
+
+- Legacy migration fixture: run the historical 1.3.4 interactive updater function with a real mv/exec handoff and TTY consent; exercise the generated embedded bootstrap before any shared libraries, standalone alpha bootstrap, same-version manager seeding, readiness/restart, check-only/noninteractive behavior, cancellation forwarding, failed install/checksum/no-release behavior and private staging cleanup. GitHub transport and the transaction boundary are mocked; the existing installer fixture independently exercises real file transactions.
 
 Runtime PHP, Bash and JavaScript syntax checks passed. Six pages/templates have no alpha banner and retain automatic-year copyright and their stable version. Package, repository overlays and release assets have verified SHA-256 manifests. Native lighttpd configuration is checked by the installer on the router; no live mail-client rendering is claimed.
 

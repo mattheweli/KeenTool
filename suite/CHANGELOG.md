@@ -4,6 +4,8 @@ No tags or GitHub Releases existed in the five repositories when inspected. Thes
 
 ## KeenTool 2.0.0
 
+- Automatic public legacy migration: the existing manager update hands off to an embedded verifier before shared libraries load. Preserve consent, retry on failure, propagate cancellation and open the new menu only after full installation. Pinned alpha installations use the same standalone bootstrap.
+
 - WAN monitor shutdown waits for in-flight scans and notification work even when a trapped signal interrupts Bash wait.
 
 Baseline: `8d640c8b06968b0f24ce41feb1bc5b0a89c3f541`.

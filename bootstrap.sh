@@ -2,9 +2,12 @@
 # KeenTool stable bootstrap 1.0.0. Downloaded over trusted GitHub HTTPS; verify its source before running.
 set -Eeuo pipefail
 umask 077
-export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
-work=$(mktemp -d /opt/tmp/keentool-bootstrap.XXXXXX)
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+work=$(mktemp -d "${KT_UPDATE_TMP:-/opt/tmp}/keentool-bootstrap.XXXXXX")
+child=''
 trap 'rm -rf "$work"' EXIT
+cancel(){ trap - INT TERM;[ -z "$child" ] || { kill -TERM "$child" 2>/dev/null || :;wait "$child" || :; };exit 143; }
+trap cancel INT TERM
 cat > "$work/release_update.php" <<'KT_BOOTSTRAP_PHP'
 <?php
 // KeenTool release verification/extraction 1.0.0. CLI only; downloaded code is never evaluated here.
@@ -157,4 +160,6 @@ rm -f "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}"
 echo 'Verified GitHub release installed. Review the installer backup path and refresh generated pages.'
 
 KT_BOOTSTRAP_SH
-KT_UPDATE_BOOTSTRAP=true KT_UPDATE_HELPER="$work/release_update.php" /opt/bin/bash "$work/keentool_update" --reinstall "$@"
+KT_UPDATE_BOOTSTRAP=true KT_UPDATE_HELPER="$work/release_update.php" "${KT_UPDATE_BASH:-/opt/bin/bash}" "$work/keentool_update" --reinstall "$@" <&0 & child=$!
+wait "$child";child=''
+trap - INT TERM

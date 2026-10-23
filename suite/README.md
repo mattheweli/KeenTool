@@ -12,7 +12,7 @@ The complete suite is the supported installation unit. Shared runtime, security 
 - [Validation and live acceptance](docs/VALIDATION.md)
 - [GitHub release preparation](docs/RELEASING.md)
 
-Remote update: `keentool --check-updates` checks GitHub; `keentool --update` downloads/verifies a newer published stable suite and asks before installation. Legacy/alpha installations use the standalone bootstrap once.
+Remote update: `keentool --check-updates` checks GitHub; `keentool --update` downloads/verifies a newer published stable suite and asks before installation. Public legacy installations migrate through their existing Update KeenTool menu, using a self-contained entry before shared libraries load. Pinned alpha installations run bootstrap.sh once.
 
 Release date: 2026-10-22. Installer and shared helpers: 1.0.0. Firewall repository release: 4.0.0; component versions are listed individually. The first stable package is based on locally tested 20261020-r50 and verified public upstream commits recorded in UPSTREAM_BASELINES.json. No upstream tags or GitHub Releases existed at inspection time.
 

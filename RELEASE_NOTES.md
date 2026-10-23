@@ -1,5 +1,7 @@
 # KeenTool 2.0.0
 
+- Existing public Update KeenTool now hands off to a self-contained migration entry before shared libraries load. The entry verifies the full stable suite, preserves interactive consent, handles cancellation/retry and opens the new menu only after successful installation. Pinned alpha installations use the same standalone bootstrap once.
+
 - WAN monitor shutdown waits for in-flight scans and notification work even when a trapped signal interrupts Bash wait.
 
 Baseline: `8d640c8b06968b0f24ce41feb1bc5b0a89c3f541`.

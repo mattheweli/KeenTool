@@ -96,6 +96,10 @@
     "status": "passed"
   },
   {
+    "test": "legacy-migration-check.py",
+    "status": "passed"
+  },
+  {
     "test": "mail-layout-check.py",
     "status": "passed"
   },
@@ -121,6 +125,10 @@
   },
   {
     "test": "release-installer-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "remote-update-check.py",
     "status": "passed"
   },
   {
@@ -165,10 +173,6 @@
   },
   {
     "test": "web-isolation-check.py",
-    "status": "passed"
-  },
-  {
-    "test": "remote-update-check.py",
     "status": "passed"
   }
 ]
