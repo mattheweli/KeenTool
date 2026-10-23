@@ -18,6 +18,12 @@ print(asset)
 # Publish a lightweight component overview for checks before package download consent.
 overview={key:release[key] for key in ('suite','version','channel','components')}
 overview.update(json.loads((root/'UPDATE_NOTES.json').read_text()))
+scopes=json.loads((root/'FILE_SCOPES.json').read_text());targets=[]
+for line in (root/'INSTALL.tsv').read_text().splitlines():
+ source,path,mode=line.split('\t');data=(root/source).read_bytes();match=re.search(rb'\bv([0-9]+\.[0-9]+\.[0-9]+)\b',data[:4096])
+ targets.append({'source':source,'path':path,'mode':mode,'owner':scopes[source],'sha256':hashlib.sha256(data).hexdigest(),'version':match[1].decode() if match else '-'})
+assert set(scopes)=={t['source'] for t in targets}
+overview['targets']=targets
 manifest=out/('keentool-'+version+'-manifest.json')
 manifest.write_text(json.dumps(overview,indent=2)+'\n')
 manifest.with_name(manifest.name+'.sha256').write_text(hashlib.sha256(manifest.read_bytes()).hexdigest()+'  '+manifest.name+'\n')

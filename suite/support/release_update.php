@@ -1,5 +1,5 @@
 <?php
-// KeenTool release verification/extraction 1.0.2. CLI only; downloaded code is never evaluated here.
+// KeenTool release verification/extraction 1.0.3. CLI only; downloaded code is never evaluated here.
 if(PHP_SAPI!=='cli')exit(1);
 umask(0077);
 function requireValue($ok,$message){if(!$ok)throw new RuntimeException($message);}
@@ -46,24 +46,57 @@ function verifiedOverview($path,$version,$digest){
  $j=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);
  requireValue(($j['suite']??'')==='KeenTool'&&($j['version']??'')===$version&&($j['channel']??'')==='stable','Overview release mismatch');
  foreach(['KeenTool','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'] as $name)requireValue(stableVersion($j['components'][$name]??null),'Missing overview component: '.$name);
- requireValue($j['components']['KeenTool']===$version,'Inconsistent manager version');
+
  foreach($j['changes']??[] as $line)requireValue(is_string($line)&&strlen($line)<=1000&&!preg_match('/[\x00-\x1f\x7f]/',$line),'Unsafe release note');
  return $j;
 }
-function overviewStatus($j,$installedFile,$legacy,$scope,$selectionOnly=false){
- $installed=is_file($installedFile)?json_decode(file_get_contents($installedFile),true):[];$current=currentVersion($installedFile,$legacy);
- $names=['KeenTool','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'];requireValue($scope===''||in_array($scope,$names,true),'Unknown overview scope');$selected=false;$changed=[];$newerComponents=[];
- foreach($names as $name){$local=$installed['components'][$name]??($name==='KeenTool'?$current:'unknown');requireValue(is_string($local),'Invalid installed component version');
-  $remote=$j['components'][$name];if($local!=='unknown'&&version_compare($local,$remote,'>'))$newerComponents[]=$name;$upgrade=$local==='unknown'||newer($remote,$local);if($upgrade)$changed[]=$name.': '.$local.' -> '.$remote;
-  if(($scope===''||$scope===$name)&&$upgrade)$selected=true;
-  if(!$selectionOnly&&($scope===''||$scope===$name))printf("%-20s installed %-12s available %-12s %s\n",$name,$local,$remote,$upgrade?'UPDATE AVAILABLE':($local===$remote?'CURRENT':'LOCAL VERSION NEWER'));
+function fileVersion($path){
+ if(!is_file($path)||is_link($path)||!is_readable($path))return 'missing';
+ $text=file_get_contents($path,false,null,0,4096);return preg_match('/\bv([0-9]+\.[0-9]+\.[0-9]+)\b/',$text,$m)?$m[1]:'unknown';
+}
+function overviewAudit($j,$scope,$root){
+ $issues=[];$checked=0;$seen=[];
+ foreach($j['targets']??[] as $t){
+  requireValue(is_array($t)&&is_string($t['source']??null)&&preg_match('~^[A-Za-z0-9_./-]+$~D',$t['source'])&&!in_array('..',explode('/',$t['source']),true),'Invalid target source');
+  $path=$t['path']??'';requireValue(is_string($path)&&preg_match('~^/opt/[A-Za-z0-9_./-]+$~D',$path)&&!in_array('..',explode('/',$path),true)&&!isset($seen[$path]),'Invalid or duplicate target path');$seen[$path]=true;
+  requireValue(preg_match('/^[0-7]{3}$/D',$t['mode']??'')&&preg_match('/^[a-f0-9]{64}$/D',$t['sha256']??''),'Invalid target mode or hash');
+  requireValue(in_array($t['owner']??'',array_merge(array_keys($j['components']),['shared']),true),'Unknown target owner');
+  requireValue(($t['version']??'')==='-'||stableVersion($t['version']??null),'Invalid target version');
+  if($scope!==''&&$t['owner']!==$scope&&$t['owner']!=='shared')continue;
+  $checked++;$local=rtrim($root,'/').$path;$reason=null;
+  if(is_link($local))$reason='unexpected symbolic link';
+  elseif(!is_file($local))$reason='missing';
+  elseif(!is_readable($local))$reason='unreadable';
+  elseif(!hash_equals($t['sha256'],hash_file('sha256',$local)))$reason='content differs';
+  elseif((fileperms($local)&0777)!==octdec($t['mode']))$reason='permissions differ';
+  if($reason!==null)$issues[]=['path'=>$path,'reason'=>$reason,'installed'=>fileVersion($local),'available'=>$t['version']];
  }
- // A component cannot authorize downgrading a newer coordinated installation.
+ if(isset($j['targets']))requireValue($checked>0,'No verification targets for selected component');
+ return ['verified'=>isset($j['targets']),'checked'=>$checked,'issues'=>$issues];
+}
+function overviewStatus($j,$installedFile,$legacy,$scope,$selectionOnly=false,$root=''){
+ $installed=is_file($installedFile)?json_decode(file_get_contents($installedFile),true):[];$current=currentVersion($installedFile,$legacy);
+ $names=['KeenTool','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'];if(isset($j['components']['Dashboard']))$names[]='Dashboard';
+ requireValue($scope===''||in_array($scope,$names,true),'Unknown overview scope');$selected=false;$changed=[];$newerComponents=[];$audit=overviewAudit($j,$scope,$root);
+ foreach($names as $name){$local=$installed['components'][$name]??($name==='KeenTool'?$current:'unknown');
+  if($name==='Dashboard')$local=fileVersion(rtrim($root,'/').'/opt/var/www/index.html');
+  requireValue(is_string($local),'Invalid installed component version');$remote=$j['components'][$name];
+  $known=stableVersion($local)||preg_match('/^[0-9]+\.[0-9]+\.[0-9]+a[0-9]+$/D',$local);if($known&&version_compare($local,$remote,'>'))$newerComponents[]=$name;
+  $upgrade=!$known||newer($remote,$local);if($upgrade)$changed[]=$name.': '.$local.' -> '.$remote;
+  if(($scope===''||$scope===$name)&&$upgrade)$selected=true;
+  if(!$selectionOnly&&($scope===''||$scope===$name))printf("%-20s installed %-12s available %-12s %s\n",$name,$local,$remote,$upgrade?'UPDATE AVAILABLE':($local===$remote?'VERSION CURRENT':'LOCAL VERSION NEWER'));
+ }
+ if($audit['issues'])$selected=true;
  if(version_compare($current,$j['version'],'>')||$newerComponents)$selected=false;
- if(!$selectionOnly&&$newerComponents)echo 'Coordinated update blocked: newer installed components ('.implode(', ',$newerComponents)."). Downgrades are not permitted.\n";
  if($selectionOnly){echo $selected?'1':'0';return;}
- if(!$selected){echo "No update is available for the selected scope.\n";return;}
+ if($audit['verified']){
+  echo 'Files verified: '.$audit['checked'].'; differences: '.count($audit['issues']).".\n";
+  foreach($audit['issues'] as $issue)echo ' - '.$issue['path'].': '.$issue['reason'].' (installed '.$issue['installed'].'; available '.$issue['available'].")\n";
+ }else echo "Installed files have not been verified: this older overview contains versions only.\n";
+ if($newerComponents)echo 'Coordinated update blocked: newer installed components ('.implode(', ',$newerComponents)."). Downgrades are not permitted.\n";
+ if(!$selected){echo $audit['verified']?"Selected component versions and files match, or a downgrade is blocked.\n":"No newer component version found; file verification is still required.\n";return;}
  echo "\nChanges in the coordinated installation:\n";foreach($changed as $line)echo ' - '.$line."\n";
+ if($audit['issues'])echo ' - Repair '.count($audit['issues'])." missing, modified or incorrectly permissioned files in the selected scope.\n";
  echo 'Shared runtime and installer: coordinated suite '.$current.' -> '.$j['version'].".\n";
  echo "Installation applies the complete verified package, including unchanged components, to keep shared files compatible.\n";
  foreach($j['changes']??[] as $line)echo ' - '.$line."\n";
@@ -115,14 +148,16 @@ function extractVerified($dest,$version){
 }
 function componentStatus($base,$installedFile,$component,$root){
  $candidate=json_decode(file_get_contents($base.'/RELEASE.json'),true,512,JSON_THROW_ON_ERROR);$installed=is_file($installedFile)?json_decode(file_get_contents($installedFile),true):[];
- $allowed=['KeenTool','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'];requireValue(in_array($component,$allowed,true),'Unknown component');
- $remote=$candidate['components'][$component]??null;$local=$installed['components'][$component]??'unknown';requireValue(stableVersion($remote),'Component version is missing from the verified release');
- echo $component.': installed '.$local.'; available '.$remote.' (coordinated suite '.$candidate['version'].")\n";
+ $allowed=['','KeenTool','Dashboard','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'];requireValue(in_array($component,$allowed,true),'Unknown component');
+ $remote=$candidate['components'][$component]??($component===''?$candidate['version']:null);$local=$installed['components'][$component]??'unknown';requireValue(stableVersion($remote),'Component version is missing from the verified release');
+ if($component==='')echo 'Complete package: installed '.currentVersion($installedFile,'').' ; available '.$remote."\n";else echo $component.': installed '.$local.'; available '.$remote.' (coordinated suite '.$candidate['version'].")\n";
  // Independent script versions are not interchangeable with the repository/suite version.
  $files=$component==='keenetic-firewall'?['scripts/firewall_stats.sh','scripts/firewall_monitor','scripts/firewall_manager.sh','scripts/100-firewall.sh']:[];
  foreach($files as $file){$src=$base.'/projects/'.$component.'/'.$file;requireValue(is_file($src),'Incomplete component source');$text=substr(file_get_contents($src),0,4096);preg_match('/\bv([0-9]+\.[0-9]+\.[0-9]+)\b/',$text,$m);echo '  '.basename($file).': release '.($m[1]??'unversioned')."\n";}
+ $scopes=is_file($base.'/FILE_SCOPES.json')?json_decode(file_get_contents($base.'/FILE_SCOPES.json'),true):[];
  $issues=[];foreach(file($base.'/INSTALL.tsv',FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES) as $line){
   $parts=explode("\t",$line);requireValue(count($parts)===3,'Invalid installation manifest');[$source,$path,$mode]=$parts;
+  $owner=$scopes[$source]??(str_starts_with($source,'projects/'.$component.'/')?$component:'shared');if($component!==''&&$owner!==$component&&$owner!=='shared')continue;
   requireValue(preg_match('~^[A-Za-z0-9_./-]+$~D',$source)&&!in_array('..',explode('/',$source),true)&&str_starts_with($path,'/opt/')&&!in_array('..',explode('/',$path),true),'Unsafe installation path');
   requireValue(preg_match('/^[0-7]{3}$/D',$mode),'Invalid installation mode');$source=$base.'/'.$source;$path=rtrim($root,'/').$path;
   requireValue(is_file($source)&&!is_link($source),'Missing package target');
@@ -137,13 +172,19 @@ try{
  elseif($action==='metadata'){echo implode("\t",metadata(json_decode(stream_get_contents(STDIN),true),$argv[2],$argv[3]));}
  elseif($action==='overview-asset'){echo implode("\t",overviewAsset(json_decode(stream_get_contents(STDIN),true,512,JSON_THROW_ON_ERROR)));}
  elseif($action==='overview'||$action==='selection'){
-  $j=verifiedOverview($argv[2],$argv[3],$argv[4]);overviewStatus($j,$argv[5],$argv[6],$argv[7]??'',$action==='selection');
+  $j=verifiedOverview($argv[2],$argv[3],$argv[4]);overviewStatus($j,$argv[5],$argv[6],$argv[7]??'',$action==='selection',$argv[8]??'');
  }elseif($action==='overview-safe'){
   $j=verifiedOverview($argv[2],$argv[3],$argv[4]);$installed=is_file($argv[5])?json_decode(file_get_contents($argv[5]),true):[];
   foreach($installed['components']??[] as $name=>$local)if(isset($j['components'][$name]))requireValue(is_string($local)&&!version_compare($local,$j['components'][$name],'>'),'Refusing to downgrade installed component: '.$name);
  }elseif($action==='overview-match'){
   $j=verifiedOverview($argv[2],$argv[3],$argv[4]);$candidate=json_decode(file_get_contents($argv[5].'/RELEASE.json'),true,512,JSON_THROW_ON_ERROR);
   requireValue(($candidate['components']??null)==$j['components'],'Archive component versions do not match the approved overview');
+  if(isset($j['targets'])){
+   $scopes=json_decode(file_get_contents($argv[5].'/FILE_SCOPES.json'),true,512,JSON_THROW_ON_ERROR);$targets=[];
+   foreach(file($argv[5].'/INSTALL.tsv',FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES) as $line){[$source,$path,$mode]=explode("\t",$line);$targets[$source]=[$path,$mode,$scopes[$source],hash_file('sha256',$argv[5].'/'.$source)];}
+   requireValue(count($targets)===count($j['targets']),'Overview installation target count mismatch');
+   foreach($j['targets'] as $t)requireValue(($targets[$t['source']]??null)===[$t['path'],$t['mode'],$t['owner'],$t['sha256']],'Overview installation target mismatch: '.$t['source']);
+  }
  }elseif($action==='checksum'){
   $s=trim(file_get_contents($argv[2]));$name='keentool-'.$argv[4].'.tar.gz';requireValue(preg_match('/^([0-9a-f]{64})  '.preg_quote($name,'/').'$/D',$s,$m),'Invalid checksum sidecar');$hash=hash_file('sha256',$argv[3]);requireValue(hash_equals($m[1],$hash),'Release archive SHA-256 mismatch');if(($argv[5]??'-')!=='-')requireValue(hash_equals('sha256:'.$hash,$argv[5]),'GitHub asset digest mismatch');echo $hash;
  }elseif($action==='component'){componentStatus($argv[2],$argv[3],$argv[4],$argv[5]??'');}

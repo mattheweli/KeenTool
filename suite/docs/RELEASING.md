@@ -27,3 +27,5 @@ The historical public updater replaces the manager without retaining its origina
 ## Lightweight update overview (2.0.3+)
 
 package-suite.py also builds keentool-VERSION-manifest.json and its SHA-256 sidecar. The overview carries the five component versions and reviewed UPDATE_NOTES.json changes. Publish these alongside the complete archive; normal checks verify the overview against its GitHub release asset digest before displaying it. Do not remove or replace these assets after publication. The approved overview must match RELEASE.json in the archive. The source kit builder and GitHub draft workflow use the same package builder.
+
+From 2.0.4, FILE_SCOPES.json must cover every INSTALL.tsv source exactly once. The overview includes target hashes/modes/owners and must remain below the 64 KiB updater limit. Dashboard is a component in the same repository; its version tracks the HTML independently of the manager. Preserve valid independent component versions when the coordinated suite advances.

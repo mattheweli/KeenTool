@@ -114,4 +114,32 @@ sys.exit(0 if code=='200' else 22)
  publish_overview();local['components']['keenetic-firewall']='4.0.0';installed.write_text(json.dumps(local))
  # The approved component versions must exactly match the subsequently verified archive.
  altered=copy.deepcopy(candidate);altered['components']['keenetic-firewall']='4.0.2';(payload/'RELEASE.json').write_text(json.dumps(altered));checksums();pack();publish_overview();r=run('--yes');assert r.returncode!=0 and 'do not match the approved overview' in r.stderr and not capture.exists(),r.stdout+r.stderr
-print('PASS: real remote updater, stable-only GitHub metadata/URLs/digests, check versus apply, no downgrade, alpha/public version detection, HTTPS-only curl, 404/403 handling, tar/PAX streaming verification, traversal/symlink/internal checksum rejection, atomic flag and staging cleanup; independent component/all-version overviews, no archive before consent, interactive decline, explicit repair separation, overview digests and archive consistency; GitHub/installer mocked, no network or router writes.')
+ # Install/update verifies every selected component target, not just its version record.
+ candidate['components']['Dashboard']='2.0.3';(payload/'RELEASE.json').write_text(json.dumps(candidate))
+ targets=[];scopes={};rows=[]
+ for line in manifest:
+  src,path,mode=line.split('\t');scopes[src]='keenetic-firewall';rows.append((src,path,mode))
+ for src,path,owner,text in [('projects/KeenTool/index.html','/opt/var/www/index.html','Dashboard','<!-- KeenTool Dashboard v2.0.3 -->'),('projects/KeenTool/keentool','/opt/bin/keentool','KeenTool','# MANAGER v2.0.0'),('assets/shared.js','/opt/var/www/assets/shared.js','shared','// shared fixture'),('projects/Traffic_manager/traffic.sh','/opt/bin/traffic.sh','Traffic_manager','# TRAFFIC v2.0.0')]:
+  f=payload/src;f.parent.mkdir(parents=True,exist_ok=True);f.write_text(text+'\n');rows.append((src,path,'644'));scopes[src]=owner
+ (payload/'INSTALL.tsv').write_text(''.join('\t'.join(row)+'\n' for row in rows));(payload/'FILE_SCOPES.json').write_text(json.dumps(scopes))
+ import re,shutil
+ for src,path,mode in rows:
+  f=payload/src;dest=router/path.lstrip('/');dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy(f,dest);dest.chmod(int(mode,8));match=re.search(r'\bv([0-9]+\.[0-9]+\.[0-9]+)\b',f.read_text()[:4096])
+  targets.append({'source':src,'path':path,'mode':mode,'owner':scopes[src],'sha256':hashlib.sha256(f.read_bytes()).hexdigest(),'version':match[1] if match else '-'})
+ checksums();pack();overview.write_text(json.dumps({**candidate,'targets':targets,'changes':['Verify all selected component files before consent.']}));publish_overview();installed.write_text(json.dumps(candidate));env['KT_INSTALL_ROOT']=str(router)
+ reset_calls();r=run('--component','keenetic-firewall','--check');assert r.returncode==0 and 'Files verified: 5; differences: 0' in r.stdout and len(urls())==2,r.stdout+r.stderr
+ monitor=router/'opt/bin/firewall_monitor';monitor.write_text('# MONITOR v3.0.0\n');reset_calls();r=run('--component','keenetic-firewall','--check')
+ assert r.returncode==0 and 'Files verified: 5; differences: 1' in r.stdout and 'installed 3.0.0; available 4.0.0' in r.stdout and 'Repair 1' in r.stdout and len(urls())==2 and not capture.exists(),r.stdout+r.stderr
+ r=run('--component','keenetic-firewall','--yes');assert r.returncode==0 and capture.exists(),r.stdout+r.stderr;capture.unlink();shutil.copy(payload/'projects/keenetic-firewall/scripts/firewall_monitor',monitor);monitor.chmod(0o755)
+ # Unrelated traffic drift cannot trigger a firewall component update.
+ (router/'opt/bin/traffic.sh').write_text('old traffic\n');reset_calls();r=run('--component','keenetic-firewall','--yes');assert r.returncode==0 and 'differences: 0' in r.stdout and len(urls())==2 and not capture.exists(),r.stdout+r.stderr
+ # Missing files, modes and common dependencies are included in the selected audit.
+ stats=router/'opt/bin/firewall_stats.sh';stats.unlink();monitor.chmod(0o644);(router/'opt/var/www/assets/shared.js').write_text('old shared\n');reset_calls();r=run('--component','keenetic-firewall','--check')
+ assert r.returncode==0 and 'differences: 3' in r.stdout and 'permissions differ' in r.stdout and 'shared.js' in r.stdout and 'traffic.sh' not in r.stdout and len(urls())==2,r.stdout+r.stderr
+ # Dashboard uses its real HTML version, separate from both manager and stale record.
+ dashboard=router/'opt/var/www/index.html';dashboard.write_text('<!-- KeenTool Dashboard v2.0.2 -->\n');reset_calls();r=run('--component','Dashboard','--check')
+ assert r.returncode==0 and 'Dashboard' in r.stdout and 'installed 2.0.2' in r.stdout and 'available 2.0.3' in r.stdout and 'firewall_monitor' not in r.stdout and 'KeenTool: 2.0.0' not in r.stdout and len(urls())==2,r.stdout+r.stderr
+ # An inconsistent overview target hash cannot be used for an installation.
+ j=json.loads(overview.read_text());j['targets'][0]['sha256']='0'*64;overview.write_text(json.dumps(j));publish_overview();r=run('--component','keenetic-firewall','--yes')
+ assert r.returncode!=0 and 'Overview installation target mismatch' in r.stderr and not capture.exists(),r.stdout+r.stderr
+print('PASS: real remote updater, stable-only GitHub metadata/URLs/digests, check versus apply, no downgrade, alpha/public version detection, HTTPS-only curl, 404/403 handling, tar/PAX streaming verification, traversal/symlink/internal checksum rejection, atomic flag and staging cleanup; independent component/all-version overviews, no archive before consent, interactive decline, explicit repair separation, overview digests and archive consistency; GitHub/installer mocked, scoped target/mode verification, stale same-version scripts, shared and unrelated files, independent Dashboard HTML version and target manifest consistency; no network or router writes.')

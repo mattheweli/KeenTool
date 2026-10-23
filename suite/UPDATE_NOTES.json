@@ -1,8 +1,8 @@
 {
   "changes": [
-    "Check each tool against its own component version; unrelated KeenTool releases do not trigger a tool update.",
-    "Check all updates lists the installed and available versions of all five components.",
-    "Review changes and coordinated installation scope before confirming the package download.",
-    "Verify or repair installed program files separately from ordinary version checks."
+    "Install / Update checks every file owned by the selected component, including same-version files, against verified release hashes and permissions.",
+    "Missing or modified scripts are reported before asking to download and apply a coordinated repair.",
+    "Main Dashboard remains in the KeenTool repository with its own version and update scope.",
+    "The main menu shows the Firewall suite version separately from Monitor and Stats script versions."
   ]
 }
