@@ -1,18 +1,14 @@
-# KeenTool 2.0.2
+# KeenTool 2.0.0
 
-Stable component sources for the KeenTool suite. Release date: 2026-10-23.
+Stable component sources for the KeenTool suite. Release date: 2026-10-22.
 
 ## Installation and updates
 
-Install the complete KeenTool 2.0.2 release from https://github.com/mattheweli/KeenTool/releases. The shared runtime, assets, authentication and security broker are required. Do not copy this component alone over an older installation.
+Install the complete KeenTool 2.0.0 release from https://github.com/mattheweli/KeenTool/releases. The shared runtime, assets, authentication and security broker are required. Do not copy this component alone over an older installation.
 
 For an extracted complete package, use /opt/bin/bash ./install.sh --plan and follow docs/INSTALL.md. Existing public-source and local-alpha installations use --mode upgrade. New installations require --interface and reviewed web/logging ownership options. Existing databases, configuration, credentials and upgrade schedules are preserved.
 
-## Current patch
-
-Bootstrap dependency preflight, one coordinated component update, independent component/script version reporting, verified source repair and automatic menu restart after a successful install. See RELEASE_NOTES.md and suite/docs/UPDATE_RECOVERY.md. The 7/30-day firewall history policy introduced in 2.0.1 is unchanged.
-
-## Earlier stable changes
+## Changes
 
 - New coordinated 2.0.0 suite installation: fresh/upstream/alpha detection, verified file/configuration backups, atomic replacement, automatic/manual rollback and whole-package update entry point.
 - Uniform Keenetic-inspired responsive navigation, shared refresh with Off/manual controls, remembered navigation/density, readable tables and a full-width Security & Health overview. Remove development banners and show versions in copyright footers.

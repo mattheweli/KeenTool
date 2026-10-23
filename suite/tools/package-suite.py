@@ -14,3 +14,10 @@ with asset.open('wb') as raw,gzip.GzipFile(fileobj=raw,mode='wb',mtime=epoch,fil
   with p.open('rb') as f:tar.addfile(info,f)
 asset.with_name(asset.name+'.sha256').write_text(hashlib.sha256(asset.read_bytes()).hexdigest()+'  '+asset.name+'\n')
 print(asset)
+
+# Publish a lightweight component overview for checks before package download consent.
+overview={key:release[key] for key in ('suite','version','channel','components')}
+overview.update(json.loads((root/'UPDATE_NOTES.json').read_text()))
+manifest=out/('keentool-'+version+'-manifest.json')
+manifest.write_text(json.dumps(overview,indent=2)+'\n')
+manifest.with_name(manifest.name+'.sha256').write_text(hashlib.sha256(manifest.read_bytes()).hexdigest()+'  '+manifest.name+'\n')

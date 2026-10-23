@@ -17,7 +17,7 @@ def archive(base,out,dirname):
  checksum=hashlib.sha256(out.read_bytes()).hexdigest();out.with_name(out.name+'.sha256').write_text(checksum+'  '+out.name+'\n')
 checksum_tree(root)
 package=kit/('keentool-'+version);shutil.copytree(root,package,ignore=shutil.ignore_patterns('__pycache__','.git'))
-assets=kit/'assets';assets.mkdir();archive(package,assets/('keentool-'+version+'.tar.gz'),'keentool-'+version)
+assets=kit/'assets';assets.mkdir();subprocess.run(['python3',str(root/'tools/package-suite.py'),str(assets)],check=True)
 rows=json.loads((root/'UPSTREAM_BASELINES.json').read_text())
 if (root/'PATCH_BASELINES.json').is_file():
  patches=json.loads((root/'PATCH_BASELINES.json').read_text());rows=[{'repository':'mattheweli/'+repo,'version':v['version'],'tag':'v'+v['version'],'baseline_commit':v['main'],'baseline_branch':'main'} for repo,v in patches.items()]
