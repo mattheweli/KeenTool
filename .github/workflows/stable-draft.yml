@@ -16,12 +16,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Build pinned BusyBox tar compatibility fixture
+        if: github.event.repository.name == 'KeenTool'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --connect-timeout 15 --max-time 120 --retry 2 https://busybox.net/downloads/busybox-1.37.0.tar.bz2 -o "$RUNNER_TEMP/busybox-1.37.0.tar.bz2"
+          printf '%s  %s\n' 3311dff32e746499f4df0d5df04d7eb396382d7e108bb9250e7b519b837043a4 "$RUNNER_TEMP/busybox-1.37.0.tar.bz2" | sha256sum -c -
+          tar -xjf "$RUNNER_TEMP/busybox-1.37.0.tar.bz2" -C "$RUNNER_TEMP"
+          make -C "$RUNNER_TEMP/busybox-1.37.0" defconfig > "$RUNNER_TEMP/busybox-build.log" 2>&1
+          sed -i 's/^CONFIG_TC=y/# CONFIG_TC is not set/' "$RUNNER_TEMP/busybox-1.37.0/.config"
+          make -C "$RUNNER_TEMP/busybox-1.37.0" -j2 busybox >> "$RUNNER_TEMP/busybox-build.log" 2>&1 || { tail -100 "$RUNNER_TEMP/busybox-build.log"; exit 1; }
       - name: Check coordinated suite
         if: github.event.repository.name == 'KeenTool'
         run: |
           sudo apt-get update
-          sudo apt-get install -y php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3 busybox
-          sudo env PATH="$PATH" KT_VALIDATION_RESULTS="$RUNNER_TEMP/keentool-validation.json" python3 suite/tools/check-release.py
+          sudo apt-get install -y php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3
+          sudo env PATH="$PATH" KT_TEST_BUSYBOX="$RUNNER_TEMP/busybox-1.37.0/busybox" KT_VALIDATION_RESULTS="$RUNNER_TEMP/keentool-validation.json" python3 suite/tools/check-release.py
       - name: Preserve isolated validation results
         if: always() && github.event.repository.name == 'KeenTool'
         uses: actions/upload-artifact@v4

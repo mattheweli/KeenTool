@@ -4,7 +4,13 @@ import os, shutil, socket, sqlite3, subprocess, tarfile, tempfile
 root = Path(__file__).resolve().parents[1]
 source = (root/'projects/SMB_Backup_tool/Script/smb_backup_tool.sh').read_text()
 functions = source[source.index('smb_safe_path()'):source.index('run_retention_check()')]
-variants = ['tar'] + (['busybox'] if shutil.which('busybox') else [])
+busybox = os.environ.get('KT_TEST_BUSYBOX') or shutil.which('busybox')
+variants = ['tar']
+if busybox:
+ help_text = subprocess.run([busybox, 'tar', '--help'], capture_output=True, text=True).stderr
+ if '-X' in help_text: variants.append('busybox')
+ elif os.environ.get('KT_TEST_BUSYBOX'): raise AssertionError('Required BusyBox lacks tar -X support')
+ else: print('NOTE: system BusyBox lacks tar -X; full-feature BusyBox is required for this variant.')
 for variant in variants:
  with tempfile.TemporaryDirectory(prefix='kt-smb-source-', dir='/') as src, tempfile.TemporaryDirectory() as work:
   b, w = Path(src), Path(work)
@@ -39,7 +45,7 @@ else:
 c.close()
 '''); shim.chmod(0o755)
   if variant == 'busybox':
-   tar = bindir/'tar'; tar.write_text('#!/bin/sh\nexec '+shutil.which('busybox')+' tar "$@"\n');tar.chmod(0o755)
+   tar = bindir/'tar'; tar.write_text('#!/bin/sh\nexec '+busybox+' tar "$@"\n');tar.chmod(0o755)
   code = '. "'+str(root/'support/common.sh')+'"\n'+functions.replace('/opt',src)+r'''
 logger_msg(){ printf '%s\n' "$*" >> "$WORK/log"; }
 dump_system_files(){ mkdir -p "$TEMP_DIR/sys_dump";printf 'router configuration\n' > "$TEMP_DIR/sys_dump/running-config.txt"; }
