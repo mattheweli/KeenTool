@@ -2,7 +2,7 @@
 
 ## Automated evidence
 
-43/43 isolated checks passed. The machine-readable list is validation-results.json. Run tools/check-release.py on a Linux host with Node.js, PHP CLI/CGI and sqlite3; the fixture runtime is staged under /tmp/keentool-security-runtime. On Ubuntu 24.04, install php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3 and Node.js first. Tests create temporary fake router roots and mocked mail/service commands; they do not send SMTP or modify a router.
+43/43 isolated checks passed. The machine-readable list is validation-results.json. Run sudo env PATH="$PATH" python3 tools/check-release.py on a Linux host with Node.js, PHP CLI/CGI and sqlite3; the fixture runtime is staged under /tmp/keentool-security-runtime. On Ubuntu 24.04, install php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3 and Node.js first. Installer/rollback fixtures require root, matching the production installer requirement. GitHub workflows preserve the isolated check results as an artifact. Tests create temporary fake router roots and mocked mail/service commands; they do not send SMTP or modify a router.
 
 - All 14 JavaScript fixtures: administrator visibility/session flow, numeric formatting, health states, missing versus disabled monitors, expandable port lists, geography, settings types/presets/dirty-state preservation, density/navigation and unified refresh behavior.
 - Production PHP/SQLite security integration: bans/expiry, management and whitelist protections, request validation, guarded policy apply/confirm/revert, list events/comparisons, snapshots, settings revisions and HTML/plain digest queue/retry.

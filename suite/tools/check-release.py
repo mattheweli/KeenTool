@@ -3,6 +3,7 @@
 from pathlib import Path
 import concurrent.futures,subprocess,shutil,os,json,re
 root=Path(__file__).resolve().parents[1]
+if os.geteuid()!=0:raise SystemExit('Isolated installer/rollback fixtures require root; run sudo env PATH="$PATH" python3 tools/check-release.py')
 runtime=Path('/tmp/keentool-security-runtime/root/usr/bin');runtime.mkdir(parents=True,exist_ok=True)
 for target,choices in {'php8.3':['php8.3','php'],'php-cgi8.3':['php-cgi8.3','php-cgi'],'sqlite3':['sqlite3']}.items():
  p=runtime/target

@@ -48,7 +48,13 @@ jobs:
         with:
           node-version: '22'
       - run: sudo apt-get update && sudo apt-get install -y php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3
-      - run: python3 suite/tools/check-release.py
+      - run: sudo env PATH="$PATH" KT_VALIDATION_RESULTS="$RUNNER_TEMP/keentool-validation.json" python3 suite/tools/check-release.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/keentool-validation.json
+          if-no-files-found: warn
 ''')
  checksum_tree(dest);archive(dest,assets/(repo+'-'+row['version']+'-sources.tar.gz'),repo+'-'+row['version'])
 shutil.copy(root/'UPSTREAM_BASELINES.json',kit/'release-plan.json')
