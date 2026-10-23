@@ -177,7 +177,7 @@
   {
     "test": "remote-update-check.py",
     "code": 0,
-    "output": "PASS: real remote updater, stable-only GitHub metadata/URLs/digests, check versus apply, no downgrade, alpha/public version detection, HTTPS-only curl, 404/403 handling, tar/PAX streaming verification, traversal/symlink/internal checksum rejection, atomic flag and staging cleanup; independent component/all-version overviews, no archive before consent, interactive decline, explicit repair separation, overview digests and archive consistency; GitHub/installer mocked, no network or router writes.\n"
+    "output": "PASS: real remote updater, stable-only GitHub metadata/URLs/digests, check versus apply, no downgrade, alpha/public version detection, HTTPS-only curl, 404/403 handling, tar/PAX streaming verification, traversal/symlink/internal checksum rejection, atomic flag and staging cleanup; independent component/all-version overviews, no archive before consent, interactive decline, explicit repair separation, overview digests and archive consistency; GitHub/installer mocked, scoped target/mode verification, stale same-version scripts, shared and unrelated files, independent Dashboard HTML version and target manifest consistency; no network or router writes.\n"
   },
   {
     "test": "security-api-check.py",

@@ -2,6 +2,8 @@
 
 ## Automated evidence
 
+The 2.0.4 checks cover every selected source target and shared dependency, unchanged-version drift, missing files, bad modes, unrelated component exclusion, actual Dashboard HTML versions, correct Firewall summary and overview/archive target consistency.
+
 The 2.0.3 checks additionally cover independent per-tool/global scopes, metadata-only checks, no archive download before interactive consent, explicit file repair, overview URL/size/digest validation, approved overview/package consistency and mixed-component downgrade rejection.
 
 The 2.0.2 checks additionally cover missing/broken PHP CLI, dependency consent and failed repair, one managed component invocation, no legacy firewall update side effects, independent component/script versions, exact installed-source/mode audit, private update receipts and exec restart, same-version repair and downgrade rejection.

@@ -1,4 +1,4 @@
-# Bootstrap and managed updates — KeenTool 2.0.3
+# Bootstrap and managed updates — KeenTool 2.0.4
 
 ## Dependency preflight
 
@@ -25,7 +25,7 @@ Automatic menu restart applies to updates initiated by 2.0.2 and later. Replacin
 
 ## Independent component checks and global overview
 
-Use **u. Check all updates (KeenTool and tools)** to review KeenTool, Firewall, Pingtool, Traffic Manager and SMB Backup together. The self-update action checks KeenTool; a tool's own action checks only its component. A current Firewall 4.0.1 does not become an available update because KeenTool advances to 2.0.3. Independent Monitor/Stats/hook script versions still differ legitimately within a firewall component release.
+Use **u. Check all updates (KeenTool and tools)** to review KeenTool, Firewall, Pingtool, Traffic Manager, SMB Backup and Main Dashboard together. The self-update action checks KeenTool; a tool's own action checks its component version, all owned program files and shared dependencies. A current Firewall 4.0.1 does not become an available update because KeenTool advances to 2.0.3. Independent Monitor/Stats/hook script versions still differ legitimately within a firewall component release.
 
 ```sh
 /opt/bin/bash /opt/bin/keentool --check-updates
@@ -34,13 +34,13 @@ Use **u. Check all updates (KeenTool and tools)** to review KeenTool, Firewall, 
 /opt/bin/bash /opt/bin/keentool_update --component keenetic-firewall
 ```
 
-Checks fetch the GitHub release record and a small versioned component overview (maximum 64 KiB), verified against the GitHub asset SHA-256. They do not download the suite archive or compare source file content. When the selected scope has an update, the report lists all component changes and the coordinated shared runtime before asking **Apply this coordinated update? [y/N]**. Decline or a noninteractive invocation without --yes leaves the archive undownloaded. --yes is explicit installation consent; --check always stops before package download.
+Checks fetch the GitHub release record and a small versioned component overview (maximum 64 KiB), verified against the GitHub asset SHA-256. The overview includes the SHA-256, file mode and ownership of every INSTALL.tsv target. Checks compare all selected component files and shared dependencies locally without downloading the suite archive. Global checks inspect all targets. A source mismatch, missing file or incorrect permission triggers a proposed repair even when the declared component version is current. Each difference is reported before consent. Configuration and database files are not installation targets and are excluded. When the selected scope has an update, the report lists all component changes and the coordinated shared runtime before asking **Apply this coordinated update? [y/N]**. Decline or a noninteractive invocation without --yes leaves the archive undownloaded. --yes is explicit installation consent; --check always stops before package download.
 
 An accepted update installs the complete coordinated bundle, including unchanged component files, through the existing backup/rollback transaction. This keeps the manager, security broker and shared assets compatible. The package manifest must match the reviewed overview. Newer installed suite/component versions prevent a downgrade. Settings, credentials and databases remain preserved by the installer. The firewall hook is not applied by this action.
 
 For older published releases without an overview, full-suite checks retain their previous version comparison; component actions explain that per-component metadata is unavailable rather than treating the suite version as a tool version.
 
-## Explicit source verification and repair
+## Full-package verification and repair
 
 Use **r. Verify / repair installed package files** separately from version checks:
 
@@ -51,4 +51,6 @@ Use **r. Verify / repair installed package files** separately from version check
 
 Repair asks before downloading the complete verified archive, then compares all INSTALL.tsv program targets against source hashes and modes. It detects missing/stale files even if installed-release.json says the latest version. With differences, it asks again before applying the complete transaction-backed repair; a check-only repair never installs. --yes explicitly authorizes both steps. Deliberate local source changes are reported and replaced only by an accepted repair. Configuration and database files are excluded. --reinstall remains an explicit complete-suite reinstall, also confirmed before download.
 
-This release changes KeenTool/bootstrap/updater/verifier only. Installer 1.0.2 and the firewall repository 4.0.1 are retained; no firewall rule or history policy changes are included.
+Main Dashboard stays in the KeenTool repository but has its own Dashboard version and menu scope. Its actual HTML version is compared separately from the manager, so a 2.0.2 dashboard is not labeled current merely because KeenTool is 2.0.3 or 2.0.4. The main Firewall summary shows the suite version, while Monitor/Stats versions remain separate in its submenu.
+
+This release changes KeenTool/Dashboard/bootstrap/updater/verifier only. Installer 1.0.2 and the firewall repository 4.0.1 are retained; no firewall rule or history policy changes are included.

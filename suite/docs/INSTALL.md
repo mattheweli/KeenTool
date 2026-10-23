@@ -95,3 +95,7 @@ Read [UPDATE_RECOVERY.md](UPDATE_RECOVERY.md) for interactive missing-dependency
 ## Component overview and separate repair in 2.0.3
 
 The main menu checks all five component versions together; a tool menu checks only that tool. Review component changes and coordinated runtime requirements before consenting to archive download. File verification/repair is explicit (--repair) and separate from version checks. See [UPDATE_RECOVERY.md](UPDATE_RECOVERY.md) for commands and compatibility.
+
+## Component file verification in 2.0.4
+
+Install / Update now checks all selected component source files and shared dependencies against the lightweight verified release overview before asking to download/apply the full package. A current declared version does not suppress missing or stale files. Dashboard has its own scope/version within the KeenTool repository. The global overview covers all six components and all 54 targets.

@@ -1,23 +1,24 @@
-# KeenTool 2.0.3
+# KeenTool 2.0.4
 
-Relative to published v2.0.2 (main `b65b265032a35469db2cdc0c2fdaaceb60a79264`).
+Relative to published v2.0.3 (main `9350079e75db877333c0b927562734537e4aecc0`).
 
-- Check a selected tool against its own installed and published component versions. An available KeenTool update does not trigger an update when the selected Firewall, Pingtool, Traffic Manager or SMB component is current.
-- Add a main-menu **Check all updates (KeenTool and tools)** overview for the five components, showing installed version, available version and status. Self-update explicitly selects KeenTool.
-- Fetch only the GitHub release record and a small component overview during version checks. Bind the overview URL, stable version, size and SHA-256 to the published GitHub release. Before confirmation, disclose every changed component, shared runtime coordination and release changes. Download the full archive only after interactive consent or explicit --yes.
-- Preserve coordinated installation, HTTPS-only transport, archive and internal file checksum verification, backup/rollback, dependency preflight and successful-install menu restart. Verify that the downloaded package component versions match the approved overview. Refuse downgrades, including newer component versions within a mixed installation.
-- Separate source verification and repair into **Verify / repair installed package files** and explicit --repair. This operation asks before downloading the archive, compares actual files and modes, then asks before applying a repair. --repair --check verifies without installation. Ordinary version checks no longer audit or silently repair files.
-- Keep compatibility with older releases without an overview for complete-suite checks and explicit repair; do not invent per-tool versions from the suite number. Publish versioned component overview assets and checksum sidecars with this and future complete releases.
-- Extend isolated transport/menu tests for per-tool and global scopes, unchanged components, no archive download before consent, interactive decline, explicit repair, overview tampering and package/overview mismatch.
+- Make Install / Update verify every installed file owned by the selected component, plus shared dependencies, against the published target SHA-256 and expected permissions. A current installed-release.json no longer hides an old Monitor, missing API/helper or modified script. Report every differing path, reason and readable source version before installation consent. Unrelated component source differences do not trigger the selected component.
+- Add explicit FILE_SCOPES.json ownership for all 54 installation targets. The lightweight GitHub-digest-verified overview carries source/path/owner/hash/mode/version data; normal checks still do not download the archive. After consent, require the archive's INSTALL.tsv, scopes and source hashes to match the approved overview before applying the coordinated transaction.
+- Keep the Main Dashboard in the KeenTool repository while tracking Dashboard 2.0.3 separately from manager 2.0.4. Check the actual installed HTML version and content, including when an old record does not contain a Dashboard entry or incorrectly claims a newer version. The dashboard menu selects Dashboard instead of KeenTool; the global overview includes all six components.
+- Display the recorded Firewall suite version in the main tool summary. Keep Monitor and Stats script versions in the firewall submenu; independent script versions are not used as the suite version.
+- Retain explicit full-package repair, coordinated file installation, dependency preflight, successful-update menu restart, backup/rollback and preservation of credentials, configuration, databases and schedules. Older version-only overviews explicitly state that files were not verified.
+- Add transport/menu regression cases for same-version Monitor 3.0.0 versus expected 4.0.0, scoped file coverage, unrelated component drift, shared dependencies, missing files and bad modes, actual Dashboard HTML versus the record, and mismatched target metadata.
 
-Installer 1.0.2, Firewall 4.0.1, Pingtool/Traffic/SMB 2.0.0 and database/history behavior are unchanged. Updater/verifier/bootstrap advance to 1.0.2. See [Update recovery](docs/UPDATE_RECOVERY.md) and the [2.0.2 changelog](docs/history/STABLE_2.0.2.md).
+Firewall remains 4.0.1 (Monitor 4.0.0, Stats 4.0.1). Pingtool/Traffic/SMB remain 2.0.0. Installer remains 1.0.2; updater/verifier/bootstrap advance to 1.0.3. No firewall policy, cron or database history change is included. See [Update behavior](docs/UPDATE_RECOVERY.md) and the [2.0.3 changelog](docs/history/STABLE_2.0.3.md).
 
 ## Upgrade
 
-Update through `/opt/bin/bash /opt/bin/keentool --update`. Starting with the 2.0.3 menu, **u. Check all updates (KeenTool and tools)** lists all five components; a tool's own update action checks only its version. The report shows changes and coordinated shared-runtime requirements before asking for confirmation and downloading the full archive. Explicit --yes remains available for requested unattended updates. A current firewall is not updated merely because KeenTool has a newer version.
+Run `/opt/bin/bash /opt/bin/keentool --update` or use the KeenTool self-update menu. After 2.0.4 is installed, a component's Install / Update compares every owned file and shared dependency against the verified release target hashes and modes, including when the declared version is current. Review differences and coordinated package changes before consenting to the archive download and installation.
 
-Use **r. Verify / repair installed package files** or `keentool_update --repair` separately for source verification and repair; ordinary version checks do not audit source files. See suite/docs/UPDATE_RECOVERY.md. Full-package installation, backup/rollback, dependency checks, HTTPS/checksum verification, successful-update menu restart and preservation of settings, credentials, schedules and databases remain in place.
+Main Dashboard remains in mattheweli/KeenTool but has its own version (2.0.3), update scope and actual HTML check. The main menu reports Firewall suite 4.0.1 rather than using the Monitor entry-point version. Monitor 4.0.0 and Stats 4.0.1 remain legitimate script versions within that suite.
+
+The coordinated installer preserves settings, credentials, schedules and databases through its normal backup/rollback transaction. No firewall policy or history retention change is included. Explicit full-package verification/repair remains available.
 
 ## Validation
 
-47 isolated checks pass locally. Coverage includes mocked remote transport with real verifiers, independent tool/all scopes, no archive before consent, interactive decline, explicit repair, overview tampering, package/overview consistency and downgrade refusal; migration, file transactions, history, notifications and UI regression checks remain included. GitHub CI must pass for the exact release commit before publication. No physical-router reboot or live SMTP send is claimed.
+47 isolated local checks passed, including same-version stale Monitor detection, scoped and shared file coverage, unrelated component exclusion, missing files and wrong permissions, actual Dashboard version versus installed record, correct firewall menu version, and approved overview/archive target consistency. GitHub checks must pass for the exact release commit before publication. No physical-router reboot or live SMTP delivery is claimed.

@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KeenTool remote release updater 1.0.2 — 2026-10-23.
+# KeenTool remote release updater 1.0.3 — 2026-10-23.
 set -Eeuo pipefail
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 umask 077
@@ -7,7 +7,7 @@ check=false;yes=false;reinstall=false;install_deps=false;component='';local_pack
 while [ "$#" -gt 0 ];do
  case "$1" in --check)check=true;; --repair)repair=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--repair|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path]';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
 done
-case "$component" in ''|KeenTool|keenetic-firewall|keenetic-pingtool|Traffic_manager|SMB_Backup_tool);;*)echo 'Unknown suite component' >&2;exit 2;;esac
+case "$component" in ''|KeenTool|Dashboard|keenetic-firewall|keenetic-pingtool|Traffic_manager|SMB_Backup_tool);;*)echo 'Unknown suite component' >&2;exit 2;;esac
 [ "$check" != true ] || [ "$install_deps" != true ] || { echo '--install-deps cannot be used with --check' >&2;exit 2; }
 bash_bin=${KT_UPDATE_BASH:-/opt/bin/bash}
 if [ -n "$local_package" ];then
@@ -34,7 +34,7 @@ if [ "$status" = 404 ];then echo 'No published stable KeenTool release is availa
 [ "$rc" = 0 ] && [ "$status" = 200 ] || { echo "GitHub release check failed (HTTP $status, curl $rc); installed files are unchanged." >&2;exit 1; }
 info=$("$php_cli" "$helper" metadata "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "${KT_UPDATE_LEGACY:-/opt/bin/keentool}" < "$work/release.json")
 IFS=$'\t' read -r version current available archive_url checksum_url digest <<< "$info"
-# Checks fetch only release metadata and its small component overview; no package audit.
+# Check versions and component file hashes using the verified overview before archive download.
 overview_info=$("$php_cli" "$helper" overview-asset < "$work/release.json")
 IFS=$'\t' read -r overview_url overview_digest <<< "$overview_info"
 [ -n "${overview_url:-}" ] && [ -n "${overview_digest:-}" ] || { echo 'Invalid release overview metadata' >&2;exit 1; }
@@ -43,8 +43,8 @@ if "$php_cli" -r 'exit(version_compare($argv[1],$argv[2],">")?0:1);' "$current" 
 fi
 if [ "$overview_url" != '-' ];then
  curl "${curl_opts[@]}" --max-filesize 65536 "$overview_url" -o "$work/overview.json"
- "$php_cli" "$helper" overview "$work/overview.json" "$version" "$overview_digest" "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "${KT_UPDATE_LEGACY:-/opt/bin/keentool}" "$component"
- available=$("$php_cli" "$helper" selection "$work/overview.json" "$version" "$overview_digest" "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "${KT_UPDATE_LEGACY:-/opt/bin/keentool}" "$component")
+ "$php_cli" "$helper" overview "$work/overview.json" "$version" "$overview_digest" "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "${KT_UPDATE_LEGACY:-/opt/bin/keentool}" "$component" "${KT_INSTALL_ROOT:-}"
+ available=$("$php_cli" "$helper" selection "$work/overview.json" "$version" "$overview_digest" "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "${KT_UPDATE_LEGACY:-/opt/bin/keentool}" "$component" "${KT_INSTALL_ROOT:-}")
 else
  if [ -n "$component" ] && [ "$repair" != true ];then
   echo 'This older release has no component overview. Use Check all updates or explicitly verify/repair the package.';exit 0
@@ -85,7 +85,7 @@ if [ -f "$work/overview.json" ];then
  "$php_cli" "$helper" overview-match "$work/overview.json" "$version" "$overview_digest" "$work/package"
 fi
 if [ "$repair" = true ];then
- audit=$("$php_cli" "$helper" component "$work/package" "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "${component:-KeenTool}" "${KT_INSTALL_ROOT:-}")
+ audit=$("$php_cli" "$helper" component "$work/package" "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "$component" "${KT_INSTALL_ROOT:-}")
  printf '%s\n' "$audit"
  [ "$check" != true ] || exit 0
  [[ "$audit" != *'All installed package files match the verified release.'* ]] || exit 0
