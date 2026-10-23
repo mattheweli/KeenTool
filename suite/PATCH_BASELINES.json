@@ -1,7 +1,22 @@
 {
   "KeenTool": {
-    "version": "2.0.4",
-    "previous_tag": "v2.0.3",
-    "main": "9350079e75db877333c0b927562734537e4aecc0"
+    "version": "2.0.5",
+    "previous_tag": "v2.0.4",
+    "main": "1e799ec2abade673cd7a728872db0035b7c5fff6"
+  },
+  "keenetic-firewall": {
+    "version": "4.0.2",
+    "previous_tag": "v4.0.1",
+    "main": "9b5ad665d69285c76a1c02d4f02d62d8fc564661"
+  },
+  "keenetic-pingtool": {
+    "version": "2.0.1",
+    "previous_tag": "v2.0.0",
+    "main": "85e9ac9cb6f92527743d2bd52801af2d0cd5e335"
+  },
+  "Traffic_manager": {
+    "version": "2.0.1",
+    "previous_tag": "v2.0.0",
+    "main": "ba8f435d096c08933706c779a22981b3ae2b59bb"
   }
 }

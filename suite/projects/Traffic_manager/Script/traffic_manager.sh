@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# TRAFFIC MANAGER v2.0.0
+# TRAFFIC MANAGER v2.0.1
 # Release: 2026-10-22 | Stable. See CHANGELOG.md for release details.
 
 # ==============================================================================
@@ -14,7 +14,7 @@
 # ==============================================================================
 
 PATH=${KT_PATH:-/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin}
-# Traffic Manager 2.0.0
+# Traffic Manager 2.0.1
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 kt_init traffic-manager || exit $?
 
@@ -106,7 +106,7 @@ for IFACE in $IFACES; do
 done
 
 # --- 3. GENERATE HTML ---
-SIGNATURE=$(printf '%s|%s' "$IFACES" "$ALIASES|${MONTHLY_QUOTA_GB:-0}|2.0.0" | sha256sum)
+SIGNATURE=$(printf '%s|%s' "$IFACES" "$ALIASES|${MONTHLY_QUOTA_GB:-0}|2.0.1" | sha256sum)
 if [ ! -f "$HTMLFILE" ] || [ "$FORCE_HTML" = true ] || [ "$(cat "$OUTDIR/.signature" 2>/dev/null)" != "$SIGNATURE" ]; then
     echo "Generating HTML Dashboard..."
     
@@ -274,7 +274,7 @@ cat <<EOF > "$HTML_TMP"
     </style>
 <script src="/assets/keentool-format.js?v=1.0.0"></script>
 <link rel="stylesheet" href="/assets/keentool-ui.css?v=1.0.0">
-<script defer src="/assets/keentool-ui.js?v=1.0.0"></script>
+<script defer src="/assets/keentool-ui.js?v=1.0.1"></script>
 </head>
 <body class="kt-ui" data-kt-page="traffic"><div id="data_freshness" style="padding:8px;text-align:center"></div><div id="data_quota" style="padding:4px;text-align:center"></div>
 
@@ -685,7 +685,7 @@ cat <<EOF > "$HTML_TMP"
             }, 100);
         };
     </script>
-<footer class="kt-page-footer">&copy; <span data-kt-year>2026</span> mattheweli<span class="kt-footer-meta">Traffic Manager 2.0.0</span></footer>
+<footer class="kt-page-footer">&copy; <span data-kt-year>2026</span> mattheweli<span class="kt-footer-meta">Traffic Manager 2.0.1</span></footer>
 </body>
 </html>
 EOF

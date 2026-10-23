@@ -25,6 +25,19 @@ function page(name,store={},blocked=false){
  p.context.window.ktRefreshPage=async()=>{throw Error('Network error')};await p.fire();assert(p.created.some(e=>e.textContent==='Refresh failed'));assert.equal(p.timers.size,1);
  const restricted=page('security',{},true);restricted.select.value='0';restricted.select.onchange();assert.equal(restricted.timers.size,0);
  const invalid=page('settings',{kt_refresh_rate:'1000'});assert.equal(invalid.select.value,'60000');
+ // Security age is compared to the slower configured producer/browser cadence.
+ const fresh=page('security',{'kt_refresh_rate':'300000'}),now=1800000000000;
+ fresh.context.Date=class extends Date{static now(){return now;}};
+ const age=(seconds,interval)=>fresh.context.window.getKTSecurityFreshness(now/1000-seconds,interval);
+ assert.equal(age(240,60).stale,false);assert.equal(age(300,60).stale,false);assert.equal(age(301,60).stale,true);
+ assert.equal(age(600,900).stale,false);assert.equal(age(901,900).stale,true);
+ fresh.context.window.KT_SECURITY_DATA={updated:now/1000-240,monitorInterval:60,status:'ready'};fresh.context.window.updateKTDataState();
+ const indicator=fresh.created.find(e=>e.className==='kt-data-state');assert.equal(indicator.dataset.state,'ready');
+ fresh.select.value='30000';fresh.select.onchange();assert.equal(indicator.dataset.state,'stale');
+ fresh.select.value='0';fresh.select.onchange();assert.equal(age(59,60).stale,false);assert.equal(age(61,60).stale,true);
+ assert.equal(age(10000,undefined).stale,false);assert.equal(age(10000,undefined).limit,null);
+ fresh.listeners.storage({key:'kt_refresh_rate',newValue:'300000'});assert.equal(indicator.dataset.state,'ready');
+ assert.equal(age(-10,60).age,0);
  // Execute the real Traffic and Ping adapters; neither reloads the document.
  const traffic=fs.readFileSync(root+'projects/Traffic_manager/Script/traffic_manager.sh','utf8');
  const adapter=traffic.slice(traffic.indexOf('        window.ktRefreshPage='),traffic.indexOf('        window.onload = function()'));

@@ -4,11 +4,11 @@ import tempfile,subprocess,os,json,shutil
 root=Path(__file__).resolve().parents[1];source=(root/'projects/KeenTool/keentool').read_text();fn=source[source.index('kt_managed_update() {'):source.index('kt_component_version() {')]
 with tempfile.TemporaryDirectory() as td:
  p=Path(td);calls=p/'calls';updater=p/'updater';manager=p/'manager'
- updater.write_text('#!/bin/bash\nprintf "%s\\n" "$*" >> "$KT_TEST_CALLS"\n[ "$KT_TEST_MODE" != fail ] || exit 9\n[ "$KT_TEST_MODE" != install ] || printf "2.0.4\\n" > "$KT_UPDATE_RECEIPT"\nexit 0\n');manager.write_text('#!/bin/bash\necho "CURRENT MENU 2.0.4"\n');env=dict(os.environ,KT_RUN_DIR=td,KT_UPDATE_BASH='/bin/bash',KT_UPDATE_COMMAND=str(updater),KT_MANAGER_PATH=str(manager),KT_TEST_CALLS=str(calls))
+ updater.write_text('#!/bin/bash\nprintf "%s\\n" "$*" >> "$KT_TEST_CALLS"\n[ "$KT_TEST_MODE" != fail ] || exit 9\n[ "$KT_TEST_MODE" != install ] || printf "2.0.5\\n" > "$KT_UPDATE_RECEIPT"\nexit 0\n');manager.write_text('#!/bin/bash\necho "CURRENT MENU 2.0.5"\n');env=dict(os.environ,KT_RUN_DIR=td,KT_UPDATE_BASH='/bin/bash',KT_UPDATE_COMMAND=str(updater),KT_MANAGER_PATH=str(manager),KT_TEST_CALLS=str(calls))
  for mode in ['current','declined','fail','install']:
   calls.unlink(missing_ok=True);r=subprocess.run(['bash','-c',fn+'\nkt_managed_update keenetic-firewall;rc=$?;echo "OLD MENU AFTER: $rc"'],env=dict(env,KT_TEST_MODE=mode),text=True,capture_output=True)
   assert calls.read_text().splitlines()==['--component keenetic-firewall'];assert not list(p.glob('keentool-menu-update.*'))
-  if mode=='install':assert 'CURRENT MENU 2.0.4' in r.stdout and 'OLD MENU AFTER' not in r.stdout
+  if mode=='install':assert 'CURRENT MENU 2.0.5' in r.stdout and 'OLD MENU AFTER' not in r.stdout
   else:assert 'CURRENT MENU' not in r.stdout and ('OLD MENU AFTER: 9' if mode=='fail' else 'OLD MENU AFTER: 0') in r.stdout
  # Explicit repair uses its own option; self update selects KeenTool, global scan leaves scope open.
  calls.unlink();r=subprocess.run(['bash','-c',fn+'\nkt_managed_update --repair'],env=dict(env,KT_TEST_MODE='current'),text=True,capture_output=True)
@@ -34,7 +34,7 @@ KT_MANAGED_PACKAGE=true;FW_CORE_LOCAL="$KT_MANAGER_PATH";BIN_DIR=/fixture
  dashboard_menu=source[source.index('Main Dashboard Manager'):]
  assert 'kt_managed_update Dashboard;pause;continue;fi' in dashboard_menu
  # Audit independent component/script versions and actual installed content.
- pkg=p/'package';(pkg/'projects/keenetic-firewall/scripts').mkdir(parents=True);(pkg/'RELEASE.json').write_text(json.dumps({'version':'2.0.4','components':{'keenetic-firewall':'4.0.1'}}));installed=p/'installed.json';installed.write_text((pkg/'RELEASE.json').read_text());manifest=[]
+ pkg=p/'package';(pkg/'projects/keenetic-firewall/scripts').mkdir(parents=True);(pkg/'RELEASE.json').write_text(json.dumps({'version':'2.0.5','components':{'keenetic-firewall':'4.0.1'}}));installed=p/'installed.json';installed.write_text((pkg/'RELEASE.json').read_text());manifest=[]
  for name,version in [('firewall_stats.sh','4.0.1'),('firewall_monitor','4.0.0'),('firewall_manager.sh','3.0.0'),('100-firewall.sh','3.0.0')]:
   rel='projects/keenetic-firewall/scripts/'+name;f=pkg/rel;f.write_text('# SCRIPT v'+version+'\n');dest=p/'opt/bin'/name;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy(f,dest);dest.chmod(0o755);manifest.append(rel+'\t/opt/bin/'+name+'\t755')
  (pkg/'INSTALL.tsv').write_text('\n'.join(manifest)+'\n');php='/tmp/keentool-security-runtime/root/usr/bin/php8.3'

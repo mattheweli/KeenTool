@@ -1,0 +1,60 @@
+name: Generate documented interface screenshots
+on:
+  push:
+    branches: ['operations/docs-previews-20261023']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: documented-interface-previews
+  cancel-in-progress: false
+jobs:
+  screenshots:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare screenshot-only runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y php8.3-cli python3-pil
+          npm install --prefix "$RUNNER_TEMP/preview-node" playwright
+          python3 suite/docs/demo/download_vendor.py "$RUNNER_TEMP/vendor"
+      - name: Build actual templates with synthetic data
+        env:
+          KT_DOC_PHP: /usr/bin/php8.3
+        run: KT_DOC_VENDOR="$RUNNER_TEMP/vendor" python3 suite/docs/demo/build_demo.py "$RUNNER_TEMP/preview"
+      - name: Render current interfaces
+        id: render
+        continue-on-error: true
+        env:
+          KT_DOC_BROWSER: /usr/bin/google-chrome
+        run: NODE_PATH="$RUNNER_TEMP/preview-node/node_modules" node suite/docs/demo/render.cjs "$RUNNER_TEMP/preview" suite/docs/screenshots
+      - name: Store screenshots and matching checksum inventories
+        if: always() && steps.render.outcome != 'skipped'
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          import shutil,hashlib
+          folder=Path('suite/docs/screenshots');assert len(list(folder.glob('*.png')))==6
+          for p in folder.glob('*.png'):
+              with Image.open(p) as image:image.convert('RGB').quantize(colors=192).save(p,optimize=True)
+          Path('docs/screenshots').mkdir(parents=True,exist_ok=True)
+          for p in folder.iterdir():shutil.copy(p,Path('docs/screenshots')/p.name)
+          for root in [Path('suite'),Path('.')]:
+              files=sorted(p for p in root.rglob('*') if p.is_file() and p.name!='CHECKSUMS.sha256' and '.git' not in p.parts and '__pycache__' not in p.parts)
+              (root/'CHECKSUMS.sha256').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(root).as_posix()+'\n' for p in files))
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/screenshots suite/docs/screenshots CHECKSUMS.sha256 suite/CHECKSUMS.sha256
+          git diff --cached --quiet || { git commit -m "Generate current interface screenshots with synthetic example data";git push origin "HEAD:$GITHUB_REF_NAME"; }
+      - name: Require successful rendering
+        if: steps.render.outcome != 'success'
+        run: exit 1

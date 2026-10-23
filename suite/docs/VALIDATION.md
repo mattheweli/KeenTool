@@ -2,6 +2,8 @@
 
 ## Automated evidence
 
+The 2.0.5 checks additionally verify configured producer/browser freshness, exact thresholds, Off/legacy behavior, cross-tab refresh changes and interval propagation in public snapshots. Documentation screenshot rendering uses actual templates with synthetic fixtures; see docs/demo/.
+
 The 2.0.4 checks cover every selected source target and shared dependency, unchanged-version drift, missing files, bad modes, unrelated component exclusion, actual Dashboard HTML versions, correct Firewall summary and overview/archive target consistency.
 
 The 2.0.3 checks additionally cover independent per-tool/global scopes, metadata-only checks, no archive download before interactive consent, explicit file repair, overview URL/size/digest validation, approved overview/package consistency and mixed-component downgrade rejection.

@@ -1,4 +1,4 @@
-/* KeenTool Security UI v1.0.1 — 2026-10-22. Public diagnostics, authenticated writes. */
+/* KeenTool Security UI v1.0.2 — 2026-10-22. Public diagnostics, authenticated writes. */
 (() => {
  'use strict';
  let snapshot=null,pending=null,loading=false,lastGuardPoll=0,guardPolling=false;
@@ -31,7 +31,8 @@
   if(!byId('view_security'))return;
   if(loading)return;loading=true;
   try{const response=await fetch('/firewall/security-data.json?t='+Date.now(),{cache:'no-store',credentials:'same-origin'});if(!response.ok)throw Error('Security snapshot not generated yet');snapshot=await response.json();const s=snapshot.system||{};
-   byId('security_updated').textContent='Checked: '+stamp(s.time)+(Date.now()/1000-s.time>180?' · snapshot is stale':'');
+   const freshness=window.getKTSecurityFreshness?.(s.time,s.monitor_interval);
+   byId('security_updated').textContent='Checked: '+stamp(s.time)+(freshness?.stale?' · snapshot older than '+freshness.label:'');
    const fwStatus=s.firewall?.healthy===true?'ok':s.firewall?.healthy===false?'error':'unknown';
    healthResult('security_fw',fwStatus==='ok'?(s.firewall.enabled?'Rules verified':'Intentionally disabled'):fwStatus==='error'?'Verification failed':'Not verified',fwStatus);
    const free=s.disk?.free,total=s.disk?.total,diskKnown=Number.isFinite(free)&&free>=0&&Number.isFinite(total)&&total>0;
@@ -48,7 +49,7 @@
    byId('security_manual').querySelectorAll('tr').forEach(row=>{const ip=row.firstElementChild?.textContent;if(!ip||!/^[0-9a-fA-F:.\/]+$/.test(ip))return;const td=document.createElement('td');const details=document.createElement('button');details.type='button';details.className='btn-action';details.textContent='Details';details.onclick=()=>window.explainIP(ip);td.appendChild(details);const remove=document.createElement('button');remove.type='button';remove.className='btn-action';remove.textContent='Unban';remove.setAttribute('data-admin-only','');remove.hidden=typeof adminAuthenticated==='undefined'||!adminAuthenticated;remove.onclick=()=>unbanIP(ip);td.appendChild(remove);row.appendChild(td);});
    const review=byId('security_policy');review.textContent=Object.entries(s.bypasses||{}).map(([key,value])=>key+': '+value).join('\n')+'\n\nAdditional protected management networks: '+(s.management_networks||[]).join(', ')+'\n\nBypasses return control to subsequent router rules; they are not unconditional ACCEPT rules. WAN input interface and established connection state also matter.';
    renderEvents();renderComparison();
-   window.KT_SECURITY_DATA={updated:s.time,status:'ready'};
+   window.KT_SECURITY_DATA={updated:s.time,monitorInterval:s.monitor_interval,status:'ready'};
   }catch(e){byId('security_updated').textContent=e.message;for(const id of ['security_fw','security_disk','security_web','security_backup'])healthResult(id,'Unavailable','unknown');window.KT_SECURITY_DATA={status:'error'};}finally{loading=false;window.updateKTDataState?.();}
  }
  window.loadSecurityOverview=loadSecurityOverview;

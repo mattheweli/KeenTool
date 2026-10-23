@@ -1,14 +1,25 @@
 # Stable changelog — 2026-10-23
 
-## KeenTool 2.0.4
+## KeenTool 2.0.5
 
-Relative to published v2.0.3 (main `9350079e75db877333c0b927562734537e4aecc0`).
+Relative to v2.0.4 (main `1e799ec2abade673cd7a728872db0035b7c5fff6`).
 
-- Make Install / Update verify every installed file owned by the selected component, plus shared dependencies, against the published target SHA-256 and expected permissions. A current installed-release.json no longer hides an old Monitor, missing API/helper or modified script. Report every differing path, reason and readable source version before installation consent. Unrelated component source differences do not trigger the selected component.
-- Add explicit FILE_SCOPES.json ownership for all 54 installation targets. The lightweight GitHub-digest-verified overview carries source/path/owner/hash/mode/version data; normal checks still do not download the archive. After consent, require the archive's INSTALL.tsv, scopes and source hashes to match the approved overview before applying the coordinated transaction.
-- Keep the Main Dashboard in the KeenTool repository while tracking Dashboard 2.0.3 separately from manager 2.0.4. Check the actual installed HTML version and content, including when an old record does not contain a Dashboard entry or incorrectly claims a newer version. The dashboard menu selects Dashboard instead of KeenTool; the global overview includes all six components.
-- Display the recorded Firewall suite version in the main tool summary. Keep Monitor and Stats script versions in the firewall submenu; independent script versions are not used as the suite version.
-- Retain explicit full-package repair, coordinated file installation, dependency preflight, successful-update menu restart, backup/rollback and preservation of credentials, configuration, databases and schedules. Older version-only overviews explicitly state that files were not verified.
-- Add transport/menu regression cases for same-version Monitor 3.0.0 versus expected 4.0.0, scoped file coverage, unrelated component drift, shared dependencies, missing files and bad modes, actual Dashboard HTML versus the record, and mismatched target metadata.
+- Replace the fixed three-minute Security & Health age warning with the slower configured monitor-production/browser-refresh cadence. Publish monitor_interval in the security snapshot and apply one shared freshness calculation to the top status banner, Checked timestamp and Main Dashboard security summary. Mark yellow only when age is strictly greater than the effective interval; handle Off, missing legacy intervals, exact boundaries and future timestamps without inventing a delay.
+- Refresh all page/template shared JavaScript references to prevent browser caches from keeping the old freshness logic. Main Dashboard advances to 2.0.4; shared UI to 1.0.1 and security UI/engine to 1.0.2. Firewall component 4.0.2 (Dashboard 2.0.2), Pingtool 2.0.1 and Traffic Manager 2.0.1 carry updated references; their collection/filtering algorithms are unchanged.
+- Rewrite the five GitHub component READMEs with current features, independent versions, complete-suite installation/update instructions, real command/configuration paths, data/precision/security limitations and troubleshooting. Preserve license attribution and optional original project support links.
+- Add reproducible screenshots from actual current application templates and the real SMB CLI menu, using synthetic fixtures, example addresses and an explicit documentation watermark. No user logs, credentials, database or NAS contents are used. Include generation source, pinned documentation browser dependencies and a render error report.
+- Extend freshness/refresh tests for five-minute polling, long producer intervals, exact threshold, Off/legacy state, cross-tab changes and snapshot interval propagation.
 
-Firewall remains 4.0.1 (Monitor 4.0.0, Stats 4.0.1). Pingtool/Traffic/SMB remain 2.0.0. Installer remains 1.0.2; updater/verifier/bootstrap advance to 1.0.3. No firewall policy, cron or database history change is included. See [Update behavior](docs/UPDATE_RECOVERY.md) and the [2.0.3 changelog](docs/history/STABLE_2.0.3.md).
+Installer, firewall rule application, history aggregation and preservation/rollback behavior are unchanged. SMB runtime remains 2.0.0; its README is documentation-only.
+
+## keenetic-firewall 4.0.2
+
+Refresh shared UI/security asset references for configured snapshot freshness. No hook, filtering, statistics collection or database policy change. Monitor remains 4.0.0, Stats 4.0.1; firewall HTML advances to 2.0.2. Update the explanatory README with a synthetic interface screenshot.
+
+## keenetic-pingtool 2.0.1
+
+Refresh the generated page shared UI reference for the coordinated security freshness correction. Probe, notification and history algorithms are unchanged. Rewrite the explanatory README with a synthetic Connection Monitor screenshot.
+
+## Traffic_manager 2.0.1
+
+Refresh the generated page shared UI reference for the coordinated security freshness correction. vnStat collection, export retention and history algorithms are unchanged. Rewrite the explanatory README with a synthetic Traffic Monitor screenshot.
