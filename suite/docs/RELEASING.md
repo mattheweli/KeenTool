@@ -1,8 +1,8 @@
 # Prepared GitHub releases
 
-The release kit contains five repository overlays, five component source archives, the complete suite archive, draft notes, recorded public baseline commits and checksums. The KeenTool overlay includes suite/ with the coordinated package; component overlays preserve their normal source paths and existing upstream files/licenses.
+A release kit contains changed repository overlays and source archives, the complete suite archive, release notes, recorded public baseline commits and checksums. The 2.0.1 patch changes KeenTool and keenetic-firewall only; the other three repository versions remain unchanged. The KeenTool overlay includes suite/ with the coordinated package; component overlays preserve their normal source paths and existing upstream files/licenses.
 
-Updated sources can be uploaded directly through the GitHub connector as release/stable-20261022 branches and draft pull requests. The connector has no binary release-asset upload operation. Each prepared repository therefore includes a stable-draft workflow: a push to release/stable-* runs validation, assembles archives/checksums on GitHub and creates or refreshes a draft release with GitHub Actions. It explicitly refuses to overwrite a published release and never publishes a draft. Actions must be enabled and repository policy must permit the contents-write workflow token. The kit also includes tools/publish-drafts.sh for a workstation with authenticated GitHub CLI as an alternative. Do not run it if the workflows already created the drafts.
+Updated sources can be uploaded directly through the GitHub connector as release/stable-* branches and draft pull requests. The connector has no binary release-asset upload operation. Each prepared repository therefore includes a stable-draft workflow: a push to release/stable-* runs validation, assembles archives/checksums on GitHub and creates or refreshes a draft release with GitHub Actions. It explicitly refuses to overwrite a published release and never publishes a draft. Actions must be enabled and repository policy must permit the contents-write workflow token. The kit also includes tools/publish-drafts.sh for a workstation with authenticated GitHub CLI as an alternative. Do not run it if the workflows already created the drafts.
 
 On a workstation with git, gh, tar and sha256sum:
 
@@ -16,7 +16,7 @@ The script checks checksums, validates that upstream main still matches each rec
 
 KeenTool is the coordinated runtime release. Component assets depend on the full KeenTool suite and are not separate bootstrap installers. Preserve attribution and the upstream license for each repository. Do not use a tag already assigned to different code, and do not replace an already downloaded stable asset in place.
 
-The stable changelog uses source commits as baselines because no upstream tags/Releases existed. The GeoIP KP source issue is explicitly included in release notes.
+The patch changelog is relative to the preceding published stable tags. First-stable source baselines and alpha history are archived separately. The GeoIP KP source issue is explicitly included in release notes.
 
 ## Remote upgrades
 

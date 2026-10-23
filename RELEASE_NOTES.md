@@ -1,27 +1,18 @@
-# KeenTool 2.0.0
+# KeenTool 2.0.1
 
-- Existing public Update KeenTool now hands off to a self-contained migration entry before shared libraries load. The entry verifies the full stable suite, preserves interactive consent, handles cancellation/retry and opens the new menu only after successful installation. Pinned alpha installations use the same standalone bootstrap once.
+Relative to published v2.0.0 (`2758f0d7ee8fb9e703ee7c35ea866002e4edb036` on main).
 
-- WAN monitor shutdown waits for in-flight scans and notification work even when a trapped signal interrupts Bash wait.
+- Add progressive firewall history settings in the CLI Firewall menu and authenticated web Settings, with enabled/raw/hourly thresholds, ranges/presets, revision checks, private configuration backup and cross-field validation. History settings do not reapply the firewall hook.
+- Add the coordinated history engine/CLI, default 7-day raw and 30-day hourly detail, installation targets and missing-default configuration migration. Preserve existing history settings, scheduler, credentials and databases during package updates.
+- Expose historical bucket precision in dashboard/Security diagnostics and comparisons. Preserve all-time IP/list totals, local calendar-day totals, global counters, full port history and reporting state.
+- Patch component versions: manager/dashboard 2.0.1, firewall statistics 4.0.1, firewall page 2.0.1, changed settings/security/installation/uninstall helpers 1.0.1; new history helpers 1.0.0. Unchanged components retain their published versions.
 
-Baseline: `8d640c8b06968b0f24ce41feb1bc5b0a89c3f541`.
+## Upgrade and history precision
 
-- Remote whole-suite updater and standalone legacy/alpha bootstrap: stable-only release lookup, confirmation, no downgrade, SHA-256/GitHub digest validation, bounded safe TAR/PAX extraction and complete file-manifest verification before the same migration installer. Menu/CLI checks and offline updates remain available.
-- New coordinated 2.0.0 suite installation: fresh/upstream/alpha detection, verified file/configuration backups, atomic replacement, automatic/manual rollback and whole-package update entry point.
-- Uniform Keenetic-inspired responsive navigation, shared refresh with Off/manual controls, remembered navigation/density, readable tables and a full-width Security & Health overview. Remove development banners and show versions in copyright footers.
-- Dot thousands/comma decimals across rendered dashboard values; preserve raw technical data and arithmetic. Full expanded log views, bounded internal transport, log sizes and allowlisted read-only system logs without changing syslog rotation.
-- Password-only HTTPS administrator access shared with Settings/Security, typed settings with ranges/presets, revision conflict handling and guarded firewall changes.
-- Entware update monitoring/notifications and an explicitly requested maintenance worker that stops/restarts Entware services. Shared HTML/plain notification layout with safe tables, MTR rendering and semantic health colors.
-- Independent incremental PPP syslog monitor, root broker, ktweb web-isolation tools, boot scheduler check and private helper paths. BusyBox metadata fallback removes the GNU stat requirement.
+Install the complete KeenTool 2.0.1 suite through `keentool --update`. Component sources require the coordinated runtime; do not install isolated scripts. Existing settings, credentials, schedules and databases are preserved by the installer. Missing history defaults are enabled (7 days of samples, hourly through 30 days, daily thereafter). Aggregation starts at the next normal firewall statistics job, after a verified private baseline backup, and then runs at most daily. Configure it in KeenTool → Firewall → History aggregation settings, or authenticated Settings → Firewall history.
 
-## Installation and compatibility
-
-Install/update through the complete KeenTool 2.0.0 suite asset. Component archives require the coordinated shared runtime; do not replace isolated scripts over older installations. Existing settings, credentials, databases and upgrade schedules are preserved. Read the suite docs/INSTALL.md and SECURITY.md.
-
-## Known feed limitation
-
-IPdeny IPv6 KP may return HTTP 404; incomplete candidates retain the installed GeoBlock6 list. Cached installation time is not source freshness. This is reported explicitly, not silently bypassed.
+All IP/list and calendar-day hit totals remain exact; older time precision is reduced irreversibly. Period boundaries crossing a bucket and historical first/last timestamps are approximate and labeled. Global counters, full port histories and reporting state are untouched. Increasing thresholds or disabling aggregation cannot reconstruct prior detail. The baseline backup is retained separately and occupies storage; restoring it later would lose events collected since that backup. See suite/docs/FIREWALL_HISTORY.md.
 
 ## Validation
 
-See suite docs/VALIDATION.md for isolated regression results and the live-router acceptance steps that remain before publication. This prepared release is a draft; no router reboot or public deployment is claimed.
+45 isolated regression checks passed, including real SQLite/PHP-core aggregation, DST transitions, backup verification, rollback on integer overflow, writer locking and installer/updater compatibility. A private database copy reduced from 46.9 MB to 43.8 MB with all 30,626,489 hits and all metadata/global/report state preserved; production dashboard SQL/geography export passed. No private database is distributed. Physical-router execution/reboot and live SMTP were not independently tested for this patch.

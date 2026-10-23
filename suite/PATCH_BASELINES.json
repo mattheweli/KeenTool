@@ -1,0 +1,12 @@
+{
+  "KeenTool": {
+    "version": "2.0.1",
+    "previous_tag": "v2.0.0",
+    "main": "2758f0d7ee8fb9e703ee7c35ea866002e4edb036"
+  },
+  "keenetic-firewall": {
+    "version": "4.0.1",
+    "previous_tag": "v4.0.0",
+    "main": "55dc2b0404de3ddd0fa87e333ee7a91aeedfd0ca"
+  }
+}

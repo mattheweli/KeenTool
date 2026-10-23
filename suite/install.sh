@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KeenTool stable installer 1.0.0 — 2026-10-22.
+# KeenTool stable installer 1.0.1 — 2026-10-23.
 set -Eeuo pipefail
 export PATH="${KT_INSTALL_ROOT:-}/opt/bin:${KT_INSTALL_ROOT:-}/opt/sbin:/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
 base=$(cd "$(dirname "$0")" && pwd)

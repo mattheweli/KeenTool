@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# uninstall v1.0.0 | 2026-10-22 | Stable release
+# uninstall v1.0.1 | 2026-10-23 | Stable release
 # Selective uninstaller: no shared packages, native router chains or unrelated files.
 set -e
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -37,9 +37,9 @@ if selected notifications;then paths+=(/opt/bin/email_sender.mod /opt/bin/telegr
 if selected firewall;then
     paths+=(/opt/bin/firewall_security /opt/bin/keentool_security_service /opt/etc/init.d/S96keentool-security /opt/etc/init.d/S01keentool-web-user /opt/lib/keentool-security /opt/lib/keentool/firewall_guard /opt/bin/firewall_health)
     data+=(/opt/etc/keentool/security /opt/var/log/keentool-security)
-    paths+=(/opt/bin/firewall_manager.sh /opt/bin/firewall_monitor /opt/bin/firewall_stats.sh /opt/bin/update_blocklist.sh /opt/bin/vpn_scan.sh /opt/bin/abuse_reporter.sh /opt/bin/firewall_enrich /opt/bin/firewall_db_migrate /opt/etc/ndm/netfilter.d/100-firewall.sh /opt/etc/init.d/S00ipset-load /opt/var/www/firewall /opt/var/www/security /opt/var/www/settings /opt/var/www/assets/keentool-settings.js)
+    paths+=(/opt/bin/firewall_history /opt/lib/keentool/history_engine.php /opt/bin/firewall_manager.sh /opt/bin/firewall_monitor /opt/bin/firewall_stats.sh /opt/bin/update_blocklist.sh /opt/bin/vpn_scan.sh /opt/bin/abuse_reporter.sh /opt/bin/firewall_enrich /opt/bin/firewall_db_migrate /opt/etc/ndm/netfilter.d/100-firewall.sh /opt/etc/init.d/S00ipset-load /opt/var/www/firewall /opt/var/www/security /opt/var/www/settings /opt/var/www/assets/keentool-settings.js)
     patterns+=(/opt/bin/firewall_stats.sh /opt/bin/update_blocklist.sh /opt/bin/vpn_scan.sh /opt/bin/abuse_reporter.sh /opt/bin/firewall_enrich)
-    data+=(/opt/etc/firewall.conf /opt/etc/firewall_stats.db /opt/etc/firewall_stats.db-wal /opt/etc/firewall_stats.db-shm /opt/etc/AbuseIPDB.key /opt/etc/vpn_banned_ips.txt /opt/etc/firewall_autoban.save /opt/etc/firewall_blocklist.save /opt/etc/firewall_blocklist6.save /opt/etc/firewall_geoblock.save /opt/etc/firewall_geoblock6.save /opt/etc/Blacklist.backup /opt/etc/Blacklist6.backup /opt/etc/keentool/vpn /opt/etc/keentool/blocklist-cache /opt/etc/keentool/firewall-api.token)
+    data+=(/opt/etc/keentool/firewall-history.conf /opt/etc/firewall.conf /opt/etc/firewall_stats.db /opt/etc/firewall_stats.db-wal /opt/etc/firewall_stats.db-shm /opt/etc/AbuseIPDB.key /opt/etc/vpn_banned_ips.txt /opt/etc/firewall_autoban.save /opt/etc/firewall_blocklist.save /opt/etc/firewall_blocklist6.save /opt/etc/firewall_geoblock.save /opt/etc/firewall_geoblock6.save /opt/etc/Blacklist.backup /opt/etc/Blacklist6.backup /opt/etc/keentool/vpn /opt/etc/keentool/blocklist-cache /opt/etc/keentool/firewall-api.token)
 fi
 if [ "$tool" = all ]; then
     paths+=(/opt/bin/keentool_uninstall /opt/lib/keentool)

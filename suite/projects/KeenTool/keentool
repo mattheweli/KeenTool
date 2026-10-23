@@ -1,6 +1,6 @@
 #!/opt/bin/bash
-# KEENTOOL MANAGER v2.0.0
-# Release: 2026-10-22 | Stable. See CHANGELOG.md for release details.
+# KEENTOOL MANAGER v2.0.1
+# Release: 2026-10-23 | Stable. See CHANGELOG.md for release details.
 
 # ==============================================================================
 # KEENTOOL MANAGER v1.3.4 (Stable)
@@ -226,7 +226,7 @@ if ! kt_runtime_ready;then
  exit 0
 fi
 # END GENERATED LEGACY MIGRATION
-# KeenTool 2.0.0
+# KeenTool 2.0.1
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 # Shared runtime and components are updated together through verified release packages.
 KT_MANAGED_PACKAGE=true
@@ -308,7 +308,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.0  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.1  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -835,7 +835,7 @@ EOF
 }
 
 doctor() {
-    echo 'KeenTool v2.0.0'
+    echo 'KeenTool v2.0.1'
     for cmd in bash curl sqlite3 ipset iptables smbclient vnstat tar timeout sha256sum; do
         command -v "$cmd" >/dev/null && printf 'OK %s\n' "$cmd" || printf 'MISSING %s\n' "$cmd"
     done
@@ -2038,7 +2038,7 @@ EOF
 action_firewall() {
     while true; do
         header; if [ -f "$FW_CORE_LOCAL" ]; then V_CORE=$(get_version "$FW_CORE_LOCAL"); S_MAIN="${GREEN}Installed (v$V_CORE)${RESET}"; else S_MAIN="${DIM}Missing${RESET}"; fi
-        echo -e "Firewall Suite Status: $S_MAIN"; echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Run Manager"; echo " 4. Run Monitor"; echo " 5. Uninstall Suite"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
+        echo -e "Firewall Suite Status: $S_MAIN"; echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Run Manager"; echo " 4. Run Monitor"; echo " 5. Uninstall Suite"; echo " 6. History aggregation settings"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
         case $op in
             1) header; check_and_install_deps "$DEPS_FW"; RES_DEPS=$?
                if [ $RES_DEPS -ne 0 ]; then 
@@ -2122,6 +2122,7 @@ EOF
             2) manage_cron_menu "$CMD_FW_STAT" "$CMD_FW_UPD" "$CMD_FW_VPN" "$CMD_ABUSE" "$CMD_FW_REPORT_AUTO" "$CMD_FW_REPORT_DAILY" "$CMD_FW_REPORT_WEEKLY" "$CMD_FW_REPORT_MONTHLY"; ;;
             3) [ -f "$BIN_DIR/firewall_manager.sh" ] && run_protected "$BIN_DIR/firewall_manager.sh" || { echo "Missing"; sleep 1; };;
             4) [ -f "$BIN_DIR/firewall_monitor" ] && run_protected "$BIN_DIR/firewall_monitor" || { echo "Missing"; sleep 1; };;
+            6) /opt/bin/bash /opt/bin/firewall_history menu; pause ;;
             5) /opt/bin/keentool_uninstall --tool firewall --keep-data; echo 'Preview only; apply via keentool --uninstall --tool firewall --keep-data --apply'; pause ;;
             0) return ;;
         esac

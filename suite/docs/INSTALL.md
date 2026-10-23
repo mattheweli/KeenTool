@@ -83,3 +83,7 @@ Pinned alpha installations have online updates disabled locally. Run the reviewe
 For first migration, use the manager update before individual component updates. Release maintainers must publish the reviewed complete suite asset before exposing the replacement manager on main. Otherwise legacy users can only retry after publication. After the first migration, all normal updates use published complete-suite releases, not individual main files.
 
 The offline path remains: `keentool --update --local /absolute/path/to/extracted-release`. Existing external settings, credentials, databases and cron are preserved through both paths, with the same backup/rollback. Complex inline shell customizations require manual migration and are rejected before replacement. Physical-router reboot/rollback acceptance remains necessary; isolated tests do not establish every custom installation's compatibility.
+
+## Firewall history in 2.0.1
+
+The next scheduled firewall statistics run enables the default progressive 7/30-day policy after a verified baseline backup. Installation itself preserves the database. Configure it in KeenTool → Firewall → History aggregation settings, or authenticated Settings → Firewall history. Read [FIREWALL_HISTORY.md](FIREWALL_HISTORY.md) before restoring a baseline backup: later events are not in that initial copy, and changing thresholds does not recover aggregated time precision.
