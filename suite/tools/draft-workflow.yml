@@ -50,6 +50,7 @@ jobs:
           set -euo pipefail
           if gh release view "$RELEASE_TAG" --json isDraft > "$RUNNER_TEMP/release-state.json" 2>/dev/null;then
             python3 -c 'import json,sys;assert json.load(open(sys.argv[1]))["isDraft"] is True,"Refusing to replace a published release"' "$RUNNER_TEMP/release-state.json"
+            gh release edit "$RELEASE_TAG" --draft --target "$GITHUB_SHA" --title "$RELEASE_TITLE" --notes-file RELEASE_NOTES.md
           else
             gh release create "$RELEASE_TAG" --draft --target "$GITHUB_SHA" --title "$RELEASE_TITLE" --notes-file RELEASE_NOTES.md
           fi
