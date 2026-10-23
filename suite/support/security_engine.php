@@ -1,5 +1,5 @@
 <?php
-// KEENTOOL SECURITY ENGINE v1.0.1 — 2026-10-23, stable.
+// KEENTOOL SECURITY ENGINE v1.0.2 — 2026-10-23, stable.
 // Root-only local command broker, audit, guarded policy changes and monitoring.
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit(1); }
 umask(0077);
@@ -227,7 +227,7 @@ function ksystem() {
     }
     $wanPid=trim((string)@file_get_contents(kp('/tmp/keentool-wan-service.pid')));$services['wan_syslog_service']=kdigits($wanPid)&&strpos((string)@file_get_contents(kp('/proc/'.$wanPid.'/cmdline')),'wan_syslog_service')!==false;
     $setHealth=[];foreach(['FirewallBlock','FirewallBlock6','GeoBlock','GeoBlock6','AutoBan','AutoBan6','KTManualBan','KTManualBan6'] as $set){[$rc,$text]=krun(['ipset','list',$set,'-terse'],5);$row=['present'=>$rc===0,'boot_restore_complete'=>trim((string)@file_get_contents(kp('/tmp/fw-restored-'.$set)))==='complete-v2'];if(preg_match('/Number of entries:\s*(\d+)/',$text,$m))$row['entries']=(int)$m[1];if(preg_match('/References:\s*(\d+)/',$text,$m))$row['references']=(int)$m[1];$setHealth[$set]=$row;}
-    return ['time'=>time(),'firewall'=>$health,'disk'=>['free'=>@disk_free_space($root),'total'=>@disk_total_space($root)],'databases'=>$sizes,'services'=>$services,'latest_verified_smb_backup'=>$lastSmb,'latest_source_backup'=>$last?:null,'latest_verified_source_backup'=>$verified?:null,'backup_note'=>$verified?'Backup file checksums verified; database recovery is not included.':'Source-backup presence only; legacy backup has no checksum ledger.','web_privileges'=>$webSeen?($webRoot?'root detected':'unprivileged detected'):'not verified','isolation_configured'=>is_file(kp('/opt/etc/keentool/security/web-hardened')),'sets'=>$setHealth,'bypasses'=>$review,'management_networks'=>kconfig()['management_networks'],'pending'=>kpending(),'lists'=>kread(kp('/opt/etc/keentool/security/lists.json')),'manual_bans'=>array_map(fn($r)=>['expires'=>$r['expires'],'created'=>$r['created']],kread(kp('/opt/etc/keentool/security/manual-bans.json')))];
+    return ['time'=>time(),'monitor_interval'=>max(30,min(3600,(int)kconfig()['monitor_interval'])),'firewall'=>$health,'disk'=>['free'=>@disk_free_space($root),'total'=>@disk_total_space($root)],'databases'=>$sizes,'services'=>$services,'latest_verified_smb_backup'=>$lastSmb,'latest_source_backup'=>$last?:null,'latest_verified_source_backup'=>$verified?:null,'backup_note'=>$verified?'Backup file checksums verified; database recovery is not included.':'Source-backup presence only; legacy backup has no checksum ledger.','web_privileges'=>$webSeen?($webRoot?'root detected':'unprivileged detected'):'not verified','isolation_configured'=>is_file(kp('/opt/etc/keentool/security/web-hardened')),'sets'=>$setHealth,'bypasses'=>$review,'management_networks'=>kconfig()['management_networks'],'pending'=>kpending(),'lists'=>kread(kp('/opt/etc/keentool/security/lists.json')),'manual_bans'=>array_map(fn($r)=>['expires'=>$r['expires'],'created'=>$r['created']],kread(kp('/opt/etc/keentool/security/manual-bans.json')))];
 }
 // Decimal units keep the public dashboard and digest consistent.
 function kstorageSize($bytes) {

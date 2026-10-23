@@ -17,7 +17,7 @@ const securityState=securityCreated.find(e=>e.className==='kt-data-state');
 assert.equal(securityState.dataset.state,'missing');assert.equal(securityState.lastElementChild.textContent,'Waiting for security data');
 securityCtx.window.KT_SECURITY_DATA={status:'ready',updated:Math.floor(Date.now()/1000)};securityCtx.window.updateKTDataState();
 assert.equal(securityState.dataset.state,'ready');assert(securityState.lastElementChild.textContent.includes('Data available'));
-securityCtx.window.KT_SECURITY_DATA.updated-=240;securityCtx.window.updateKTDataState();assert.equal(securityState.dataset.state,'stale');assert(securityState.lastElementChild.textContent.includes('3 minutes'));
+securityCtx.window.KT_SECURITY_DATA.updated-=240;securityCtx.window.updateKTDataState();assert.equal(securityState.dataset.state,'stale');assert(securityState.lastElementChild.textContent.includes('1 minute'));
 securityCtx.window.KT_SECURITY_DATA={status:'error'};securityCtx.window.updateKTDataState();assert.equal(securityState.dataset.state,'error');assert.equal(securityState.lastElementChild.textContent,'Security data unavailable');
 securityCtx.window.KT_SECURITY_DATA={status:'ready'};securityCtx.window.updateKTDataState();assert.equal(securityState.dataset.state,'missing');
 console.log('PASS: Security snapshot waiting/ready/stale/error/missing-time states and immediate asynchronous refresh.');

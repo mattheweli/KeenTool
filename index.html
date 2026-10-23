@@ -1,3 +1,4 @@
+<!-- Changelog 2.0.4: use configured security snapshot/poll intervals for freshness. -->
 <!-- Changelog 2.0.3: track the Dashboard independently from the KeenTool manager in component update metadata. -->
 <!-- Changelog 2.0.2: align the Security overview with monitor cards; keep title navigation and one update footer. -->
 <!-- Changelog 2.0.2: uniform numeric presentation and refreshed shared layout. -->
@@ -11,7 +12,7 @@
 <!-- Changelog 2.0.2: cleaner decorative icons, consistent typography/colors and shared log terminal. -->
 <!-- Changelog 2.0.2: full-width layout, collapsible navigation and chart resize. -->
 <!-- Changelog 2.0.2: shared Keenetic-inspired navigation/theme, responsive controls and readable monitoring. -->
-<!-- KeenTool Dashboard v2.0.3 | Stable release -->
+<!-- KeenTool Dashboard v2.0.4 | Stable release -->
 <!-- Changelog 2.0.2: English source comments and interface messages. -->
 
 <!DOCTYPE html>
@@ -224,7 +225,7 @@
     </style>
 <script src="/assets/keentool-format.js?v=1.0.0"></script>
 <link rel="stylesheet" href="/assets/keentool-ui.css?v=1.0.0">
-<script defer src="/assets/keentool-ui.js?v=1.0.0"></script>
+<script defer src="/assets/keentool-ui.js?v=1.0.1"></script>
 </head>
 <body class="kt-ui" data-kt-page="home">
 
@@ -299,7 +300,7 @@
     </section>
     <div id="log_container_root"></div>
 
-    <footer class="kt-page-footer">&copy; <span id="year" data-kt-year>2026</span> mattheweli<span class="kt-footer-meta">KeenTool Dashboard 2.0.3</span></footer>
+    <footer class="kt-page-footer">&copy; <span id="year" data-kt-year>2026</span> mattheweli<span class="kt-footer-meta">KeenTool Dashboard 2.0.4</span></footer>
 
     <script>
         // === CONFIGURATION ===
@@ -350,7 +351,7 @@
                 const free=system.disk?.free,total=system.disk?.total,known=Number.isFinite(free)&&free>=0&&Number.isFinite(total)&&total>0;
                 result('dashboard_sec_storage',known?window.KTFormat.bytes(free,1000,1):'Unavailable',known?(free/total>=0.05?'ok':'error'):'unknown');
                 document.getElementById('dashboard_sec_events').textContent=window.KTFormat.integer((snapshot.events||[]).length);
-                document.getElementById('dashboard_sec_updated').textContent=system.time?'Checked: '+new Date(system.time*1000).toLocaleString('en-GB')+(Date.now()/1000-system.time>180?' · snapshot is stale':''):'Check time unavailable';
+                document.getElementById('dashboard_sec_updated').textContent=system.time?'Checked: '+new Date(system.time*1000).toLocaleString('en-GB')+(window.getKTSecurityFreshness?.(system.time,system.monitor_interval)?.stale?' · snapshot older than configured interval':''):'Check time unavailable';
             }catch(error){for(const id of ['dashboard_sec_fw','dashboard_sec_web','dashboard_sec_storage'])result(id,'Unavailable','unknown');document.getElementById('dashboard_sec_events').textContent='Unavailable';document.getElementById('dashboard_sec_updated').textContent='Security data unavailable';}
         }
         let dashboardLoading=false;

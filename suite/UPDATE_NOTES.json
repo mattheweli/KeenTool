@@ -1,8 +1,7 @@
 {
   "changes": [
-    "Install / Update checks every file owned by the selected component, including same-version files, against verified release hashes and permissions.",
-    "Missing or modified scripts are reported before asking to download and apply a coordinated repair.",
-    "Main Dashboard remains in the KeenTool repository with its own version and update scope.",
-    "The main menu shows the Firewall suite version separately from Monitor and Stats script versions."
+    "Security freshness respects the slower configured snapshot/browser interval instead of a fixed three minutes.",
+    "The main Dashboard uses the same security freshness logic and all page asset references are refreshed.",
+    "All five component READMEs include current operation, configuration, troubleshooting and synthetic interface screenshots."
   ]
 }

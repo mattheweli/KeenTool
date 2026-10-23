@@ -12,7 +12,7 @@ with tempfile.TemporaryDirectory() as td:
  entry=entry.replace('#!/opt/bin/bash','#!/bin/bash',1)+'printf opened >> "$KT_TEST_OPEN"\nexit 0\n'
  source.write_text(entry);source.chmod(0o755)
  payload=b/'payload';(payload/'support').mkdir(parents=True)
- (payload/'RELEASE.json').write_text('{"suite":"KeenTool","version":"2.0.4","channel":"stable"}')
+ (payload/'RELEASE.json').write_text('{"suite":"KeenTool","version":"2.0.5","channel":"stable"}')
  (payload/'support/release_install.php').write_text('<?php // mocked transaction boundary\n')
  (payload/'install.sh').write_text('''#!/bin/bash
 printf '%s\\n' "$*" >> "$KT_TEST_INSTALL"
@@ -27,19 +27,19 @@ cp "$KT_TEST_MANAGER" "$KT_MANAGER_PATH"
 printf ready > "$KT_COMMON"
 printf updater > "$KT_UPDATE_COMMAND"
 printf verifier > "$KT_TEST_READY_HELPER"
-printf '{"version":"2.0.4"}' > "$KT_UPDATE_INSTALLED"
+printf '{"version":"2.0.5"}' > "$KT_UPDATE_INSTALLED"
 ''')
  def pack():
   (payload/'CHECKSUMS.sha256').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(payload).as_posix()+'\n' for p in sorted(payload.rglob('*')) if p.is_file() and p.name!='CHECKSUMS.sha256'))
   with tarfile.open(archive,'w:gz') as t:
    for p in sorted(payload.rglob('*')):
-    if p.is_file():t.add(p,arcname='keentool-2.0.4/'+p.relative_to(payload).as_posix())
-  sidecar.write_text(hashlib.sha256(archive.read_bytes()).hexdigest()+'  keentool-2.0.4.tar.gz\n')
+    if p.is_file():t.add(p,arcname='keentool-2.0.5/'+p.relative_to(payload).as_posix())
+  sidecar.write_text(hashlib.sha256(archive.read_bytes()).hexdigest()+'  keentool-2.0.5.tar.gz\n')
   if api.exists():
    value=json.loads(api.read_text());value['assets'][0].update(size=archive.stat().st_size,digest='sha256:'+hashlib.sha256(archive.read_bytes()).hexdigest());api.write_text(json.dumps(value))
  pack()
- url='https://github.com/mattheweli/KeenTool/releases/download/v2.0.4/'
- release={'tag_name':'v2.0.4','draft':False,'prerelease':False,'assets':[{'name':'keentool-2.0.4.tar.gz','state':'uploaded','size':archive.stat().st_size,'browser_download_url':url+'keentool-2.0.4.tar.gz','digest':'sha256:'+hashlib.sha256(archive.read_bytes()).hexdigest()},{'name':'keentool-2.0.4.tar.gz.sha256','state':'uploaded','size':sidecar.stat().st_size,'browser_download_url':url+'keentool-2.0.4.tar.gz.sha256'}]}
+ url='https://github.com/mattheweli/KeenTool/releases/download/v2.0.5/'
+ release={'tag_name':'v2.0.5','draft':False,'prerelease':False,'assets':[{'name':'keentool-2.0.5.tar.gz','state':'uploaded','size':archive.stat().st_size,'browser_download_url':url+'keentool-2.0.5.tar.gz','digest':'sha256:'+hashlib.sha256(archive.read_bytes()).hexdigest()},{'name':'keentool-2.0.5.tar.gz.sha256','state':'uploaded','size':sidecar.stat().st_size,'browser_download_url':url+'keentool-2.0.5.tar.gz.sha256'}]}
  api.write_text(json.dumps(release))
  curl=bin/'curl';curl.write_text('''#!/usr/bin/env python3
 import os,sys,json
@@ -80,10 +80,10 @@ sys.exit(0 if code=='200' else 22)
    os.close(master)
   return result,output
  reset();r=run('--help');assert r.returncode==0 and not calls.exists()
- r=run('--check-updates');assert r.returncode==0 and 'available 2.0.4' in r.stdout and not trace.exists() and not opened.exists(),r.stdout+r.stderr
+ r=run('--check-updates');assert r.returncode==0 and 'available 2.0.5' in r.stdout and not trace.exists() and not opened.exists(),r.stdout+r.stderr
  r=run();assert r.returncode==0 and not trace.exists() and 'interactively' in r.stdout
  r=run('--update','--yes',extra={'KT_TEST_HTTP':'404'});assert r.returncode==0 and not trace.exists() and not opened.exists()
- sidecar.write_text('0'*64+'  keentool-2.0.4.tar.gz\n');r=run('--update','--yes');assert r.returncode!=0 and 'SHA-256 mismatch' in r.stderr and not trace.exists();pack()
+ sidecar.write_text('0'*64+'  keentool-2.0.5.tar.gz\n');r=run('--update','--yes');assert r.returncode!=0 and 'SHA-256 mismatch' in r.stderr and not trace.exists();pack()
  r=run('--update','--yes',extra={'KT_TEST_INSTALL_FAIL':'1'});assert r.returncode==7 and not opened.exists(),r.stdout+r.stderr
  trace.unlink();started=b/'started'
  proc=subprocess.Popen(['bash',str(manager),'--update','--yes'],env={**env,'KT_TEST_INSTALL_WAIT':'1','KT_TEST_STARTED':str(started)},stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,start_new_session=True)
@@ -98,7 +98,7 @@ sys.exit(0 if code=='200' else 22)
  before=calls.read_bytes();r=run();assert r.returncode==0 and opened.read_text()=='opened' and calls.read_bytes()==before
  reset();result,output=interactive(manager,b'n\n');assert result==0 and not trace.exists() and not opened.exists(),output.decode()
  # An alpha starts the same standalone verifier without replacing its manager first.
- reset();manager.write_text('# KEENTOOL MANAGER v2.0.0a8\n');r=run('--yes',script=root/'bootstrap.sh');assert r.returncode==0 and 'installed 2.0.0a8; available 2.0.4' in r.stdout and trace.exists(),r.stdout+r.stderr
+ reset();manager.write_text('# KEENTOOL MANAGER v2.0.0a8\n');r=run('--yes',script=root/'bootstrap.sh');assert r.returncode==0 and 'installed 2.0.0a8; available 2.0.5' in r.stdout and trace.exists(),r.stdout+r.stderr
  # Run the unmodified historical interactive update function. Only dependencies/UI
  # and its fixed temporary filename are isolated; its mv + exec handoff is real.
  reset();manager.write_text('# KEENTOOL MANAGER v1.3.4\n');old=b/'old-menu'

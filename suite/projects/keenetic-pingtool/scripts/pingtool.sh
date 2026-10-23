@@ -1,9 +1,9 @@
 #!/opt/bin/bash
-# KEENETIC PINGTOOL v2.0.0
+# KEENETIC PINGTOOL v2.0.1
 # Release: 2026-10-22 | Stable. See CHANGELOG.md for release details.
 
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin}
-# Pingtool 2.0.0
+# Pingtool 2.0.1
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 
 
@@ -357,11 +357,11 @@ echo "Done."
 # ==============================================================================
 HTML_FILE="$WEB_DIR/index.html"
 # Force regeneration to apply UI changes if requested
-if [ ! -f "$HTML_FILE" ] || [ "$FORCE_HTML_GEN" = "true" ] || ! grep -q "KT-PING-2.0.0" "$HTML_FILE"; then
+if [ ! -f "$HTML_FILE" ] || [ "$FORCE_HTML_GEN" = "true" ] || ! grep -q "KT-PING-2.0.1" "$HTML_FILE"; then
     echo " - Generating new HTML template (Keenetic UI)..."
 cat <<'HTML_EOF' > "$HTML_FILE"
 <!DOCTYPE html>
-<html lang="en"><!-- KT-PING-2.0.0 -->
+<html lang="en"><!-- KT-PING-2.0.1 -->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -510,7 +510,7 @@ cat <<'HTML_EOF' > "$HTML_FILE"
     </style>
 <script src="/assets/keentool-format.js?v=1.0.0"></script>
 <link rel="stylesheet" href="/assets/keentool-ui.css?v=1.0.0">
-<script defer src="/assets/keentool-ui.js?v=1.0.0"></script>
+<script defer src="/assets/keentool-ui.js?v=1.0.1"></script>
 </head>
 <body class="kt-ui" data-kt-page="ping">
     <div class="container">
@@ -755,7 +755,7 @@ cat <<'HTML_EOF' > "$HTML_FILE"
         if (['1','24','7','30','max'].includes(savedRange)) document.getElementById('history_range').value = savedRange;
         render();
     </script>
-<footer class="kt-page-footer">&copy; <span data-kt-year>2026</span> mattheweli<span class="kt-footer-meta">Pingtool 2.0.0</span></footer>
+<footer class="kt-page-footer">&copy; <span data-kt-year>2026</span> mattheweli<span class="kt-footer-meta">Pingtool 2.0.1</span></footer>
 </body>
 </html>
 HTML_EOF

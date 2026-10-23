@@ -1,4 +1,4 @@
-/* KeenTool shared UI v1.0.0. Presentation only; no admin or router mutations. */
+/* KeenTool shared UI v1.0.1. Presentation only; no admin or router mutations. */
 (() => {
  'use strict';
  function readPreference(key,fallback){try{return localStorage.getItem(key)||fallback;}catch(_){return fallback;}}
@@ -38,6 +38,17 @@
  });
  const state=document.createElement('div');state.className='kt-data-state';state.setAttribute('role','status');state.innerHTML='<span class="kt-state-dot"></span><span></span>';
  const anchor=document.querySelector('.container')||document.body;anchor.insertBefore(state,anchor.firstChild);
+ // Snapshot production and browser polling are independent; respect the slower cadence.
+ let freshnessRefreshMs=60000;
+ {const stored=readPreference('kt_refresh_rate','60000');if(['0','30000','60000','300000'].includes(stored))freshnessRefreshMs=Number(stored);}
+ function securityFreshness(epoch,monitorInterval){
+  const produced=Number(monitorInterval),browser=freshnessRefreshMs/1000;
+  const producer=Number.isFinite(produced)&&produced>=30&&produced<=3600?produced:0;
+  const limit=Math.max(producer,browser)||null;
+  const stamp=Number(epoch),age=Number.isFinite(stamp)&&stamp>0?Math.max(0,Date.now()/1000-stamp):null;
+  return {age,limit,stale:age!==null&&limit!==null&&age>limit,label:limit===null?'unavailable':limit%60===0?(limit/60)+' '+(limit===60?'minute':'minutes'):limit+' seconds'};
+ }
+ window.getKTSecurityFreshness=securityFreshness;
  function parseDate(s){if(!s)return null;const m=String(s).match(/^(\d{2})[/-](\d{2})[/-](\d{4})[, ]+(\d{2}):(\d{2})(?::(\d{2}))?/);return m?new Date(+m[3],+m[2]-1,+m[1],+m[4],+m[5],+(m[6]||0)):null;}
  function updateCopyrightYear(){document.querySelectorAll('[data-kt-year]').forEach(el=>{el.textContent=String(new Date().getFullYear());});}
  function updateState(){updateCopyrightYear();let stamp=null;let text='Waiting for data';
@@ -47,12 +58,15 @@
   if(page==='home')text='Overview · select a monitor for detailed history';
   if(page==='settings')text='Settings · configuration and policy';
   if(page==='security'){const epoch=Number(window.KT_SECURITY_DATA?.updated);if(Number.isFinite(epoch)&&epoch>0)stamp=new Date(epoch*1000);text=window.KT_SECURITY_DATA?.status==='error'?'Security data unavailable':'Waiting for security data';}
-  const staleAfter=page==='security'?3:30;
+  const freshness=page==='security'?securityFreshness(window.KT_SECURITY_DATA?.updated,window.KT_SECURITY_DATA?.monitorInterval):null;
+  const staleAfter=30;
   const age=stamp?(Date.now()-stamp.getTime())/60000:null;
-  state.dataset.state=stamp?(age>staleAfter?'stale':'ready'):(['home','settings'].includes(page)?'ready':'missing');
-  if(stamp)text=(age>staleAfter?'Data older than '+staleAfter+' minutes':'Data available')+' · '+stamp.toLocaleString('en-GB')+' (router time)';
+  const stale=freshness?freshness.stale:age>staleAfter;
+  state.dataset.state=stamp?(stale?'stale':'ready'):(['home','settings'].includes(page)?'ready':'missing');
+  if(stamp)text=(stale?'Data older than '+(freshness?freshness.label:staleAfter+' minutes'):'Data available')+' · '+stamp.toLocaleString('en-GB')+' (router time)';
   if(page==='security'&&window.KT_SECURITY_DATA?.status==='error')state.dataset.state='error';
   state.lastElementChild.textContent=text;
+  if(freshness){state.title='Snapshot interval: '+(window.KT_SECURITY_DATA?.monitorInterval||'unknown')+' seconds; browser refresh: '+(freshnessRefreshMs?freshnessRefreshMs/1000+' seconds':'Off')+'. Freshness uses the slower configured cadence.';const checked=document.getElementById('security_updated');if(stamp&&checked)checked.textContent='Checked: '+stamp.toLocaleString('en-GB')+(stale?' · snapshot older than '+freshness.label:'');}
   const dot=document.getElementById('loading_dot');if(dot?.classList.contains('active'))state.lastElementChild.textContent='Refreshing data…';
   document.querySelectorAll('#fw_drops, #fw_trap, #fw_v4, #fw_v6, #fw_vpn, #fw_geo').forEach(el=>{const raw=el.textContent.replace(/[.,]/g,'').trim();if(/^\d+$/.test(raw))el.textContent=BigInt(raw).toLocaleString('de-DE');});
  }
@@ -82,7 +96,7 @@
  }
  function setRefreshRate(value,persist=false){
   const valid=['0','30000','60000','300000'].includes(String(value))?String(value):'60000';
-  refreshRate=Number(valid);refreshSelect.value=valid;if(persist)writePreference('kt_refresh_rate',valid);scheduleRefresh();
+  refreshRate=Number(valid);freshnessRefreshMs=refreshRate;refreshSelect.value=valid;if(persist)writePreference('kt_refresh_rate',valid);updateState();scheduleRefresh();
  }
  refreshSelect.onchange=()=>setRefreshRate(refreshSelect.value,true);refreshButton.onclick=()=>runRefresh(true);
  window.addEventListener?.('storage',event=>{if(event.key==='kt_refresh_rate')setRefreshRate(event.newValue);});
