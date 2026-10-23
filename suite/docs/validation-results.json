@@ -84,6 +84,10 @@
     "status": "passed"
   },
   {
+    "test": "firewall-history-check.py",
+    "status": "passed"
+  },
+  {
     "test": "firewall-optimize-check.py",
     "status": "passed"
   },

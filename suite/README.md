@@ -1,4 +1,4 @@
-# KeenTool 2.0.0 — stable source package
+# KeenTool 2.0.1 — stable source package
 
 KeenTool integrates a router dashboard, dual-stack firewall, connection and traffic history, SMB backups, notifications, Entware maintenance, Security & Health and administrator Settings for Keenetic/Entware.
 
@@ -14,6 +14,6 @@ The complete suite is the supported installation unit. Shared runtime, security 
 
 Remote update: `keentool --check-updates` checks GitHub; `keentool --update` downloads/verifies a newer published stable suite and asks before installation. Public legacy installations migrate through their existing Update KeenTool menu, using a self-contained entry before shared libraries load. Pinned alpha installations run bootstrap.sh once.
 
-Release date: 2026-10-22. Installer and shared helpers: 1.0.0. Firewall repository release: 4.0.0; component versions are listed individually. The first stable package is based on locally tested 20261020-r50 and verified public upstream commits recorded in UPSTREAM_BASELINES.json. No upstream tags or GitHub Releases existed at inspection time.
+Release date: 2026-10-23. Installer: 1.0.1. Firewall repository release: 4.0.1; unchanged components keep their published versions. This patch adds progressive IP history aggregation with verified backup and configurable 7/30-day defaults. See [Firewall history](docs/FIREWALL_HISTORY.md) for precision, measurements and backup limitations. The original stable and alpha development notes remain archived under docs/history/.
 
 All six pages display their component version in the copyright footer. Development banners are removed. Generated Ping and Traffic pages adopt the new template at their next run or with force.

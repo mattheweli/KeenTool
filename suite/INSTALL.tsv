@@ -49,3 +49,5 @@ support/keentool_update	/opt/bin/keentool_update	755
 support/release_install.php	/opt/lib/keentool/release_install.php	644
 rollback.sh	/opt/lib/keentool/rollback.sh	755
 support/release_update.php	/opt/lib/keentool/release_update.php	644
+support/history_engine.php	/opt/lib/keentool/history_engine.php	644
+support/firewall_history	/opt/bin/firewall_history	755

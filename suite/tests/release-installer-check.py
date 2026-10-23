@@ -36,6 +36,8 @@ with tempfile.TemporaryDirectory() as td:
  fresh,env=fixture('fresh')
  r=call(env,'--plan','--mode','fresh','--interface','ppp0','--configure-web','--configure-logging');assert r.returncode==0,r.stdout+r.stderr;assert not (fresh/'events').exists() and not (fresh/'opt/etc/keentool').exists()
  r=call(env,'--apply','--mode','fresh','--interface','ppp0','--configure-web','--configure-logging');assert r.returncode==0,r.stdout+r.stderr
+ assert 'HISTORY_RAW_DAYS="7"' in (fresh/'opt/etc/keentool/firewall-history.conf').read_text()
+ assert (fresh/'opt/bin/firewall_history').exists() and (fresh/'opt/lib/keentool/history_engine.php').exists()
  assert 'ENABLE_FIREWALL="false"' in (fresh/'opt/etc/firewall.conf').read_text()
  assert (fresh/'opt/etc/keentool/tls/server.pem').stat().st_mode&0o777==0o600
  assert (fresh/'opt/etc/crontab').read_text().count('/opt/bin/pingtool.sh')==1
@@ -45,8 +47,9 @@ with tempfile.TemporaryDirectory() as td:
  assert not (fresh/'opt/bin/keentool').exists() and not (fresh/'opt/etc/crontab').exists()
  assert 'S80lighttpd stop' in (fresh/'events').read_text()
  # Upstream migration: literal inline Ping settings, existing cron/database/password unchanged.
- upstream,env=fixture('upstream',True);cron=(upstream/'opt/etc/crontab').read_bytes();db=(upstream/'opt/etc/firewall_stats.db').read_bytes();conf=(upstream/'opt/etc/firewall.conf').read_bytes()
+ upstream,env=fixture('upstream',True);history=upstream/'opt/etc/keentool/firewall-history.conf';history.write_text('HISTORY_ENABLED="false"\nHISTORY_RAW_DAYS="14"\nHISTORY_HOURLY_DAYS="60"\n');history_before=history.read_bytes();cron=(upstream/'opt/etc/crontab').read_bytes();db=(upstream/'opt/etc/firewall_stats.db').read_bytes();conf=(upstream/'opt/etc/firewall.conf').read_bytes()
  r=call(env,'--apply','--mode','upgrade');assert r.returncode==0,r.stdout+r.stderr
+ assert history.read_bytes()==history_before
  p=(upstream/'opt/etc/pingtool.conf').read_text();assert 'PING_TARGET="1.1.1.1"' in p and 'RETENTION_DAYS="90"' in p and 'ENABLE_IPV6="false"' in p
  assert (upstream/'opt/etc/crontab').read_bytes()==cron and (upstream/'opt/etc/firewall_stats.db').read_bytes()==db and (upstream/'opt/etc/firewall.conf').read_bytes()==conf
  assert '# preserve custom line' in (upstream/'opt/etc/ulogd.conf').read_text() and '/opt/var/log/keentool-firewall/' in (upstream/'opt/etc/ulogd.conf').read_text()

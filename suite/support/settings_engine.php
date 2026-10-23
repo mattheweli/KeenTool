@@ -1,5 +1,5 @@
 <?php
-// KEENTOOL WEB SETTINGS v1.0.0 — 2026-10-22, stable.
+// KEENTOOL WEB SETTINGS v1.0.1 — 2026-10-23, stable.
 // Typed fixed-file configuration only; never evaluate shell input or return unrelated secrets.
 if(PHP_SAPI!=='cli'||!function_exists('kdispatch')){http_response_code(403);exit(1);}
 function ksettingsspec() {
@@ -21,6 +21,9 @@ function ksettingsspec() {
     foreach(['PING_DURATION'=>['Probe duration (seconds)',30,1,50],'TRIGGER_LATENCY'=>['Latency alert threshold (ms)',30,1,10000],'RETENTION_DAYS'=>['History retention (days)',45,1,3650],'MAX_DISPLAY_POINTS'=>['Maximum chart points',2000,100,10000],'WAN_MONITOR_INTERVAL'=>['PPP syslog check interval (seconds)',5,1,60]] as $k=>$d)$add($p,$k,$d[0],'int',$d[1],['min'=>$d[2],'max'=>$d[3]]);
     $p['RETENTION_DAYS']['help']='Increasing is allowed. Lowering retention can delete stored samples and remains a CLI operation.';
     $add($p,'WAN_LABEL','WAN notification label','interfaces','');$add($p,'WAN_SYSLOG_ENABLED','PPP syslog monitoring','bool',true);
+    $h=[];$add($h,'HISTORY_ENABLED','Aggregate older IP history','bool',true,['section'=>'History precision']);
+    $add($h,'HISTORY_RAW_DAYS','Original sample detail (days)','int',7,['min'=>1,'max'=>3650,'presets'=>[['value'=>7],['value'=>14],['value'=>30],['value'=>90]],'unit'=>'days','section'=>'History precision']);
+    $add($h,'HISTORY_HOURLY_DAYS','Hourly detail through (days)','int',30,['min'=>1,'max'=>3650,'presets'=>[['value'=>30],['value'=>60],['value'=>90],['value'=>365]],'unit'=>'days','section'=>'History precision','help'=>'Must be at least the original-sample days. Older records become daily buckets. No IP/list hit totals, global counters or port histories are removed.']);
     $t=[];$add($t,'MONTHLY_QUOTA_GB','Monthly traffic quota (GB; 0 = off)','decimal',0,['min'=>0,'max'=>1000000000]);$add($t,'VNSTAT_ALIASES','Interface aliases (in configured interface order)','interfaces','',['help'=>'One space-separated alias per interface. Interface selection and job schedules remain in KeenTool.']);
     $sec=[];$securityDefaults=['monitor_interval'=>60,'email_enabled'=>true,'immediate_alerts'=>true,'digest_hour'=>7,'timezone'=>'Europe/Rome','guard_seconds'=>120,'management_networks'=>[],'list_shrink_percent'=>50,'list_growth_percent'=>100,'geo_shrink_percent'=>90,'geo_growth_percent'=>300];foreach($securityDefaults as $k=>$v){
         $label=ucfirst(str_replace('_',' ',$k));
@@ -60,6 +63,7 @@ function ksettingsspec() {
     $sec['guard_seconds']['label']='Firewall confirmation window';$sec['monitor_interval']['label']='Health check interval';$sec['digest_hour']['label']='Daily summary time';
     $sec['management_networks']['help']='Space-separated IP addresses or CIDR networks that manual bans must never overlap. At most 32 networks.';
     return ['firewall'=>['title'=>'Firewall and blocklists','path'=>'/opt/etc/firewall.conf','fields'=>$f,'note'=>'Saving applies the hook with timed rollback. Confirm the new policy before the deadline. GeoIP/source changes are used at the next scheduled list update; lists are not downloaded by this form.'],
+        'firewall_history'=>['title'=>'Firewall history','path'=>'/opt/etc/keentool/firewall-history.conf','fields'=>$h,'note'=>'Once daily at the next firewall statistics run: keep recent samples, then hourly, then daily buckets. A verified backup precedes the first aggregation. Reduced time precision cannot be restored by increasing thresholds or disabling this policy. Period boundaries crossing a bucket are approximate. Firewall rules are not reapplied.'],
         'ping'=>['title'=>'Connection Monitor','path'=>'/opt/etc/pingtool.conf','fields'=>$p,'note'=>'Probe and chart changes take effect at the next scheduled run. PPP settings are read by the WAN monitor.'],
         'traffic'=>['title'=>'Traffic Monitor','path'=>'/opt/etc/keentool/dashboard.conf','fields'=>$t,'note'=>'Changes appear at the next scheduled traffic export. Existing interfaces, databases and schedules are preserved.'],
         'security'=>['title'=>'Security monitoring','path'=>'/opt/etc/keentool/security/settings.json','fields'=>$sec,'note'=>'Changes are read by the security service at its next cycle. Existing schedules and mail credentials are preserved.']];
@@ -117,6 +121,7 @@ function ksettingssave($input,$actor) {
     if(!is_string($revision)||!hash_equals($data['revision'],$revision))throw new RuntimeException('Configuration changed. Reload Settings before saving.');
     $changes=$input['values']??null;if(!is_array($changes)||!$changes||strlen(json_encode($changes))>6000)throw new InvalidArgumentException('Bounded settings object required');
     $values=[];foreach($changes as $key=>$value){if(!isset($group['fields'][$key]))throw new InvalidArgumentException('Unknown setting: '.$key);try{$values[$key]=ksettingsvalue($value,$group['fields'][$key]);}catch(Throwable $e){throw new InvalidArgumentException($key.': '.$e->getMessage());}}
+    if($name==='firewall_history'){$merged=array_merge($data['values'],$values);if($merged['HISTORY_HOURLY_DAYS']<$merged['HISTORY_RAW_DAYS'])throw new InvalidArgumentException('Hourly detail days must be at least the original-sample days');}
     if($name==='ping'&&isset($values['RETENTION_DAYS'])&&$values['RETENTION_DAYS']<$data['values']['RETENTION_DAYS'])throw new InvalidArgumentException('Lowering history retention can delete data; use the CLI explicitly.');
     if($name==='firewall'){
         $merged=array_merge($data['values'],$values);

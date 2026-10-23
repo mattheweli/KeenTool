@@ -1,4 +1,4 @@
-/* KeenTool Security UI v1.0.0 — 2026-10-22. Public diagnostics, authenticated writes. */
+/* KeenTool Security UI v1.0.1 — 2026-10-22. Public diagnostics, authenticated writes. */
 (() => {
  'use strict';
  let snapshot=null,pending=null,loading=false,lastGuardPoll=0,guardPolling=false;
@@ -64,7 +64,7 @@
   try{const response=await fwFetch('/firewall/firewall_api.php?action=lookup&ip='+encodeURIComponent(ip));const data=await response.json();if(data.status!=='success')throw Error(data.message||'Lookup failed');
    const lines=['Address: '+data.ip,'Matching blocking lists: '+(data.lists?.join(', ')||'None'),'Whitelisted: '+(data.whitelisted?'yes':'no'),'Matching network bypasses: '+(data.bypass_networks?.join(', ')||'None'),'Firewall healthy: '+(data.health?.healthy?'yes':'no'),''];
    for(const row of data.matches||[])lines.push(row.set+(row.member?' · member '+row.member:'')+' · timeout '+(row.timeout_remaining===null?'unavailable':row.timeout_remaining===0?'permanent':row.timeout_remaining+'s')+' · packets '+(row.packets===null?'unavailable':number(row.packets))+' · bytes '+(row.bytes===null?'unavailable':number(row.bytes)));
-   lines.push('\nMetadata:\n'+JSON.stringify(data.metadata,null,2),'\nExact recorded IP/subnet counters:\n'+JSON.stringify(data.counters,null,2),'\nMatching installed rules:\n'+(data.rules||[]).join('\n'),'\n'+data.explanation);
+   lines.push('\nMetadata:\n'+JSON.stringify(data.metadata,null,2),'\nRecorded IP/subnet hit totals (timestamps may be bucketed):\n'+JSON.stringify(data.counters,null,2),'\nMatching installed rules:\n'+(data.rules||[]).join('\n'),'\n'+data.explanation);
    if(request===modalRequest)byId('modalBody').innerText=lines.join('\n');
   }catch(e){if(request===modalRequest)byId('modalBody').innerText=e.message;}
  };

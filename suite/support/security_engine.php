@@ -1,5 +1,5 @@
 <?php
-// KEENTOOL SECURITY ENGINE v1.0.0 — 2026-10-22, stable.
+// KEENTOOL SECURITY ENGINE v1.0.1 — 2026-10-23, stable.
 // Root-only local command broker, audit, guarded policy changes and monitoring.
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit(1); }
 umask(0077);
@@ -165,6 +165,10 @@ function krollback($id,$reason) {
     unlink($path);kaudit('firewall','policy rolled back','ok','local','',$reason);
 }
 function kpending() {$p=kread(kp('/opt/etc/keentool/security/pending.json'));return $p?['pending_id'=>$p['id'],'confirm_before'=>$p['expires']]:null;}
+function khistorynote() {
+    $rows=ksql("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='kt_history_meta';");
+    return !empty($rows[0]['n'])?' Older IP history uses hourly/daily buckets; hit totals per IP/list are exact, but first/last timestamps and period boundaries crossing a bucket are approximate.':'';
+}
 function klookup($input) {
     $ip=knetwork($input['ip']??'')['text'];$members=kmembers($ip);$q="'".str_replace("'","''",$ip)."'";$base=explode('/',$ip)[0];
     $metadata=ksql("SELECT country,risk,domain,target_port,substr(port_history,1,4000) AS port_history FROM ip_info WHERE ip='".$base."' LIMIT 1;");
@@ -173,7 +177,7 @@ function klookup($input) {
     if($rc===0)foreach(explode("\n",$saved) as $line)foreach($members as $member)if(strpos($line,'--match-set '.$member['set'].' ')!==false)$rules[]=$line;
     $conf=kconf();$bypassed=[];foreach(preg_split('/\s+/',trim($conf[strpos($ip,':')!==false?'BYPASS_NETWORKS_V6':'BYPASS_NETWORKS_V4']??'')) as $net){try{if($net&&koverlap($ip,$net))$bypassed[]=$net;}catch(Throwable $e){}}
     $white=array_filter($members,fn($v)=>strpos($v['set'],'FirewallWhite')===0);$blocking=array_values(array_filter($members,fn($v)=>strpos($v['set'],'FirewallWhite')!==0));
-    return ['status'=>'success','ip'=>$ip,'blocked'=>count($blocking)>0,'lists'=>array_column($blocking,'set'),'matches'=>$members,'rules'=>array_values(array_unique($rules)),'whitelisted'=>(bool)$white,'bypass_networks'=>$bypassed,'health'=>khealth(),'metadata'=>$metadata[0]??null,'counters'=>$counters,'manual_note'=>null,'explanation'=>'List membership is not proof of a dropped packet. Interface/network bypasses, established connections, enabled list settings and rule order also apply. Counters are historical, not a live packet trace.'];
+    return ['status'=>'success','ip'=>$ip,'blocked'=>count($blocking)>0,'lists'=>array_column($blocking,'set'),'matches'=>$members,'rules'=>array_values(array_unique($rules)),'whitelisted'=>(bool)$white,'bypass_networks'=>$bypassed,'health'=>khealth(),'metadata'=>$metadata[0]??null,'counters'=>$counters,'manual_note'=>null,'explanation'=>'List membership is not proof of a dropped packet. Interface/network bypasses, established connections, enabled list settings and rule order also apply. Counters are historical, not a live packet trace.'.khistorynote()];
 }
 function kqueue($key,$subject,$body,$html=null) {
     $path=kp('/opt/etc/keentool/security/notifications.json');$lock=klock('notifications');try{$q=kread($path);$q[$key]=['subject'=>$subject,'body'=>$body,'created'=>time()];if($html!==null)$q[$key]['html']=$html;if(count($q)>50)$q=array_slice($q,-50,null,true);kwrite($path,$q);}finally{kunlock($lock);}
@@ -295,7 +299,7 @@ function ktick() {
             $digest=kdigest($system,$events);kqueue('digest-'.$date,'KeenTool: daily security summary',$digest['body'],$digest['html']);$old['digest_date']=$date;
         }
         $state=array_merge($old,['started'=>$old['started']??$now,'issue_key'=>$key,'consecutive'=>$consecutive,'had_issues'=>(bool)$issues,'last_check'=>$now]);kwrite($statePath,$state);
-        $public=kp('/opt/var/www/firewall/security-data.json');$dir=dirname($public);if(!is_dir($dir))mkdir($dir,0755,true);kwrite($public,['system'=>$system,'events'=>$events,'comparisons'=>$comparisons,'coverage_note'=>'Counters describe recorded IP hits. Port comparisons attribute each IP to its latest target_port metadata; they are not per-port packet measurements. Country metadata is current, including for historical periods.'],0644);
+        $public=kp('/opt/var/www/firewall/security-data.json');$dir=dirname($public);if(!is_dir($dir))mkdir($dir,0755,true);kwrite($public,['system'=>$system,'events'=>$events,'comparisons'=>$comparisons,'coverage_note'=>'Counters describe recorded IP hits. Port comparisons attribute each IP to its latest target_port metadata; they are not per-port packet measurements. Country metadata is current, including for historical periods.'.khistorynote()],0644);
     }finally{kunlock($lock);}
     if(!empty($settings['email_enabled'])&&is_file(kp('/opt/etc/keentool/mail/email.conf'))&&is_file(kp('/opt/etc/keentool/mail/emailpw.enc'))){
         $lock=klock('mail');try{$qPath=kp('/opt/etc/keentool/security/notifications.json');$q=kread($qPath);if($q){$id=array_key_first($q);$mail=$q[$id];$argv=[kp('/opt/bin/email_sender.mod'),$mail['subject'],$mail['body']];if(isset($mail['html']))$argv[]=$mail['html'];[$rc]=krun($argv,50);if($rc===0){$qlock=klock('notifications');try{$current=kread($qPath);if(($current[$id]??null)===$mail)unset($current[$id]);kwrite($qPath,$current);}finally{kunlock($qlock);}}}}finally{kunlock($lock);}

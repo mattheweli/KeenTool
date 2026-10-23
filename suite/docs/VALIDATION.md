@@ -1,8 +1,10 @@
-# Stable release validation — 2026-10-22
+# Stable release validation — 2026-10-23
 
 ## Automated evidence
 
-44/44 isolated checks passed. The machine-readable list is validation-results.json. Run sudo env PATH="$PATH" python3 tools/check-release.py on a Linux host with Node.js, PHP CLI/CGI and sqlite3; the fixture runtime is staged under /tmp/keentool-security-runtime. On Ubuntu 24.04, install php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3 and Node.js first. Installer/rollback fixtures require root, matching the production installer requirement. GitHub workflows preserve the isolated check results as an artifact. Tests create temporary fake router roots and mocked mail/service commands; they do not send SMTP or modify a router.
+Progressive history aggregation is additionally validated with real SQLite/PHP core, 23/25-hour days, exact IP/list/calendar totals, untouched recent samples and private backups, failure rollback and the shared writer lock. See FIREWALL_HISTORY.md for private-copy size measurements.
+
+45/45 isolated checks passed. The machine-readable list is validation-results.json. Run sudo env PATH="$PATH" python3 tools/check-release.py on a Linux host with Node.js, PHP CLI/CGI and sqlite3; the fixture runtime is staged under /tmp/keentool-security-runtime. On Ubuntu 24.04, install php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3 and Node.js first. Installer/rollback fixtures require root, matching the production installer requirement. GitHub workflows preserve the isolated check results as an artifact. Tests create temporary fake router roots and mocked mail/service commands; they do not send SMTP or modify a router.
 
 - All 14 JavaScript fixtures: administrator visibility/session flow, numeric formatting, health states, missing versus disabled monitors, expandable port lists, geography, settings types/presets/dirty-state preservation, density/navigation and unified refresh behavior.
 - Production PHP/SQLite security integration: bans/expiry, management and whitelist protections, request validation, guarded policy apply/confirm/revert, list events/comparisons, snapshots, settings revisions and HTML/plain digest queue/retry.
@@ -19,9 +21,9 @@
 
 Runtime PHP, Bash and JavaScript syntax checks passed. Six pages/templates have no alpha banner and retain automatic-year copyright and their stable version. Package, repository overlays and release assets have verified SHA-256 manifests. Native lighttpd configuration is checked by the installer on the router; no live mail-client rendering is claimed.
 
-## Required live acceptance before public publication
+## Physical-router acceptance
 
-This preparation does not claim a fresh physical-router installation, a live router reboot or an actual SMTP send. Review on the test router before publishing the five drafts:
+Automated validation does not claim a fresh physical-router installation, a live router reboot or an actual SMTP send. Review the following after updating the test router:
 
 1. Run the upgrade plan/apply and record the printed backup. Confirm settings/password, existing jobs, database history and interface selection are intact. Check the plan before using web/logging adoption options.
 2. Refresh/regenerate all six pages, verify guest read-only logs and administrator Settings/diagnostics. Confirm versions appear only in the footer and common refresh still works.

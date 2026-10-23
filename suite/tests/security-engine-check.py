@@ -133,11 +133,14 @@ with tempfile.TemporaryDirectory() as td:
  lib=p/'opt/lib/keentool-security';lib.mkdir(exist_ok=True);(lib/'settings_engine.php').write_text((root/'support/settings_engine.php').read_text())
  ping=p/'opt/etc/pingtool.conf';ping.write_text('# preserve comment\nENABLE_IPV6="true"\nPING_DURATION=30\nRETENTION_DAYS=45\nMAX_DISPLAY_POINTS=2000\nCUSTOM_KEEP="untouched"\n')
  dash=p/'opt/etc/keentool/dashboard.conf';dash.write_text('MONTHLY_QUOTA_GB="500"\nVNSTAT_ALIASES="WAN"\nEN_VPN="yes"\nPRIVATE_CUSTOM="do-not-return"\n')
+ history=p/'opt/etc/keentool/firewall-history.conf';history.write_text('HISTORY_ENABLED="true"\nHISTORY_RAW_DAYS="7"\nHISTORY_HOURLY_DAYS="30"\n')
  settings=request('settings_get');assert len(json.dumps(settings).encode())<48000;assert len(settings['groups']['security']['fields']['digest_hour']['choices'])==24;assert settings['groups']['firewall']['fields']['BAN_TIMEOUT']['presets'][0]['label']=='Permanent';assert settings['groups']['ping']['fields']['MAX_DISPLAY_POINTS']['section']=='History and charts';assert settings['groups']['ping']['values']['WAN_MONITOR_INTERVAL']==5;assert 'do-not-return' not in json.dumps(settings) and all('error' not in g for g in settings['groups'].values()),settings
  def save_settings(group,values,revision=None,ok=True):
   if revision is None:revision=request('settings_get')['groups'][group]['revision']
   result=call('request',payload={'action':'settings_save','actor':'198.51.100.5','group':group,'revision':revision,'values':values},ok=ok)
   return json.loads(result.stdout) if ok else result
+ original_history=history.read_bytes();save_settings('firewall_history',{'HISTORY_RAW_DAYS':60},ok=False);assert history.read_bytes()==original_history
+ save_settings('firewall_history',{'HISTORY_RAW_DAYS':14,'HISTORY_HOURLY_DAYS':60});assert not pending.exists() and 'HISTORY_RAW_DAYS="14"' in history.read_text()
  before=ping.read_bytes();rev=settings['groups']['ping']['revision']
  for values in [{'MAX_DISPLAY_POINTS':99999},{'WAN_LABEL':'x$(id)'},{'ENABLE_IPV6':'false'},{'WAN_SYSLOG_FILE':'/etc/passwd'},{'RETENTION_DAYS':44},{'PING_TARGET':'2001:db8::1'}]:save_settings('ping',values,ok=False);assert ping.read_bytes()==before
  save_settings('ping',{'MAX_DISPLAY_POINTS':4000});assert 'CUSTOM_KEEP="untouched"' in ping.read_text() and '# preserve comment' in ping.read_text() and ping.stat().st_mode & 0o777==0o600

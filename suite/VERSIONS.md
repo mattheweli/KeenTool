@@ -1,11 +1,11 @@
-# Stable component versions — 2026-10-22
+# Stable component versions — 2026-10-23
 
-Suite release: **2.0.0**. Installer: **1.0.0**. Package manifest: **51 targets**.
+Suite release: **2.0.1**. Installer: **1.0.1**. Package manifest: **53 targets**.
 
 | Source | Stable version | Installed path |
 |---|---|---|
-| `projects/KeenTool/keentool` | 2.0.0 | `/opt/bin/keentool` |
-| `projects/KeenTool/index.html` | 2.0.0 | `/opt/var/www/index.html` |
+| `projects/KeenTool/keentool` | 2.0.1 | `/opt/bin/keentool` |
+| `projects/KeenTool/index.html` | 2.0.1 | `/opt/var/www/index.html` |
 | `projects/KeenTool/email_sender.mod` | 2.0.0 | `/opt/bin/email_sender.mod` |
 | `projects/KeenTool/telegram_sender.mod` | 2.0.0 | `/opt/bin/telegram_sender.mod` |
 | `projects/keenetic-pingtool/scripts/pingtool.sh` | 2.0.0 | `/opt/bin/pingtool.sh` |
@@ -16,10 +16,10 @@ Suite release: **2.0.0**. Installer: **1.0.0**. Package manifest: **51 targets**
 | `projects/keenetic-firewall/scripts/abuse_reporter.sh` | 3.0.0 | `/opt/bin/abuse_reporter.sh` |
 | `projects/keenetic-firewall/scripts/firewall_manager.sh` | 3.0.0 | `/opt/bin/firewall_manager.sh` |
 | `projects/keenetic-firewall/scripts/update_blocklist.sh` | 3.0.0 | `/opt/bin/update_blocklist.sh` |
-| `projects/keenetic-firewall/scripts/firewall_stats.sh` | 4.0.0 | `/opt/bin/firewall_stats.sh` |
+| `projects/keenetic-firewall/scripts/firewall_stats.sh` | 4.0.1 | `/opt/bin/firewall_stats.sh` |
 | `projects/keenetic-firewall/scripts/100-firewall.sh` | 3.0.0 | `/opt/etc/ndm/netfilter.d/100-firewall.sh` |
 | `projects/keenetic-firewall/scripts/S00ipset-load` | 2.0.0 | `/opt/etc/init.d/S00ipset-load` |
-| `projects/keenetic-firewall/www/index.html` | 2.0.0 | `/opt/var/www/firewall/index.html` |
+| `projects/keenetic-firewall/www/index.html` | 2.0.1 | `/opt/var/www/firewall/index.html` |
 | `projects/keenetic-firewall/www/firewall_api.php` | 2.0.0 | `/opt/var/www/firewall/firewall_api.php` |
 | `projects/keenetic-firewall/www/admin_auth.php` | 1.0.0 | `/opt/lib/keentool-admin/admin_auth.php` |
 | `support/set_password.php` | 1.0.0 | `/opt/lib/keentool-admin/set_password.php` |
@@ -35,25 +35,28 @@ Suite release: **2.0.0**. Installer: **1.0.0**. Package manifest: **51 targets**
 | `support/firewall_health` | 1.0.0 | `/opt/bin/firewall_health` |
 | `support/wan_syslog_service` | 1.0.0 | `/opt/bin/wan_syslog_service` |
 | `support/S95keentool-wan` | 1.0.0 | `/opt/etc/init.d/S95keentool-wan` |
-| `support/security_engine.php` | 1.0.0 | `/opt/lib/keentool-security/security_engine.php` |
+| `support/security_engine.php` | 1.0.1 | `/opt/lib/keentool-security/security_engine.php` |
 | `support/firewall_security` | 1.0.0 | `/opt/bin/firewall_security` |
 | `support/keentool_security_service` | 1.0.0 | `/opt/bin/keentool_security_service` |
 | `support/firewall_guard` | 1.0.0 | `/opt/lib/keentool/firewall_guard` |
 | `support/S96keentool-security` | 1.0.0 | `/opt/etc/init.d/S96keentool-security` |
 | `support/harden_web.sh` | 1.0.0 | `/opt/lib/keentool-security/harden_web.sh` |
-| `assets/keentool-security.js` | 1.0.0 | `/opt/var/www/assets/keentool-security.js` |
+| `assets/keentool-security.js` | 1.0.1 | `/opt/var/www/assets/keentool-security.js` |
 | `support/S01keentool-web-user` | 1.0.0 | `/opt/etc/init.d/S01keentool-web-user` |
-| `support/uninstall.sh` | 1.0.0 | `/opt/bin/keentool_uninstall` |
-| `projects/security/index.html` | 1.0.0 | `/opt/var/www/security/index.html` |
+| `support/uninstall.sh` | 1.0.1 | `/opt/bin/keentool_uninstall` |
+| `projects/security/index.html` | 1.0.1 | `/opt/var/www/security/index.html` |
 | `assets/keentool-security-page.js` | 1.0.0 | `/opt/var/www/assets/keentool-security-page.js` |
-| `support/settings_engine.php` | 1.0.0 | `/opt/lib/keentool-security/settings_engine.php` |
-| `projects/settings/index.html` | 1.0.0 | `/opt/var/www/settings/index.html` |
+| `support/settings_engine.php` | 1.0.1 | `/opt/lib/keentool-security/settings_engine.php` |
+| `projects/settings/index.html` | 1.0.1 | `/opt/var/www/settings/index.html` |
 | `assets/keentool-settings.js` | 1.0.0 | `/opt/var/www/assets/keentool-settings.js` |
 | `support/mail_layout.php` | 1.0.0 | `/opt/lib/keentool-mail/mail_layout.php` |
 | `assets/keentool-format.js` | 1.0.0 | `/opt/var/www/assets/keentool-format.js` |
 | `support/keentool_update` | 1.0.0 | `/opt/bin/keentool_update` |
-| `support/release_install.php` | 1.0.0 | `/opt/lib/keentool/release_install.php` |
+| `support/release_install.php` | 1.0.1 | `/opt/lib/keentool/release_install.php` |
 | `rollback.sh` | 1.0.0 | `/opt/lib/keentool/rollback.sh` |
 | `support/release_update.php` | 1.0.0 | `/opt/lib/keentool/release_update.php` |
 
-Repository tags: KeenTool/Pingtool/Traffic/SMB v2.0.0; keenetic-firewall v4.0.0. Shared helpers, Settings and Security components use 1.0.0. For future improvements/fixes advance the minor version of the changed component.
+| `support/history_engine.php` | 1.0.0 | `/opt/lib/keentool/history_engine.php` |
+| `support/firewall_history` | 1.0.0 | `/opt/bin/firewall_history` |
+
+Repository tags: KeenTool v2.0.1; keenetic-firewall v4.0.1. Pingtool/Traffic/SMB remain v2.0.0. This update increments the patch digit of each changed component. Archived stable and alpha notes retain their original versions.

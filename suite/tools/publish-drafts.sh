@@ -28,7 +28,7 @@ while IFS=$'\t' read -r repo tag baseline version;do
  git -C "$checkout" commit -m "Prepare $name $version stable release"
  git -C "$checkout" -c credential.helper= -c 'credential.helper=!gh auth git-credential' push origin "release/$tag"
  files=("$kit/assets/$name-$version-sources.tar.gz" "$kit/assets/$name-$version-sources.tar.gz.sha256")
- if [ "$name" = KeenTool ];then files+=("$kit/assets/keentool-2.0.0.tar.gz" "$kit/assets/keentool-2.0.0.tar.gz.sha256");fi
+ if [ "$name" = KeenTool ];then files+=("$kit/assets/keentool-$version.tar.gz" "$kit/assets/keentool-$version.tar.gz.sha256");fi
  gh release create "$tag" "${files[@]}" --repo "$repo" --draft --target "release/$tag" --title "$name $version" --notes-file "$kit/notes/$name.md"
 done < "$work/plan.tsv"
-echo 'Five draft releases created. Review diffs, run live acceptance, then merge/publish deliberately.'
+echo 'Draft releases created. Review diffs, run live acceptance, then merge/publish deliberately.'
