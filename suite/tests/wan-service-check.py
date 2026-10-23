@@ -26,4 +26,17 @@ with tempfile.TemporaryDirectory() as td:
   r=call('stop');assert r.returncode==0,r.stderr;assert not (p/'pid').exists();assert call('status').returncode!=0
   conf.write_text(conf.read_text().replace('WAN_SYSLOG_ENABLED="true"','WAN_SYSLOG_ENABLED="false"'));r=call('start');assert r.returncode==0 and 'disabled' in r.stdout
  finally:call('stop')
+ # Stop while a scan is still writing: TERM must not orphan that scan.
+ slow=p/'slow-helper';started=p/'scan-started';finished=p/'scan-finished'
+ slow.write_text('#!/bin/bash\n[ "$1" = --scan ] || exit 0\ntouch "$SCAN_STARTED"\nsleep 4\nprintf done > "$SCAN_FINISHED"\n');slow.chmod(0o755)
+ conf.write_text('WAN_SYSLOG_ENABLED="true"\nWAN_MONITOR_INTERVAL=1\n')
+ env.update(KT_WAN_HELPER=str(slow),SCAN_STARTED=str(started),SCAN_FINISHED=str(finished))
+ try:
+  assert call('start').returncode==0
+  until(started.exists)
+  assert not finished.exists()
+  r=call('stop');assert r.returncode==0,r.stdout+r.stderr
+  assert finished.read_text()=='done','stop returned before the in-flight scanner completed'
+  assert not (p/'pid').exists()
+ finally:call('stop')
 print('PASS: standalone service start/idempotence/stop/status/disabled config; detects PPP recovery during slow SMTP independently of ping jobs.')

@@ -1,5 +1,7 @@
 # KeenTool stable changelog
 
+- WAN monitor shutdown waits for in-flight scans and notification work even when a trapped signal interrupts Bash wait.
+
 Baseline: `8d640c8b06968b0f24ce41feb1bc5b0a89c3f541`.
 
 - Remote whole-suite updater and standalone legacy/alpha bootstrap: stable-only release lookup, confirmation, no downgrade, SHA-256/GitHub digest validation, bounded safe TAR/PAX extraction and complete file-manifest verification before the same migration installer. Menu/CLI checks and offline updates remain available.

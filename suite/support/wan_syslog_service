@@ -15,6 +15,13 @@ alive() {
  [ "${KT_TEST_MODE:-false}" != true ] || return 0
  [ -r "/proc/$pid/cmdline" ] && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -qF "$SELF run"
 }
+# A trapped signal can interrupt Bash wait before the child has finished.
+# Keep the child tracked until it exits, then remove the service PID/lock.
+wait_child() {
+ local child=$1
+ while kill -0 "$child" 2>/dev/null;do wait "$child" 2>/dev/null || :;done
+ wait "$child" 2>/dev/null || :
+}
 case "${1:-status}" in
  start)
   alive && { echo 'WAN monitor already running';exit 0; }
@@ -52,16 +59,16 @@ case "${1:-status}" in
    [ ! -f "$CONF" ] || . "$CONF"
    [[ "$WAN_MONITOR_INTERVAL" =~ ^[0-9]+$ ]] && [ "$WAN_MONITOR_INTERVAL" -ge 1 ] && [ "$WAN_MONITOR_INTERVAL" -le 60 ] || WAN_MONITOR_INTERVAL=5
    [ "$WAN_SYSLOG_ENABLED" = true ] || break
-   "$BASH_BIN" "$HELPER" --scan & scanner=$!;wait "$scanner" || :;scanner=''
+   "$BASH_BIN" "$HELPER" --scan & scanner=$!;wait_child "$scanner";scanner=''
    [ "$running" = true ] || break
    if [ -z "$mailer" ] || ! kill -0 "$mailer" 2>/dev/null;then
-    [ -z "$mailer" ] || wait "$mailer" 2>/dev/null || :
+    [ -z "$mailer" ] || wait_child "$mailer"
     "$BASH_BIN" "$HELPER" --deliver & mailer=$!
    fi
    sleep "$WAN_MONITOR_INTERVAL" & sleeper=$!;wait "$sleeper" || :;sleeper=''
   done
   # Finish in-flight state writes and bounded SMTP work instead of abandoning the queue.
-  [ -z "$scanner" ] || wait "$scanner" 2>/dev/null || :
-  [ -z "$mailer" ] || wait "$mailer" 2>/dev/null || :;;
+  [ -z "$scanner" ] || wait_child "$scanner"
+  [ -z "$mailer" ] || wait_child "$mailer";;
  *) echo 'Usage: wan_syslog_service {start|stop|restart|status}' >&2;exit 1;;
 esac
