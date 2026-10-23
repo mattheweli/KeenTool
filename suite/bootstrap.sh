@@ -26,9 +26,9 @@ kt_dep_scan() {
     KT_DEP_ISSUES=();KT_DEP_PACKAGES=();KT_DEP_PHP=''
     for candidate in "${KT_UPDATE_PHP:-}" "$root/opt/bin/php-cli" "$root/opt/bin/php8" "$root/opt/bin/php";do
         [ -n "$candidate" ] && [ -x "$candidate" ] || continue
-        if "$candidate" -r 'exit(PHP_SAPI==="cli"?0:1);' >/dev/null 2>&1;then KT_DEP_PHP=$candidate;break;fi
+        if "$candidate" -r 'exit(PHP_SAPI==="cli"&&PHP_VERSION_ID>=80000?0:1);' >/dev/null 2>&1;then KT_DEP_PHP=$candidate;break;fi
     done
-    [ -n "$KT_DEP_PHP" ] || kt_dep_add 'PHP CLI is missing or cannot start (php-cgi does not replace CLI)' php8-cli
+    [ -n "$KT_DEP_PHP" ] || kt_dep_add 'PHP CLI 8.0+ is missing, too old or cannot start (php-cgi does not replace CLI)' php8-cli
     for name in curl gzip sha256sum mktemp cat mkdir rm chmod;do
         command -v "$name" >/dev/null 2>&1 && continue
         case "$name" in curl)package=curl;;gzip)package=gzip;;sha256sum)package=coreutils-sha256sum;;mktemp)package=coreutils-mktemp;;*)package=busybox;;esac
@@ -102,7 +102,7 @@ KT_DEP_COMMANDS
             fi
         fi
         candidate="$root/opt/bin/php-cgi"
-        if [ ! -x "$candidate" ] || ! output=$("$candidate" -v 2>&1);then kt_dep_add 'PHP CGI is missing or cannot start' php8-cgi;fi
+        if [ ! -x "$candidate" ] || ! output=$("$candidate" -v 2>&1) || [[ ! "$output" =~ PHP[[:space:]]+([0-9]+)\. ]] || [ "${BASH_REMATCH[1]:-0}" -lt 8 ];then kt_dep_add 'PHP CGI 8.0+ is missing, too old or cannot start' php8-cgi;fi
         if command -v sqlite3 >/dev/null 2>&1;then
             output=$(sqlite3 -json :memory: 'SELECT 1 AS ok;' 2>/dev/null) || output=''
             [[ "$output" = *'"ok":1'* ]] || kt_dep_add 'SQLite CLI JSON output is unavailable' sqlite3-cli

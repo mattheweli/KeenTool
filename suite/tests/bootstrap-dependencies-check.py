@@ -3,7 +3,7 @@ from pathlib import Path
 import os,tempfile,subprocess,json
 root=Path(__file__).resolve().parents[1];lib=root/'support/dependencies.sh';php=Path('/tmp/keentool-security-runtime/root/usr/bin/php8.3');sqlite=php.with_name('sqlite3')
 with tempfile.TemporaryDirectory() as td:
- p=Path(td);bin=p/'opt/bin';bin.mkdir(parents=True);cgi=bin/'php-cgi';cgi.write_text('#!/bin/bash\nexit 0\n');cgi.chmod(0o755)
+ p=Path(td);bin=p/'opt/bin';bin.mkdir(parents=True);cgi=bin/'php-cgi';cgi.write_text('#!/bin/bash\necho \"PHP 8.3.6 (cgi-fcgi)\"\n');cgi.chmod(0o755)
  code=r'''
 . "$KT_LIB"
 # Simulate unavailable router capabilities without altering any host tools.
