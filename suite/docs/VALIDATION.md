@@ -40,3 +40,5 @@ Automated validation does not claim a fresh physical-router installation, a live
 5. Send an explicitly requested test notification through the router, review the next periodic digest and confirm the known KP source failure is described accurately. Test package rollback in a suitable isolated router installation before recommending it broadly.
 
 Known feed issues are documented in SECURITY.md and the draft notes. They are not hidden by changing source policy or deleting a configured country.
+
+The 2.0.6 checks add root-parent and trailing-slash SMB archive fixtures, runtime/log exclusions, socket handling and coherent SQLite records with GNU/BusyBox tar. Remote SMB and router export are mocked.

@@ -1,8 +1,8 @@
 {
   "KeenTool": {
-    "version": "2.0.5",
-    "previous_tag": "v2.0.4",
-    "main": "1e799ec2abade673cd7a728872db0035b7c5fff6"
+    "version": "2.0.6",
+    "previous_tag": "v2.0.5",
+    "main": "e77982645226b98e3c19a8c73e03bac3d5284983"
   },
   "keenetic-firewall": {
     "version": "4.0.2",
@@ -18,5 +18,10 @@
     "version": "2.0.1",
     "previous_tag": "v2.0.0",
     "main": "ba8f435d096c08933706c779a22981b3ae2b59bb"
+  },
+  "SMB_Backup_tool": {
+    "version": "2.0.1",
+    "previous_tag": "v2.0.0",
+    "main": "baddb1a9fbb0532ad8de08646d63317a53107fb0"
   }
 }

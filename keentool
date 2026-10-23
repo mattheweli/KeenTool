@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KEENTOOL MANAGER v2.0.5
+# KEENTOOL MANAGER v2.0.6
 # Release: 2026-10-23 | Stable. See CHANGELOG.md for release details.
 
 # ==============================================================================
@@ -507,7 +507,7 @@ if ! kt_runtime_ready;then
  exit 0
 fi
 # END GENERATED LEGACY MIGRATION
-# KeenTool 2.0.5
+# KeenTool 2.0.6
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 # Shared runtime and components are updated together through verified release packages.
 KT_MANAGED_PACKAGE=true
@@ -589,7 +589,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.5  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.6  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -1116,7 +1116,7 @@ EOF
 }
 
 doctor() {
-    echo 'KeenTool v2.0.5'
+    echo 'KeenTool v2.0.6'
     for cmd in bash curl sqlite3 ipset iptables smbclient vnstat tar timeout sha256sum; do
         command -v "$cmd" >/dev/null && printf 'OK %s\n' "$cmd" || printf 'MISSING %s\n' "$cmd"
     done

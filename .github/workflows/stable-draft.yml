@@ -20,7 +20,7 @@ jobs:
         if: github.event.repository.name == 'KeenTool'
         run: |
           sudo apt-get update
-          sudo apt-get install -y php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3
+          sudo apt-get install -y php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3 busybox
           sudo env PATH="$PATH" KT_VALIDATION_RESULTS="$RUNNER_TEMP/keentool-validation.json" python3 suite/tools/check-release.py
       - name: Preserve isolated validation results
         if: always() && github.event.repository.name == 'KeenTool'

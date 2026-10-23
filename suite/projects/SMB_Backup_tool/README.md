@@ -1,6 +1,6 @@
 # Keenetic SMB Backup Tool
 
-**Scheduled Entware/router archives to an SMB share**, with connection testing, read-back verification, retention and notifications. Current component: **2.0.0**. This component has a **CLI**, rather than a separate web dashboard.
+**Scheduled Entware/router archives to an SMB share**, with connection testing, read-back verification, retention and notifications. Current component: **2.0.1**. This component has a **CLI**, rather than a separate web dashboard.
 
 ![SMB Backup Tool CLI rendered with a synthetic NAS configuration](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/smb-backup.png)
 
@@ -53,6 +53,10 @@ After reviewing settings, run a backup interactively and verify its contents on 
 | Default source | `/opt` |
 
 Restrict the SMB account to the intended backup share and keep the configuration private. The source can include credentials and configuration; protect destination access accordingly.
+
+## Archive contents
+
+The source archive preserves configuration and ordinary source files. It excludes `/opt/var/log` (including live firewall PCAP), `/opt/var/run`, `/opt/var/lock`, `/opt/tmp`, `/opt/backup_storage` and Unix sockets. These transient files are not restore data. SQLite databases are backed up separately through coherent snapshots; a binary file named `.db` that is not SQLite stays in the source archive. Archive errors still stop the backup, and retention is skipped after any failed upload/read-back verification.
 
 ## Retention, verification and restore
 
