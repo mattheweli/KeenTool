@@ -29,7 +29,7 @@ js('ping/data.js','PING_DATA',{'updated':stamp,'config':{'ipv6':True},'targets':
 row='<tr><td>23/10/2026</td><td class="num">12.480</td><td>Recorded hits</td></tr>'
 tables={k:row for k in ['top_days','hourly','daily','monthly','yearly']}
 for periodkey in ['24h','30d','1y','all']:
- for kind in ['trap','other','nets','geo','ipv6','ports','brute']:tables[kind+'_'+periodkey]=''
+ for kind in ['trap','other','nets','geo','ipv6','ports','brute']:tables[kind+'_'+periodkey]=''.join('<tr><td class="num">'+str(hits)+'</td><td><a href="https://www.abuseipdb.com/check/'+ip+'">'+ip+'</a></td><td>443/tcp · 22/tcp</td></tr>' for ip,hits in [('203.0.113.17',423),('198.51.100.24',286),('192.0.2.80',184)])
 lists={'main':115416,'main6':910,'manual':6,'manual6':2,'vpn':12,'trap_ips':1250,'trap6_ips':380,'geo':32359,'geo6':21257}
 for key in ['v4','v6','manual','manual6','vpn','trap','trap6','geo','geo6']:lists['diff_'+key]='+12' if key=='v4' else '0'
 fw={'updated':stamp,'ipv6_status':'true','uptime':'12 days, 04:18','lifetime':1842056,'lists':lists,'tables':tables,'averages':{'hourly':520,'daily':12480,'monthly':354000,'yearly':1842056},'geography':{period:{'total':12480,'countries':{cc:{'hits':hits,'sources':max(1,hits//12),'rows':[]} for cc,hits in [('US',3880),('DE',2410),('NL',1620),('FR',1180),('GB',920),('JP',740),('CA',530),('BR',370),('AU',830)]}} for period in ['24h','30d','1y','all']}}
