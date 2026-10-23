@@ -1,16 +1,16 @@
-# KeenTool 2.0.1
+# KeenTool 2.0.2
 
 Stable component sources for the KeenTool suite. Release date: 2026-10-23.
 
 ## Installation and updates
 
-Install the complete KeenTool 2.0.1 release from https://github.com/mattheweli/KeenTool/releases. The shared runtime, assets, authentication and security broker are required. Do not copy this component alone over an older installation.
+Install the complete KeenTool 2.0.2 release from https://github.com/mattheweli/KeenTool/releases. The shared runtime, assets, authentication and security broker are required. Do not copy this component alone over an older installation.
 
 For an extracted complete package, use /opt/bin/bash ./install.sh --plan and follow docs/INSTALL.md. Existing public-source and local-alpha installations use --mode upgrade. New installations require --interface and reviewed web/logging ownership options. Existing databases, configuration, credentials and upgrade schedules are preserved.
 
 ## Current patch
 
-Progressive firewall IP history aggregation is configurable from KeenTool and web Settings, with verified baseline backup and exact IP/list totals. See RELEASE_NOTES.md for precision and baseline-restore limitations. Update through `keentool --update`.
+Bootstrap dependency preflight, one coordinated component update, independent component/script version reporting, verified source repair and automatic menu restart after a successful install. See RELEASE_NOTES.md and suite/docs/UPDATE_RECOVERY.md. The 7/30-day firewall history policy introduced in 2.0.1 is unchanged.
 
 ## Earlier stable changes
 

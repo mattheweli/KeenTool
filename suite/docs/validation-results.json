@@ -64,6 +64,10 @@
     "status": "passed"
   },
   {
+    "test": "bootstrap-dependencies-check.py",
+    "status": "passed"
+  },
+  {
     "test": "cron-bootstrap-check.py",
     "status": "passed"
   },
@@ -105,6 +109,10 @@
   },
   {
     "test": "mail-layout-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "managed-menu-update-check.py",
     "status": "passed"
   },
   {

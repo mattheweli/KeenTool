@@ -1,11 +1,11 @@
 # Stable component versions — 2026-10-23
 
-Suite release: **2.0.1**. Installer: **1.0.1**. Package manifest: **53 targets**.
+Suite release: **2.0.2**. Installer: **1.0.2**. Package manifest: **54 targets**.
 
 | Source | Stable version | Installed path |
 |---|---|---|
-| `projects/KeenTool/keentool` | 2.0.1 | `/opt/bin/keentool` |
-| `projects/KeenTool/index.html` | 2.0.1 | `/opt/var/www/index.html` |
+| `projects/KeenTool/keentool` | 2.0.2 | `/opt/bin/keentool` |
+| `projects/KeenTool/index.html` | 2.0.2 | `/opt/var/www/index.html` |
 | `projects/KeenTool/email_sender.mod` | 2.0.0 | `/opt/bin/email_sender.mod` |
 | `projects/KeenTool/telegram_sender.mod` | 2.0.0 | `/opt/bin/telegram_sender.mod` |
 | `projects/keenetic-pingtool/scripts/pingtool.sh` | 2.0.0 | `/opt/bin/pingtool.sh` |
@@ -51,12 +51,14 @@ Suite release: **2.0.1**. Installer: **1.0.1**. Package manifest: **53 targets**
 | `assets/keentool-settings.js` | 1.0.0 | `/opt/var/www/assets/keentool-settings.js` |
 | `support/mail_layout.php` | 1.0.0 | `/opt/lib/keentool-mail/mail_layout.php` |
 | `assets/keentool-format.js` | 1.0.0 | `/opt/var/www/assets/keentool-format.js` |
-| `support/keentool_update` | 1.0.0 | `/opt/bin/keentool_update` |
+| `support/keentool_update` | 1.0.1 | `/opt/bin/keentool_update` |
 | `support/release_install.php` | 1.0.1 | `/opt/lib/keentool/release_install.php` |
 | `rollback.sh` | 1.0.0 | `/opt/lib/keentool/rollback.sh` |
-| `support/release_update.php` | 1.0.0 | `/opt/lib/keentool/release_update.php` |
+| `support/release_update.php` | 1.0.1 | `/opt/lib/keentool/release_update.php` |
 
 | `support/history_engine.php` | 1.0.0 | `/opt/lib/keentool/history_engine.php` |
 | `support/firewall_history` | 1.0.0 | `/opt/bin/firewall_history` |
 
-Repository tags: KeenTool v2.0.1; keenetic-firewall v4.0.1. Pingtool/Traffic/SMB remain v2.0.0. This update increments the patch digit of each changed component. Archived stable and alpha notes retain their original versions.
+| `support/dependencies.sh` | 1.0.0 | `/opt/lib/keentool/dependencies.sh` |
+
+Standalone bootstrap: 1.0.1. Installer entry: 1.0.2. Repository tags: KeenTool v2.0.2; keenetic-firewall remains v4.0.1. Pingtool/Traffic/SMB remain v2.0.0. Each changed component advances its patch digit; newly added dependency helper starts at 1.0.0.

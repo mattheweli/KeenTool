@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KeenTool stable installer 1.0.1 — 2026-10-23.
+# KeenTool stable installer 1.0.2 — 2026-10-23.
 set -Eeuo pipefail
 export PATH="${KT_INSTALL_ROOT:-}/opt/bin:${KT_INSTALL_ROOT:-}/opt/sbin:/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
 base=$(cd "$(dirname "$0")" && pwd)
@@ -16,16 +16,11 @@ while [ "$#" -gt 0 ];do
 done
 [ "$(id -u)" = 0 ] || { echo 'Run as root' >&2;exit 1; }
 (cd "$base" && sha256sum -c CHECKSUMS.sha256) >/dev/null
-[ "$deps" != true ] || { [ "$action" = apply ] || { echo '--install-deps requires --apply; package manager changes have their own lifecycle' >&2;exit 1; };opkg update;opkg install bash curl lighttpd lighttpd-mod-fastcgi lighttpd-mod-openssl php8-cli php8-cgi php8-mod-session sqlite3-cli ipset vnstat2 tcpdump iprange iputils-ping mtr ulogd ulogd-mod-nflog ulogd-mod-pcap cron openssl-util samba4-client tar coreutils-date; }
-for name in iptables ip6tables iptables-save ip6tables-save iptables-restore ip6tables-restore ipset sqlite3 curl vnstat tcpdump iprange openssl lighttpd;do
- command -v "$name" >/dev/null || { echo "Missing command: $name. See docs/INSTALL.md or use --apply --install-deps." >&2;exit 1; }
-done
-php_cli='';for candidate in "${KT_INSTALL_ROOT:-}/opt/bin/php-cli" "${KT_INSTALL_ROOT:-}/opt/bin/php8" "${KT_INSTALL_ROOT:-}/opt/bin/php";do
- if [ -x "$candidate" ] && "$candidate" -r 'exit(PHP_SAPI === "cli" ? 0 : 1);' >/dev/null 2>&1;then php_cli=$candidate;break;fi
-done
-[ -n "$php_cli" ] && [ -x "${KT_INSTALL_ROOT:-}/opt/bin/php-cgi" ] || { echo 'PHP CLI/CGI required' >&2;exit 1; }
-"$php_cli" -r 'foreach(["inet_pton","inet_ntop","proc_open","stream_socket_server","session_start","password_hash","random_bytes","hash_file"] as $f)if(!function_exists($f)){fwrite(STDERR,"Missing PHP function: $f\n");exit(1);}'
-sqlite3 -json :memory: 'SELECT 1 AS ok;' | grep -q '"ok":1' || { echo 'SQLite JSON output support required' >&2;exit 1; }
+. "$base/support/dependencies.sh"
+dep_policy=check
+if [ "$deps" = true ];then [ "$action" = apply ] || { echo '--install-deps requires --apply' >&2;exit 2; };dep_policy=yes;fi
+kt_dep_ensure suite "$dep_policy" || exit 1
+php_cli=$KT_DEP_PHP
 while IFS=$'\t' read -r src dest perm;do
  case "$src" in *.php)"$php_cli" -l "$base/$src" >/dev/null;"${KT_INSTALL_ROOT:-}/opt/bin/php-cgi" -l "$base/$src" >/dev/null;;*)if head -n 1 "$base/$src" | grep -q '^#!/opt/bin/bash';then bash -n "$base/$src";fi;;esac
 done < "$base/INSTALL.tsv"
@@ -85,7 +80,8 @@ if [ "$start" = true ];then
  service_run "$runroot/etc/init.d/S96keentool-security" ensure-cron
 fi
 trap - ERR INT TERM
-echo 'KeenTool 2.0.0 stable installed.'
+installed_version=$("$php_cli" -r '$r=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);echo $r["version"];' "$base/RELEASE.json")
+echo "KeenTool $installed_version stable installed."
 echo "Rollback: /opt/bin/bash $backup/rollback.sh $backup"
 echo 'Existing credentials, databases, saved lists and upgrade schedules are preserved.'
 echo 'Fresh installations start with firewall filtering disabled. Set an admin password: firewall_admin_password'

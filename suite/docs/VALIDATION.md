@@ -2,9 +2,11 @@
 
 ## Automated evidence
 
+The 2.0.2 checks additionally cover missing/broken PHP CLI, dependency consent and failed repair, one managed component invocation, no legacy firewall update side effects, independent component/script versions, exact installed-source/mode audit, private update receipts and exec restart, same-version repair and downgrade rejection.
+
 Progressive history aggregation is additionally validated with real SQLite/PHP core, 23/25-hour days, exact IP/list/calendar totals, untouched recent samples and private backups, failure rollback and the shared writer lock. See FIREWALL_HISTORY.md for private-copy size measurements.
 
-45/45 isolated checks passed. The machine-readable list is validation-results.json. Run sudo env PATH="$PATH" python3 tools/check-release.py on a Linux host with Node.js, PHP CLI/CGI and sqlite3; the fixture runtime is staged under /tmp/keentool-security-runtime. On Ubuntu 24.04, install php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3 and Node.js first. Installer/rollback fixtures require root, matching the production installer requirement. GitHub workflows preserve the isolated check results as an artifact. Tests create temporary fake router roots and mocked mail/service commands; they do not send SMTP or modify a router.
+47/47 isolated checks passed. The machine-readable list is validation-results.json. Run sudo env PATH="$PATH" python3 tools/check-release.py on a Linux host with Node.js, PHP CLI/CGI and sqlite3; the fixture runtime is staged under /tmp/keentool-security-runtime. On Ubuntu 24.04, install php8.3-cli php8.3-cgi php8.3-sqlite3 sqlite3 and Node.js first. Installer/rollback fixtures require root, matching the production installer requirement. GitHub workflows preserve the isolated check results as an artifact. Tests create temporary fake router roots and mocked mail/service commands; they do not send SMTP or modify a router.
 
 - All 14 JavaScript fixtures: administrator visibility/session flow, numeric formatting, health states, missing versus disabled monitors, expandable port lists, geography, settings types/presets/dirty-state preservation, density/navigation and unified refresh behavior.
 - Production PHP/SQLite security integration: bans/expiry, management and whitelist protections, request validation, guarded policy apply/confirm/revert, list events/comparisons, snapshots, settings revisions and HTML/plain digest queue/retry.

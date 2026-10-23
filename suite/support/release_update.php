@@ -1,5 +1,5 @@
 <?php
-// KeenTool release verification/extraction 1.0.0. CLI only; downloaded code is never evaluated here.
+// KeenTool release verification/extraction 1.0.1. CLI only; downloaded code is never evaluated here.
 if(PHP_SAPI!=='cli')exit(1);
 umask(0077);
 function requireValue($ok,$message){if(!$ok)throw new RuntimeException($message);}
@@ -75,12 +75,31 @@ function extractVerified($dest,$version){
  unset($files['CHECKSUMS.sha256']);requireValue(count($files)===count($seen),'Unlisted archive content');
  $release=json_decode(file_get_contents($dest.'/RELEASE.json'),true);requireValue(is_array($release)&&($release['suite']??'')==='KeenTool'&&($release['version']??'')===$version&&($release['channel']??'')==='stable','Package metadata does not match the selected release');echo $dest;
 }
+function componentStatus($base,$installedFile,$component,$root){
+ $candidate=json_decode(file_get_contents($base.'/RELEASE.json'),true,512,JSON_THROW_ON_ERROR);$installed=is_file($installedFile)?json_decode(file_get_contents($installedFile),true):[];
+ $allowed=['KeenTool','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'];requireValue(in_array($component,$allowed,true),'Unknown component');
+ $remote=$candidate['components'][$component]??null;$local=$installed['components'][$component]??'unknown';requireValue(stableVersion($remote),'Component version is missing from the verified release');
+ echo $component.': installed '.$local.'; available '.$remote.' (coordinated suite '.$candidate['version'].")\n";
+ // Independent script versions are not interchangeable with the repository/suite version.
+ $files=$component==='keenetic-firewall'?['scripts/firewall_stats.sh','scripts/firewall_monitor','scripts/firewall_manager.sh','scripts/100-firewall.sh']:[];
+ foreach($files as $file){$src=$base.'/projects/'.$component.'/'.$file;requireValue(is_file($src),'Incomplete component source');$text=substr(file_get_contents($src),0,4096);preg_match('/\bv([0-9]+\.[0-9]+\.[0-9]+)\b/',$text,$m);echo '  '.basename($file).': release '.($m[1]??'unversioned')."\n";}
+ $issues=[];foreach(file($base.'/INSTALL.tsv',FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES) as $line){
+  $parts=explode("\t",$line);requireValue(count($parts)===3,'Invalid installation manifest');[$source,$path,$mode]=$parts;
+  requireValue(preg_match('~^[A-Za-z0-9_./-]+$~D',$source)&&!in_array('..',explode('/',$source),true)&&str_starts_with($path,'/opt/')&&!in_array('..',explode('/',$path),true),'Unsafe installation path');
+  requireValue(preg_match('/^[0-7]{3}$/D',$mode),'Invalid installation mode');$source=$base.'/'.$source;$path=rtrim($root,'/').$path;
+  requireValue(is_file($source)&&!is_link($source),'Missing package target');
+  if(is_link($path)||!is_file($path)||!hash_equals(hash_file('sha256',$source),hash_file('sha256',$path))||((fileperms($path)&0777)!==octdec($mode)))$issues[]=$parts[1];
+ }
+ if(!$issues)echo "All installed package files match the verified release.\n";
+ else {echo count($issues)." package files are missing, different or have unexpected permissions; a complete verified reinstall will repair them.\n";foreach(array_slice($issues,0,8) as $path)echo ' - '.$path."\n";}
+}
 try{
  $action=$argv[1]??'';
  if($action==='flag'){requireValue(stableVersion($argv[3]??''),'Invalid version flag');$tmp=tempnam(dirname($argv[2]),'.kt-version-');requireValue($tmp!==false,'Cannot stage version flag');try{requireValue(file_put_contents($tmp,$argv[3]."\n")!==false&&chmod($tmp,0600)&&rename($tmp,$argv[2]),'Cannot store version flag');}finally{if(is_file($tmp))unlink($tmp);}}
  elseif($action==='metadata'){echo implode("\t",metadata(json_decode(stream_get_contents(STDIN),true),$argv[2],$argv[3]));}
  elseif($action==='checksum'){
   $s=trim(file_get_contents($argv[2]));$name='keentool-'.$argv[4].'.tar.gz';requireValue(preg_match('/^([0-9a-f]{64})  '.preg_quote($name,'/').'$/D',$s,$m),'Invalid checksum sidecar');$hash=hash_file('sha256',$argv[3]);requireValue(hash_equals($m[1],$hash),'Release archive SHA-256 mismatch');if(($argv[5]??'-')!=='-')requireValue(hash_equals('sha256:'.$hash,$argv[5]),'GitHub asset digest mismatch');echo $hash;
- }elseif($action==='extract'){extractVerified($argv[2],$argv[3]);}
+ }elseif($action==='component'){componentStatus($argv[2],$argv[3],$argv[4],$argv[5]??'');}
+ elseif($action==='extract'){extractVerified($argv[2],$argv[3]);}
  else throw new InvalidArgumentException('Unsupported verification action');
 }catch(Throwable $e){fwrite(STDERR,$e->getMessage()."\n");exit(1);}
