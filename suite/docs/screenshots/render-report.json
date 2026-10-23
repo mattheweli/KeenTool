@@ -1,0 +1,38 @@
+[
+  {
+    "name": "dashboard",
+    "file": "/home/runner/work/KeenTool/KeenTool/suite/docs/screenshots/dashboard.png",
+    "errors": [],
+    "title": "KeeneticOS Web Panel"
+  },
+  {
+    "name": "security",
+    "file": "/home/runner/work/KeenTool/KeenTool/suite/docs/screenshots/security.png",
+    "errors": [],
+    "title": "Security & Health"
+  },
+  {
+    "name": "firewall",
+    "file": "/home/runner/work/KeenTool/KeenTool/suite/docs/screenshots/firewall.png",
+    "errors": [],
+    "title": "Keenetic Firewall Stats"
+  },
+  {
+    "name": "traffic",
+    "file": "/home/runner/work/KeenTool/KeenTool/suite/docs/screenshots/traffic.png",
+    "errors": [],
+    "title": "Keenetic Traffic Monitor"
+  },
+  {
+    "name": "ping",
+    "file": "/home/runner/work/KeenTool/KeenTool/suite/docs/screenshots/ping.png",
+    "errors": [],
+    "title": "Keenetic Dual-Stack Ping Monitor"
+  },
+  {
+    "name": "smb-backup",
+    "file": "/home/runner/work/KeenTool/KeenTool/suite/docs/screenshots/smb-backup.png",
+    "errors": [],
+    "title": "SMB Backup Tool · example terminal"
+  }
+]
