@@ -1,6 +1,6 @@
 #!/opt/bin/bash
-# SMB BACKUP TOOL v2.0.0
-# Release: 2026-10-22 | Stable. See CHANGELOG.md for release details.
+# SMB BACKUP TOOL v2.0.1
+# Release: 2026-10-23 | Stable. See CHANGELOG.md for release details.
 
 # ==============================================================================
 # SMB BACKUP TOOL v1.0.2 (CRON FIX)
@@ -11,18 +11,18 @@
 # ==============================================================================
 
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
-# smb_backup_tool 2.0.0
+# smb_backup_tool 2.0.1
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 
 
 # --- CONFIGURATION ---
-VERSION="2.0.0"
+VERSION="2.0.1"
 CONFIG_FILE="${KT_SMB_CONFIG:-/opt/etc/smb_backup.cfg}"
 LOG_FILE="/opt/var/log/smb_backup.log"
 TEMP_DIR="" # allocated per backup; never shared between runs
 CRON_FILE="/opt/etc/crontab"  # File target per Entware
 
-# Filtro Log per avvisi innocui
+# Filter harmless log warnings
 LOG_FILTER="NT_STATUS_OBJECT_NAME_COLLISION|Can't load|dos charset"
 
 # Colors
@@ -46,7 +46,7 @@ check_and_fix_cron_user() {
             
             # Insert "root " before the script path using sed.
             # Match: (text ending with a space) (/path/to/script).
-            # Sostituisci con: \1root \2
+            # Replace with: \1root \2
             sed -i "s|\(.*\) \($SCRIPT_PATH\)|\1 root \2|" "$CRON_FILE"
             
             # Verify that the correction succeeded.
@@ -207,7 +207,7 @@ disable_scheduler() {
     CRON_CMD="$SCRIPT_PATH -run"
     
     if [ -f "$CRON_FILE" ]; then
-        # Rimuove la riga dal file fisico
+        # Remove the entry from the crontab file
         sed -i "\#$CRON_CMD#d" "$CRON_FILE"
         restart_cron_service
     fi
@@ -276,6 +276,7 @@ dump_system_files() {
 smb_safe_path() { [[ "$1" != *['";\\']* && "$1" != *$'\n'* && "$1" != *$'\r'* && "/$1/" != *'/../'* ]]; }
 validate_backup_config() {
     [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]] || { logger_msg 'Invalid retention' ERROR; return 1; }
+    SOURCE_DIR=$(cd -- "$SOURCE_DIR" 2>/dev/null && pwd -L) || { logger_msg 'Invalid source directory' ERROR; return 1; }
     [ -d "$SOURCE_DIR" ] && [ "$SOURCE_DIR" != / ] && [[ "$SOURCE_DIR" != /opt/tmp && "$SOURCE_DIR" != /opt/tmp/* ]] || { logger_msg 'Invalid source directory' ERROR; return 1; }
     smb_safe_path "$SMB_SUBDIR" && smb_safe_path "$SMB_SHARE" || { logger_msg 'Invalid SMB path' ERROR; return 1; }
     case "$SMB_USER$SMB_PASS" in *$'\n'*|*$'\r'*) logger_msg 'Newlines in credentials are unsupported' ERROR; return 1;; esac
@@ -323,22 +324,45 @@ perform_backup() {
     ARCHIVE_SYS="sys_backup_${DATE_STR}.tar.gz"; ARCHIVE_OPT="opt_backup_${DATE_STR}.tar.gz"
     ARCHIVE_SQL="sqlite_backup_${DATE_STR}.tar.gz"
     tar -czf "$TEMP_DIR/$ARCHIVE_SYS" -C "$TEMP_DIR/sys_dump" . || return 1
+    local source_parent source_name excluded relative snapshot db
+    local -a prune_paths find_args
     source_parent=$(dirname "$SOURCE_DIR"); source_name=$(basename "$SOURCE_DIR")
     : > "$TEMP_DIR/exclude.txt"
-    for excluded in /opt/var/log /opt/tmp /opt/backup_storage; do
-        [[ "$excluded" = "$SOURCE_DIR"/* ]] && printf '%s\n' "${excluded#"$source_parent/"}" >> "$TEMP_DIR/exclude.txt" || :
+    # Tar stores relative member names; a root parent must contribute ONE slash.
+    # Runtime sockets, locks, rotating logs and staging files are not restore data.
+    prune_paths=(/opt/var/log /opt/var/run /opt/var/lock /opt/tmp /opt/backup_storage)
+    for excluded in "${prune_paths[@]}"; do
+        if [[ "$excluded" = "$SOURCE_DIR" || "$excluded" = "$SOURCE_DIR"/* ]]; then
+            relative=${excluded#"${source_parent%/}/"}
+            printf '%s\n' "$relative" >> "$TEMP_DIR/exclude.txt"
+        fi
     done
-    # Collect coherent SQLite snapshots separately, preserving relative paths.
+    # Use a checked, NUL-delimited inventory; do not scan excluded runtime trees.
+    find_args=("$SOURCE_DIR" '(')
+    for excluded in "${prune_paths[@]}"; do
+        [ "${#find_args[@]}" -eq 2 ] || find_args+=(-o)
+        find_args+=(-path "$excluded")
+    done
+    find_args+=(')' -prune -o '(' -type s -o '(' -type f -name '*.db' ')' ')' -print0)
+    find "${find_args[@]}" > "$TEMP_DIR/inventory" || { logger_msg 'Source inventory failed' ERROR; return 1; }
     mkdir -p "$TEMP_DIR/sqlite_snapshots"
-    while IFS= read -r db; do
-        [ "$(head -c 15 "$db")" = 'SQLite format 3' ] || continue
+    while IFS= read -r -d '' db; do
+        relative=${db#"${source_parent%/}/"}
+        if [[ "$relative" = *$'\n'* || "$relative" = *$'\r'* ]]; then
+            logger_msg 'Unsupported newline in archive exclusion path' ERROR; return 1
+        fi
+        if [ -S "$db" ]; then
+            printf '%s\n' "$relative" >> "$TEMP_DIR/exclude.txt"
+            continue
+        fi
+        # Encode all 16 header bytes before command substitution (SQLite ends in NUL).
+        [ "$(head -c 16 "$db" | base64)" = 'U1FMaXRlIGZvcm1hdCAzAA==' ] || continue
         command -v sqlite3 >/dev/null || { logger_msg 'sqlite3 needed for live DB backup' ERROR; return 1; }
-        relative=${db#"$source_parent/"}
         snapshot="$TEMP_DIR/sqlite_snapshots/$relative"; mkdir -p "$(dirname "$snapshot")"
         kt_sqlite "$db" ".backup '$snapshot'" || return 1
         [ "$(kt_sqlite "$snapshot" 'PRAGMA quick_check;')" = ok ] || return 1
         printf '%s\n' "$relative" "$relative-wal" "$relative-shm" >> "$TEMP_DIR/exclude.txt"
-    done < <(find "$SOURCE_DIR" -path /opt/tmp -prune -o -type f -name '*.db' -print)
+    done < "$TEMP_DIR/inventory"
     tar -X "$TEMP_DIR/exclude.txt" -czf "$TEMP_DIR/$ARCHIVE_OPT" -C "$source_parent" "$source_name" || { logger_msg 'OPT archive failed' ERROR; return 1; }
     tar -czf "$TEMP_DIR/$ARCHIVE_SQL" -C "$TEMP_DIR/sqlite_snapshots" . || return 1
     for archive in "$ARCHIVE_SYS" "$ARCHIVE_OPT" "$ARCHIVE_SQL"; do

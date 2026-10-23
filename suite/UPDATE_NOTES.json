@@ -1,7 +1,7 @@
 {
   "changes": [
-    "Security freshness respects the slower configured snapshot/browser interval instead of a fixed three minutes.",
-    "The main Dashboard uses the same security freshness logic and all page asset references are refreshed.",
-    "All five component READMEs include current operation, configuration, troubleshooting and synthetic interface screenshots."
+    "SMB Backup 2.0.1 corrects archive exclusions for the default /opt source, including live PCAP/logs, runtime sockets and locks.",
+    "Binary-safe SQLite detection eliminates Bash NUL-byte warnings while preserving coherent database snapshots.",
+    "Strict archive validation, remote checksum verification and existing settings/schedules are preserved."
   ]
 }
