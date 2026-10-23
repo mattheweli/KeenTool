@@ -1,0 +1,81 @@
+# Installation and migration
+
+## Platform and dependencies
+
+Requires root on Keenetic with Entware mounted at /opt, Entware Bash, IPv4/IPv6 iptables save/restore, ipset hash:net/counters, PHP 8 CLI and CGI with session/password/IP/process/Unix-socket functions, SQLite CLI with -json, curl, vnStat 2, tcpdump, iprange, OpenSSL and lighttpd with matching FastCGI/OpenSSL modules. Optional email/MTR/SMB functions also need mtr, a ping implementation, samba4-client and tar. syslog-ng/logrotate remain administrator-managed. PPP event monitoring requires the existing readable messages file and router PPP events routed to it; configure this logging separately on a new router.
+
+On a new router, install Entware and Bash first. The installer can ask opkg to install userland prerequisites with --apply --install-deps. Package-manager operations are outside the file rollback and may require a network connection; existing package versions are not downgraded by rollback. Kernel modules and router firmware are prerequisites, not replaced by this package.
+
+BusyBox variants without GNU stat -c are supported through PHP core metadata. No nohup or PHP filter extension is required. Router shell commands must explicitly use /opt/bin/bash.
+
+## Verify an extracted package
+
+```sh
+cd /opt/tmp/keentool-2.0.0
+sha256sum -c CHECKSUMS.sha256
+/opt/bin/bash ./install.sh --help
+```
+
+Checksums detect corruption; obtain the package through the trusted GitHub release and HTTPS. They are not a detached publisher signature.
+
+## New installation
+
+```sh
+/opt/bin/bash ./install.sh --plan --mode fresh --interface ppp0 --configure-web --configure-logging
+/opt/bin/bash ./install.sh --apply --mode fresh --interface ppp0 --configure-web --configure-logging
+```
+
+Replace ppp0 with the actual WAN interface. If dependencies are missing, first use --apply --install-deps with the same options. The explicit --configure-web option replaces the lighttpd main configuration with a dedicated HTTPS listener on port 8080; --configure-logging adopts ulogd for the NFLOG group-1 PCAP pipeline. Both previous files are backed up. Do not choose these ownership options on a server hosting unrelated sites/logging pipelines without reviewing the plan.
+
+The listener creates a private self-signed certificate only when no certificate exists at /opt/etc/keentool/tls/server.pem. Verify/trust the certificate or replace it with your own PEM before administrator login. There is no HTTP listener created by this configuration. Existing conf.d fragments are not included by the dedicated configuration. Matching lighttpd and OpenSSL/FastCGI plugins are essential; the installer validates with lighttpd -tt and restores the backup on failure.
+
+Without --configure-web the existing listener is preserved and checked for syntax. It must serve /opt/var/www, process PHP and provide HTTPS for administrator requests. The installer does not infer or alter custom virtual hosts. An existing isolated web installation must preserve its listener; the installer rejects --configure-web when web isolation is active.
+
+Fresh installs register the requested interface with vnStat when it is missing and start its native Entware service. New vnStat interface/history data is retained on rollback.
+
+Fresh installs create default jobs for Ping at minutes 12/42, Traffic every ten minutes, Firewall Stats every five minutes and blocklist updates at 04:00. An existing matching command is not duplicated. Firewall filtering starts disabled; countries/services are empty, and email is disabled in a new Ping configuration. Configure these deliberately after installation. An existing firewall.conf is never overwritten with defaults.
+
+## Upgrade from public component sources
+
+```sh
+/opt/bin/bash ./install.sh --plan --mode upgrade
+/opt/bin/bash ./install.sh --apply --mode upgrade
+```
+
+No earlier alpha add-on is required. Missing external pingtool.conf is created by migrating allowlisted literal inline settings, including the supported DB_DIR reference in DB_FILE, rather than executing the old script. Complex shell expressions are refused for manual migration. Existing external settings, firewall.conf, vnStat databases, credentials and every existing cron line are preserved. Missing configuration files get explicit defaults; filtering is disabled when no firewall configuration exists. If an old installation was customized inside the hook rather than firewall.conf, export those settings to firewall.conf before upgrading.
+
+The recognized legacy ulogd PCAP path /tmp/fw_syn_ring.pcap is migrated to /opt/var/log/keentool-firewall/fw_syn_ring.pcap without replacing unrelated configuration lines. A custom capture path requires review or explicit --configure-logging. Exactly one matching executable native init script is required for each affected service. Current PCAP content is retained when switching paths; syslog-ng and logrotate settings are not changed.
+
+## Upgrade from the local alpha
+
+Use the same upgrade commands. Existing alpha helpers are not prerequisites. Stable helpers install to /opt/lib/keentool; old /opt/lib/keentool-test files are retained so the old alpha scripts can be restored. The alpha's external configuration, history, passwords, list snapshots, cron and web isolation remain in place. A pending guarded firewall change must be confirmed/rolled back first. No firewall rules are applied by installation.
+
+## Finish and verify
+
+```sh
+/opt/bin/bash /opt/bin/firewall_admin_password
+/opt/bin/bash /opt/bin/pingtool.sh force
+/opt/bin/bash /opt/bin/traffic_manager.sh ppp0 force
+/opt/bin/bash /opt/bin/firewall_stats.sh force
+/opt/bin/bash /opt/bin/firewall_security harden-web --check
+# Review the plan, then: firewall_security harden-web --apply
+/opt/bin/bash /opt/bin/firewall_health
+```
+
+Set the password only for a new installation or intentional password change; existing credentials remain valid. Use the router's correct interface. Refresh the browser cache. CLI menu: keentool. HTTPS administrator login is password-only and Settings writes remain protected by CSRF/revision checks. Guest pages remain consultative.
+
+Review firewall.conf, allowed management networks and services before enabling protection. Use the guarded Settings action where available; for an explicitly reviewed CLI configuration apply with table=filter /opt/bin/bash /opt/etc/ndm/netfilter.d/100-firewall.sh and verify firewall_health. Restore saved lists on reboot independently of source downloads.
+
+--no-start stages files without starting services. Any affected previously running services are stopped and remain stopped; use the printed service instructions before using the installation. It is intended for maintenance, not normal interactive installation.
+
+## Future updates directly from KeenTool
+
+Use `keentool --check-updates` to check only. Use `keentool --update` (or menu option s/u) to check the latest published stable KeenTool release, show the installed/available suite version and request confirmation before download/install. For an explicitly unattended invocation use `keentool --update --yes`.
+
+The updater accepts only the complete versioned suite archive and SHA-256 sidecar from mattheweli/KeenTool release assets. It excludes draft/prerelease releases, rejects downgrades, verifies the archive hash (and GitHub asset digest when present), validates archive paths/types, rejects links/special files, verifies every file against CHECKSUMS.sha256 and checks RELEASE.json against the selected release before invoking the transactional installer. No loose files are pulled from main. This trust chain uses GitHub HTTPS and repository ownership; checksums are not a separate publisher signature.
+
+The suite version must advance for every coordinated published bundle, even when the manager component itself is unchanged. Component versions remain independent in the manifest. A same-version reinstall requires --reinstall explicitly; the standalone bootstrap uses this to seed an earlier locally prepared 2.0.0 build. It never permits a downgrade.
+
+A legacy/alpha menu cannot acquire this behavior without a first migration. Use the root bootstrap.sh from the reviewed GitHub source/tag once, or install the complete package once. The standalone bootstrap contains the same verification engine, detects the installed public/alpha version and invokes the same upgrade installer. Afterwards the regular menu handles remote releases. Until a stable release with its assets is published, it reports that no stable release exists and changes no installed files.
+
+The offline path remains: `keentool --update --local /absolute/path/to/extracted-release`. Existing external settings, credentials, databases and cron are preserved through both paths, with the same backup/rollback. Complex inline shell customizations require manual migration and are rejected before replacement. Physical-router reboot/rollback acceptance remains necessary; isolated tests do not establish every custom installation's compatibility.

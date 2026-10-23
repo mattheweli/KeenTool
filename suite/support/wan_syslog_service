@@ -1,0 +1,67 @@
+#!/opt/bin/bash
+# WAN SYSLOG SERVICE v1.0.0 — 2026-10-22, stable
+# Poll PPP syslog independently of ping cron; scan remains independent of SMTP.
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+SELF=${KT_WAN_SERVICE:-/opt/bin/wan_syslog_service}
+HELPER=${KT_WAN_HELPER:-/opt/bin/wan_syslog_monitor}
+BASH_BIN=${KT_BASH:-/opt/bin/bash}
+PID_FILE=${KT_WAN_PID:-/tmp/keentool-wan-service.pid}
+SERVICE_LOG=${KT_WAN_SERVICE_LOG:-/opt/var/log/keentool-wan-service.log}
+CONF=${KT_PING_CONF:-/opt/etc/pingtool.conf}
+alive() {
+ local pid;pid=$(cat "$PID_FILE" 2>/dev/null || :)
+ [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null || return 1
+ # The isolated test executor virtualizes PIDs without exposing their /proc entries.
+ [ "${KT_TEST_MODE:-false}" != true ] || return 0
+ [ -r "/proc/$pid/cmdline" ] && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -qF "$SELF run"
+}
+case "${1:-status}" in
+ start)
+  alive && { echo 'WAN monitor already running';exit 0; }
+  [ -f "$HELPER" ] || { echo 'WAN monitor helper missing' >&2;exit 1; }
+  [ ! -f "$CONF" ] || . "$CONF"
+  [ "${WAN_SYSLOG_ENABLED:-true}" = true ] || { echo 'WAN monitor disabled in pingtool.conf';exit 0; }
+  mkdir -p "$(dirname "$SERVICE_LOG")"
+  # Ignore HUP explicitly; no nohup package is required.
+  (trap '' HUP;exec "$BASH_BIN" "$SELF" run </dev/null >> "$SERVICE_LOG" 2>&1) &
+  for attempt in 1 2 3 4 5;do alive && { echo 'WAN monitor started';exit 0; };sleep 1;done
+  echo "WAN monitor failed to start; inspect $SERVICE_LOG" >&2;exit 1;;
+ stop)
+  if alive;then
+   pid=$(cat "$PID_FILE");kill -TERM "$pid" || exit 1
+   for attempt in $(seq 1 55);do alive || { echo 'WAN monitor stopped';exit 0; };sleep 1;done
+   echo 'WAN monitor has not stopped; no forced process termination performed' >&2;exit 1
+  fi
+  rm -f "$PID_FILE";echo 'WAN monitor stopped';;
+ restart) "$BASH_BIN" "$SELF" stop && "$BASH_BIN" "$SELF" start;;
+ status) if alive;then echo 'WAN monitor running';else echo 'WAN monitor stopped';exit 1;fi;;
+ run)
+  umask 077
+  alive && exit 0
+  if ! mkdir "$PID_FILE.lock" 2>/dev/null;then
+   alive && exit 0
+   rmdir "$PID_FILE.lock" 2>/dev/null || exit 1
+   mkdir "$PID_FILE.lock" || exit 1
+  fi
+  printf '%s\n' "$$" > "$PID_FILE"
+  running=true;mailer='';scanner='';sleeper=''
+  trap 'running=false;[ -z "$sleeper" ] || kill "$sleeper" 2>/dev/null || :' TERM INT
+  trap 'if [ "$(cat "$PID_FILE" 2>/dev/null)" = "$$" ];then rm -f "$PID_FILE";rmdir "$PID_FILE.lock" 2>/dev/null || :;fi' EXIT
+  while [ "$running" = true ];do
+   WAN_SYSLOG_ENABLED=true;WAN_MONITOR_INTERVAL=5
+   [ ! -f "$CONF" ] || . "$CONF"
+   [[ "$WAN_MONITOR_INTERVAL" =~ ^[0-9]+$ ]] && [ "$WAN_MONITOR_INTERVAL" -ge 1 ] && [ "$WAN_MONITOR_INTERVAL" -le 60 ] || WAN_MONITOR_INTERVAL=5
+   [ "$WAN_SYSLOG_ENABLED" = true ] || break
+   "$BASH_BIN" "$HELPER" --scan & scanner=$!;wait "$scanner" || :;scanner=''
+   [ "$running" = true ] || break
+   if [ -z "$mailer" ] || ! kill -0 "$mailer" 2>/dev/null;then
+    [ -z "$mailer" ] || wait "$mailer" 2>/dev/null || :
+    "$BASH_BIN" "$HELPER" --deliver & mailer=$!
+   fi
+   sleep "$WAN_MONITOR_INTERVAL" & sleeper=$!;wait "$sleeper" || :;sleeper=''
+  done
+  # Finish in-flight state writes and bounded SMTP work instead of abandoning the queue.
+  [ -z "$scanner" ] || wait "$scanner" 2>/dev/null || :
+  [ -z "$mailer" ] || wait "$mailer" 2>/dev/null || :;;
+ *) echo 'Usage: wan_syslog_service {start|stop|restart|status}' >&2;exit 1;;
+esac

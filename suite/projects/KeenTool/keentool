@@ -1,0 +1,2073 @@
+#!/opt/bin/bash
+# KEENTOOL MANAGER v2.0.0
+# Release: 2026-10-22 | Stable. See CHANGELOG.md for release details.
+
+# ==============================================================================
+# KEENTOOL MANAGER v1.3.4 (Stable)
+# Author: MatthewEli
+# Changelog v1.3.4:
+#   - FIX: Improved cron job matching (get_clean_cmd_str) to preserve quotes.
+#   - FIX: Fixed Traffic Manager cron job generation and tracking for multiple interfaces.
+# Changelog v1.3.3:
+#   - FIX: PHP installation and integration
+#   - FEAT: Added full PHP Environment support (php8-cgi, lighttpd-mod-fastcgi).
+#   - FEAT: Firewall API (firewall_api.php) dynamic installation and update.
+#   - FIX: Lighttpd auto-patching for FastCGI & PHP execution.
+# Changelog v1.2.5:
+#   - FEAT: Added Enable/Disable toggle for Email and Telegram modules.
+#   - FEAT: Added complete Uninstall option for notification modules.
+#   - FIX: Fixed executable permissions for .mod extensions (apply_perms).
+#   - UX: Main menu now reflects "Disabled" state for notifications.
+# ==============================================================================
+
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+# KeenTool 2.0.0
+. "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
+# Shared runtime and components are updated together through verified release packages.
+KT_MANAGED_PACKAGE=true
+
+
+# --- CONFIGURATION ---
+REPO_USER="mattheweli"
+BASE_URL="https://raw.githubusercontent.com/$REPO_USER"
+AS_URL="https://keentoolstats.laniakear.workers.dev"
+ID_FILE="/opt/etc/keentool.id"
+
+# DIRECTORIES
+BIN_DIR="/opt/bin"
+NDM_DIR="/opt/etc/ndm/netfilter.d"
+INIT_DIR="/opt/etc/init.d"
+WEB_ROOT="/opt/var/www"
+FW_WEB_ROOT="$WEB_ROOT/firewall"
+KEY_FILE="/opt/etc/AbuseIPDB.key"
+
+# EMAIL CONFIGURATION
+EMAIL_DIR="/opt/etc/keentool/mail"
+EMAIL_CONF="$EMAIL_DIR/email.conf"
+EMAIL_PW_FILE="$EMAIL_DIR/emailpw.enc"
+EMAIL_ENC_KEY=$(cat /opt/etc/keentool/mail/encryption.key 2>/dev/null || printf 'keentool_internal_secret')
+
+# TELEGRAM CONFIGURATION
+TELEGRAM_DIR="/opt/etc/keentool/telegram"
+TELEGRAM_CONF="$TELEGRAM_DIR/telegram.conf"
+
+# --- DEPENDENCY LISTS ---
+DEPS_CORE="lighttpd bash curl wget-ssl cron openssl-util"
+DEPS_VNSTAT="vnstat2 grep awk"
+DEPS_PING="sqlite3-cli iputils-ping mtr grep awk"
+DEPS_FW="ipset iptables wget-ssl curl sqlite3-cli coreutils-date mtr grep awk sed iprange tcpdump bind-tools php8-cgi lighttpd-mod-fastcgi"
+DEPS_SMB="bash tar samba4-client coreutils-date"
+DEPS_DASH="lighttpd syslog-ng logrotate"
+
+# --- TOOL DEFINITIONS ---
+T_SELF="Keentool Manager|$BIN_DIR/keentool|KeenTool|keentool"
+T_DASH="Main Dashboard|$WEB_ROOT/index.html|KeenTool|index.html"
+T_VNSTAT="Traffic Manager|$BIN_DIR/traffic_manager.sh|Traffic_manager|Script/traffic_manager.sh"
+T_PING="Ping Monitor|$BIN_DIR/pingtool.sh|keenetic-pingtool|scripts/pingtool.sh"
+T_SMB="SMB Backup|$BIN_DIR/smb_backup_tool.sh|SMB_Backup_tool|Script/smb_backup_tool.sh"
+T_MAILMOD="Email Module|$BIN_DIR/email_sender.mod|KeenTool|email_sender.mod"
+T_TGMOD="Telegram Module|$BIN_DIR/telegram_sender.mod|KeenTool|telegram_sender.mod"
+FW_CORE_LOCAL="$BIN_DIR/firewall_manager.sh"
+FW_REPO="keenetic-firewall"
+
+# --- CRON COMMANDS ---
+CRON_FILE="/opt/etc/crontab"
+CRON_SPOOL_DIR="/opt/var/spool/cron/crontabs"
+CRON_SPOOL_FILE="$CRON_SPOOL_DIR/root"
+
+CMD_VNSTAT="root /opt/bin/traffic_manager.sh 'ppp0' >/opt/var/log/t_manager.log 2>&1"
+CMD_PING_BASE="root /opt/bin/pingtool.sh"
+CMD_PING_ARGS=">> /opt/var/log/connmon.log 2>&1"
+CMD_FW_STAT="root /opt/bin/firewall_stats.sh > /dev/null 2>&1"
+CMD_FW_UPD="root /opt/bin/update_blocklist.sh > /dev/null 2>&1"
+CMD_FW_VPN="root /opt/bin/vpn_scan.sh > /dev/null 2>&1"
+CMD_FW_REPORT_AUTO="root /opt/bin/firewall_stats.sh -report auto > /dev/null 2>&1"
+CMD_FW_REPORT_DAILY="root /opt/bin/firewall_stats.sh -report daily > /dev/null 2>&1"
+CMD_FW_REPORT_WEEKLY="root /opt/bin/firewall_stats.sh -report weekly > /dev/null 2>&1"
+CMD_FW_REPORT_MONTHLY="root /opt/bin/firewall_stats.sh -report monthly > /dev/null 2>&1"
+CMD_SMB="root /opt/bin/smb_backup_tool.sh -run"
+CMD_ABUSE="root /opt/bin/abuse_reporter.sh > /dev/null 2>&1"
+CMD_LOGROTATE="root /opt/sbin/logrotate /opt/etc/logrotate.conf"
+CMD_SELF_UPD="root /opt/bin/keentool -update >/dev/null 2>&1"
+
+# COLORS
+ESC=$(printf '\033')
+RESET="${ESC}[0m"
+BOLD="${ESC}[1m"
+RED="${ESC}[31m"; GREEN="${ESC}[32m"; YELLOW="${ESC}[33m"; BLUE="${ESC}[34m"; CYAN="${ESC}[36m"; MAGENTA="${ESC}[35m"; DIM="${ESC}[2m"
+
+# GLOBAL STATE
+UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD_MAILMOD=""; UPD_TGMOD=""
+
+# --- UTILS ---
+header() { 
+    clear
+    echo -e "${BOLD}${BLUE}======================================================${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.0  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================${RESET}"
+    echo "" 
+}
+
+pause() { 
+    echo ""
+    read -p "Press [Enter] to return..." fack 
+}
+
+get_version() { 
+    if [ -f "$1" ]; then
+        VER=$(head -n 20 "$1" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1)
+    fi
+    if [ -z "$VER" ]; then
+        echo "0.0.0"
+    else
+        echo "${VER#v}"
+    fi
+}
+
+get_md5() { 
+    if [ -f "$1" ]; then
+        md5sum "$1" | awk '{print $1}'
+    else
+        echo "none"
+    fi
+}
+
+get_device_id() {
+    if [ ! -s "$ID_FILE" ]; then
+        if [ -f /proc/sys/kernel/random/uuid ]; then
+            cat /proc/sys/kernel/random/uuid > "$ID_FILE"
+        else
+            echo "$(date +%s)$RANDOM" | md5sum | awk '{print $1}' > "$ID_FILE"
+        fi
+    fi
+    cat "$ID_FILE" | tr -d '[:space:]'
+}
+
+send_analytics() {
+    TYPE=$1
+    UUID=$(get_device_id)
+    if [ -z "$UUID" ]; then return; fi
+    curl -m 5 -s "${AS_URL}/track/${TYPE}?uid=${UUID}" >/dev/null 2>&1 &
+}
+
+ver_compare() { 
+    if [ "$1" = "$2" ]; then 
+        return 0
+    fi
+    awk -v v1="$1" -v v2="$2" 'BEGIN { 
+        split(v1,a,"."); split(v2,b,"."); 
+        for(i=1;i<=3;i++) { 
+            if(a[i]+0 > b[i]+0) exit 1; 
+            if(a[i]+0 < b[i]+0) exit 2; 
+        } 
+        exit 0; 
+    }'
+    return $? 
+}
+
+reapply_dashboard_config() {
+    echo " -> Syncing Dashboard Configuration..."
+    
+    # PERCORSI
+    DASH_CONF="/opt/etc/keentool/dashboard.conf"
+    SYSLOG_CONF="/opt/etc/syslog-ng.conf"
+    
+    # 1. CARICAMENTO PREFERENZE
+    # Default assumptions
+    EN_VPN="no"; EN_SCRIPTS="no"; EN_DNS="no"; EN_WIFI="no"; EN_DHCP="no"; EN_PROXY="no"; EN_ULOGD="no"
+    
+    if [ -f "$DASH_CONF" ]; then
+        # New Method: Read from state file (Decoupled)
+        . "$DASH_CONF"
+    elif [ -f "$SYSLOG_CONF" ]; then
+        # Legacy Method: Guess from Syslog-ng
+        grep -q "filter(f_vpn); destination(d_vpn);" "$SYSLOG_CONF" && EN_VPN="yes"
+        grep -q "filter(f_scripts); destination(d_scripts);" "$SYSLOG_CONF" && EN_SCRIPTS="yes"
+        grep -q "filter(f_dns); destination(d_dns);" "$SYSLOG_CONF" && EN_DNS="yes"
+        grep -q "filter(f_wifi); destination(d_wifi);" "$SYSLOG_CONF" && EN_WIFI="yes"
+        grep -q "filter(f_dhcp); destination(d_dhcp);" "$SYSLOG_CONF" && EN_DHCP="yes"
+        grep -q "filter(f_proxy); destination(d_proxy);" "$SYSLOG_CONF" && EN_PROXY="yes"
+        grep -q "# ulogd_enabled" "$SYSLOG_CONF" && EN_ULOGD="yes"
+    fi
+
+    # 2. PATCH INDEX.HTML
+    WEB_ROOT="/opt/var/www"
+    if [ -f "$WEB_ROOT/index.html" ]; then
+        JS_TMP="/tmp/keentool_js.tmp"
+        echo "    const logConfig = [" > "$JS_TMP"
+        echo "        { id: 'main', file: 'messages.log', label: '📜 SYSTEM LOG', primary: true }," >> "$JS_TMP"
+        
+        [ "$EN_ULOGD" = "yes" ] && echo "        { id: 'ulogd', file: 'ulogd.log', label: '🔥 ULOGD Firewall', primary: false }," >> "$JS_TMP"
+        [ "$EN_VPN" = "yes" ] && echo "        { id: 'vpn', file: 'vpn.log', label: '🛡️ VPN Events', primary: false }," >> "$JS_TMP"
+        [ "$EN_PROXY" = "yes" ] && echo "        { id: 'proxy', file: 'nginx_proxy.log', label: '🌐 Reverse Proxy (Nginx)', primary: false }," >> "$JS_TMP"
+        [ "$EN_SCRIPTS" = "yes" ] && echo "        { id: 'scripts', file: 'keentool.log', label: '🤖 Keentool Scripts', primary: false }," >> "$JS_TMP"
+        [ "$EN_DNS" = "yes" ] && echo "        { id: 'dns', file: 'dns_proxy.log', label: '🌍 DNS Proxy Errors', primary: false }," >> "$JS_TMP"
+        [ "$EN_WIFI" = "yes" ] && echo "        { id: 'wifi', file: 'wifi_monitor.log', label: '📶 WiFi Monitor Spam', primary: false }," >> "$JS_TMP"
+        [ "$EN_DHCP" = "yes" ] && echo "        { id: 'dhcp', file: 'ndhcps.log', label: '🔌 DHCP Events', primary: false }," >> "$JS_TMP"
+        
+        echo "    ];" >> "$JS_TMP"
+
+        sed -i '/const logConfig = \[/,/\];/d' "$WEB_ROOT/index.html"
+        sed -i '/\/\/ === CONFIGURATION ===/r '"$JS_TMP" "$WEB_ROOT/index.html"
+        rm -f "$JS_TMP"
+    fi
+}
+
+# --- HUMAN READABLE CRON PARSER ---
+cron_to_human() {
+    # Expects 5 args: min hour dom mon dow
+    m=$1; h=$2; dom=$3; mon=$4; dow=$5
+    
+    # Check for "Every X Minutes" (*/10)
+    if echo "$m" | grep -q "\*/"; then
+        echo "Every ${m#*/} mins"
+        return
+    fi
+    
+    # Check for "Every X Hours" (*/1)
+    if echo "$h" | grep -q "\*/"; then
+        echo "Every ${h#*/} hours"
+        return
+    fi
+    
+    # Format Time (e.g. 4:0 -> 04:00)
+    [ ${#m} -eq 1 ] && m="0$m"
+    [ ${#h} -eq 1 ] && h="0$h"
+    TIME="$h:$m"
+
+    # Weekly (* * * * 0)
+    if [ "$dow" != "*" ]; then
+        case $dow in
+            0|7) D="Sun";; 1) D="Mon";; 2) D="Tue";; 3) D="Wed";; 4) D="Thu";; 5) D="Fri";; 6) D="Sat";; *) D="Day $dow";;
+        esac
+        echo "Weekly ($D @ $TIME)"
+        return
+    fi
+    
+    # Monthly (* * 1 * *)
+    if [ "$dom" != "*" ]; then
+        echo "Monthly (Day $dom @ $TIME)"
+        return
+    fi
+    
+    # Daily
+    if [ "$h" != "*" ]; then
+        echo "Daily @ $TIME"
+        return
+    fi
+    
+    # Fallback
+    echo "$m $h $dom $mon $dow"
+}
+
+# --- EMAIL/TELEGRAM HELPERS ---
+
+send_email_notification() {
+    SUBJECT="$1"
+    BODY="$2"
+    EMAIL_MOD="/opt/bin/email_sender.mod"
+    if [ -x "$EMAIL_MOD" ]; then
+        "$EMAIL_MOD" "$SUBJECT" "$BODY"
+        return $?
+    else
+        echo "Error: Email module ($EMAIL_MOD) not found or not executable."
+        return 1
+    fi
+}
+
+configure_telegram() {
+    mkdir -p "$TELEGRAM_DIR"
+    
+    # --- TELEGRAM MANAGEMENT MENU (If configuration exists or is disabled) ---
+    if [ -f "$TELEGRAM_CONF" ] || [ -f "${TELEGRAM_CONF}.disabled" ]; then
+        if [ ! -f "/opt/bin/telegram_sender.mod" ]; then
+            smart_process "Telegram Module" "/opt/bin/telegram_sender.mod" "KeenTool" "telegram_sender.mod"
+        fi
+        
+        header
+        echo -e "${BOLD}Telegram Notifications Setup${RESET}"
+        echo ""
+        
+        if [ -f "$TELEGRAM_CONF" ]; then
+            . "$TELEGRAM_CONF"
+            TG_STATE="${GREEN}Active${RESET}"
+            TOGGLE_BTN="Disable Telegram Notifications"
+        else
+            . "${TELEGRAM_CONF}.disabled"
+            TG_STATE="${YELLOW}Disabled${RESET}"
+            TOGGLE_BTN="Enable Telegram Notifications"
+        fi
+        
+        MOD_VER=$(get_version "/opt/bin/telegram_sender.mod")
+        
+        echo -e "Status: $TG_STATE"
+        echo "Chat ID: $TG_CHAT_ID"
+        echo "Module: v$MOD_VER"
+        echo ""
+  
+        echo " 1. Send Test Message"
+        echo " 2. Re-configure Settings"
+        echo " 3. Update Telegram Module"
+        echo " 4. $TOGGLE_BTN"
+        echo " 5. Uninstall Completely"
+        echo " 0. Back"
+        echo ""
+        echo -n "Select option: "
+        read -r tg_opt
+        
+        case $tg_opt in
+            1) 
+                if [ -f "${TELEGRAM_CONF}.disabled" ]; then
+                    echo -e "\n ${RED}Module is disabled. Enable it first.${RESET}"; pause; return
+                fi
+                echo ""
+                echo -n "Sending Test Message..."
+                if /opt/bin/telegram_sender.mod "Test Message" "This is a test notification from your Keenetic Router (KeenTool Manager)."; then
+                    echo -e " ${GREEN}Success!${RESET}"
+                else
+                    echo -e " ${RED}Failed.${RESET} Check your Bot Token and Chat ID."
+                fi
+                pause; return ;;
+            2) 
+                echo ""
+                echo "Re-configuring..." 
+                if [ -f "${TELEGRAM_CONF}.disabled" ]; then mv "${TELEGRAM_CONF}.disabled" "$TELEGRAM_CONF"; fi
+                ;;
+            3)
+                echo ""
+                smart_process "Telegram Module" "/opt/bin/telegram_sender.mod" "KeenTool" "telegram_sender.mod"
+                pause; return ;;
+            4)
+                if [ -f "$TELEGRAM_CONF" ]; then
+                    mv "$TELEGRAM_CONF" "${TELEGRAM_CONF}.disabled"
+                    echo -e "\n -> ${YELLOW}Telegram Notifications Disabled.${RESET}"
+                else
+                    mv "${TELEGRAM_CONF}.disabled" "$TELEGRAM_CONF"
+                    echo -e "\n -> ${GREEN}Telegram Notifications Enabled.${RESET}"
+                fi
+                pause; return ;;
+            5)
+                echo -e "\n${BOLD}Uninstall Telegram Module${RESET}"
+                echo -n " -> Remove module and ALL settings? (y/n): "
+                read -r ans
+                if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                    rm -f "/opt/bin/telegram_sender.mod"
+                    rm -rf "$TELEGRAM_DIR"
+                    echo -e "    ${GREEN}Uninstalled.${RESET}"
+                fi
+                pause; return ;;
+            *) return ;;
+        esac
+    else
+        if [ ! -f "/opt/bin/telegram_sender.mod" ]; then
+            echo " -> Installing Telegram Module..."
+            smart_process "Telegram Module" "/opt/bin/telegram_sender.mod" "KeenTool" "telegram_sender.mod"
+        fi
+        header
+        echo -e "${BOLD}Telegram Notifications Setup${RESET}"
+    fi
+
+    echo ""
+    echo "Enter Telegram Bot Details:"
+    echo "----------------------------------------"
+    echo -n "Bot Token (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11): "
+    read -r TG_BOT_TOKEN
+    
+    echo -n "Chat ID (e.g. 123456789 or -100123456789): "
+    read -r TG_CHAT_ID
+    
+    if [ -n "$TG_BOT_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
+        echo "# KeenTool Telegram Config" > "$TELEGRAM_CONF"
+        echo "TG_BOT_TOKEN=\"$TG_BOT_TOKEN\"" >> "$TELEGRAM_CONF"
+        echo "TG_CHAT_ID=\"$TG_CHAT_ID\"" >> "$TELEGRAM_CONF"
+        chmod 600 "$TELEGRAM_CONF"
+
+        echo ""
+        echo -e "${GREEN}Configuration saved.${RESET}"
+        
+        echo -n "Send a test message now? (y/n): "
+        read -r test_ans
+        if [ "$test_ans" = "y" ] || [ "$test_ans" = "Y" ]; then
+            echo -n "Sending..."
+            if /opt/bin/telegram_sender.mod "Test Message" "This is a test notification from your Keenetic Router."; then
+                echo -e " ${GREEN}Success!${RESET}"
+            else
+                echo -e " ${RED}Failed${RESET}"
+            fi
+            pause
+        fi
+    else
+        echo -e "${RED}Configuration aborted. Token and Chat ID are required.${RESET}"
+        pause
+    fi
+}
+
+configure_email() {
+    mkdir -p "$EMAIL_DIR"
+    # Current credentials use the legacy key until the user saves a new password.
+
+    mkdir -p "$EMAIL_DIR"
+    
+    # --- EMAIL MANAGEMENT MENU (If configuration exists or is disabled) ---
+    if [ -f "$EMAIL_CONF" ] || [ -f "${EMAIL_CONF}.disabled" ]; then
+        if [ ! -f "/opt/bin/email_sender.mod" ]; then
+            smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "email_sender.mod"
+        fi
+        
+        header
+        echo -e "${BOLD}Email Notifications Setup${RESET}"
+        echo ""
+        
+        if [ -f "$EMAIL_CONF" ]; then
+            . "$EMAIL_CONF"
+            EM_STATE="${GREEN}Active${RESET}"
+            TOGGLE_BTN="Disable Email Notifications"
+        else
+            . "${EMAIL_CONF}.disabled"
+            EM_STATE="${YELLOW}Disabled${RESET}"
+            TOGGLE_BTN="Enable Email Notifications"
+        fi
+        
+        MOD_VER=$(get_version "/opt/bin/email_sender.mod")
+        
+        echo -e "Status: $EM_STATE"
+        echo "Server: $SMTP_SERVER"
+        echo "Recipient: $TO_ADDRESS"
+        echo "Module: v$MOD_VER"
+        echo ""
+  
+        echo " 1. Send Test Email"
+        echo " 2. Re-configure Settings"
+        echo " 3. Update Email Module"
+        echo " 4. $TOGGLE_BTN"
+        echo " 5. Uninstall Completely"
+        echo " 0. Back"
+        echo ""
+        echo -n "Select option: "
+        read -r em_opt
+        
+        case $em_opt in
+            1) 
+                if [ -f "${EMAIL_CONF}.disabled" ]; then
+                    echo -e "\n ${RED}Module is disabled. Enable it first.${RESET}"; pause; return
+                fi
+                echo ""
+                echo -n "Sending Test Email to $TO_ADDRESS..."
+                if /opt/bin/email_sender.mod "Test Email" "This is a test notification from your Keenetic Router (KeenTool Manager)."; then
+                    echo -e " ${GREEN}Success!${RESET}"
+                else
+                    echo -e " ${RED}Failed.${RESET} Check /opt/var/log/messages or your SMTP settings."
+                fi
+                pause; return ;;
+            2) 
+                echo ""
+                echo "Re-configuring..." 
+                if [ -f "${EMAIL_CONF}.disabled" ]; then mv "${EMAIL_CONF}.disabled" "$EMAIL_CONF"; fi
+                ;; 
+            3)
+                echo ""
+                smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "email_sender.mod"
+                pause; return ;;
+            4)
+                if [ -f "$EMAIL_CONF" ]; then
+                    mv "$EMAIL_CONF" "${EMAIL_CONF}.disabled"
+                    echo -e "\n -> ${YELLOW}Email Notifications Disabled.${RESET}"
+                else
+                    mv "${EMAIL_CONF}.disabled" "$EMAIL_CONF"
+                    echo -e "\n -> ${GREEN}Email Notifications Enabled.${RESET}"
+                fi
+                pause; return ;;
+            5)
+                echo -e "\n${BOLD}Uninstall Email Module${RESET}"
+                echo -n " -> Remove module and ALL settings? (y/n): "
+                read -r ans
+                if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                    rm -f "/opt/bin/email_sender.mod"
+                    rm -rf "$EMAIL_DIR"
+                    echo -e "    ${GREEN}Uninstalled.${RESET}"
+                fi
+                pause; return ;;
+            *) return ;;
+        esac
+    else
+        if [ ! -f "/opt/bin/email_sender.mod" ]; then
+            echo " -> Installing Email Module..."
+            smart_process "Email Module" "/opt/bin/email_sender.mod" "KeenTool" "email_sender.mod"
+        fi
+        header
+        echo -e "${BOLD}Email Notifications Setup${RESET}"
+        echo -e "Requires: ${CYAN}openssl-util${RESET} (for password encryption)."
+    fi
+
+    echo ""
+    echo "Enter SMTP Details (e.g. Gmail, Outlook):"
+    echo "----------------------------------------"
+    sleep 1
+    
+    echo -n "SMTP Server (e.g. smtp.gmail.com): "
+    read -r SMTP_SERVER
+    
+    echo -n "SMTP Port (e.g. 465 or 587): "
+    read -r SMTP_PORT
+    
+    echo -n "Username (e.g. your@email.com): "
+    read -r SMTP_USER
+  
+    echo -n "Password (App Password recommended): "
+    read -r SMTP_PASS
+    
+    echo -n "Sender Email or Name (From): "
+    read -r FROM_ADDRESS
+    
+    echo -n "Recipient Email (To): "
+    read -r TO_ADDRESS
+    
+    # SMART DETECTION OF PROTOCOL
+    DEF_PROTO="smtps"
+    if [ "$SMTP_PORT" = "587" ] || [ "$SMTP_PORT" = "25" ]; then
+        DEF_PROTO="smtp"
+    fi
+    
+    echo -n "Protocol (smtps or smtp) [$DEF_PROTO]: "
+    read -r PROTOCOL
+    [ -z "$PROTOCOL" ] && PROTOCOL="$DEF_PROTO"
+
+    # Save Configuration to file
+    echo "# KeenTool Email Config" > "$EMAIL_CONF"
+    echo "SMTP_SERVER=\"$SMTP_SERVER\"" >> "$EMAIL_CONF"
+    echo "SMTP_PORT=\"$SMTP_PORT\"" >> "$EMAIL_CONF"
+    echo "SMTP_USER=\"$SMTP_USER\"" >> "$EMAIL_CONF"
+    echo "FROM_ADDRESS=\"$FROM_ADDRESS\"" >> "$EMAIL_CONF"
+    echo "TO_ADDRESS=\"$TO_ADDRESS\"" >> "$EMAIL_CONF"
+    echo "PROTOCOL=\"$PROTOCOL\"" >> "$EMAIL_CONF"
+
+    # Encrypt Password using OpenSSL
+    keyfile="$EMAIL_DIR/encryption.key"
+    if [ -s "$keyfile" ]; then EMAIL_ENC_KEY=$(cat "$keyfile")
+    else EMAIL_ENC_KEY=$(/opt/bin/openssl rand -hex 32) || return 1; fi
+    export KT_MAIL_KEY="$EMAIL_ENC_KEY"
+    tmp_pw=$(mktemp "$EMAIL_DIR/.password.XXXXXX") || return 1
+    if ! printf '%s' "$SMTP_PASS" | /opt/bin/openssl aes-256-cbc -pbkdf2 -out "$tmp_pw" -pass env:KT_MAIL_KEY; then rm -f "$tmp_pw"; return 1; fi
+    if [ ! -s "$keyfile" ]; then umask 077; printf '%s\n' "$EMAIL_ENC_KEY" > "$keyfile"; chmod 600 "$keyfile"; fi
+    chmod 600 "$tmp_pw"; mv "$tmp_pw" "$EMAIL_PW_FILE"
+    unset KT_MAIL_KEY
+    
+    # Secure permissions
+    chmod 600 "$EMAIL_CONF"
+    chmod 600 "$EMAIL_PW_FILE"
+
+    echo ""
+    echo -e "${GREEN}Configuration saved.${RESET}"
+    
+    # Immediate Test prompt after configuration
+    echo -n "Send a test email now? (y/n): "
+    read -r test_ans
+    if [ "$test_ans" = "y" ] || [ "$test_ans" = "Y" ]; then
+        echo -n "Sending..."
+        if /opt/bin/email_sender.mod "Test Email" "This is a test notification from your Keenetic Router."; then
+            echo -e " ${GREEN}Success!${RESET}"
+        else
+            echo -e " ${RED}Failed (Check /opt/var/log/messages)${RESET}"
+        fi
+        pause
+    fi
+}
+
+# --- HELPERS ---
+apply_perms() {
+    FILE=$1
+    sed -i 's/\r$//' "$FILE"
+    # Added .mod extension to executable files
+    if [ "${FILE##*.}" = "sh" ] || [ "${FILE##*.}" = "mod" ] || [ "$(basename "$FILE")" = "firewall_monitor" ] || [ "$(basename "$FILE")" = "keentool" ]; then
+        chmod +x "$FILE"
+    elif [ "${FILE##*.}" = "html" ] || [ "${FILE##*.}" = "conf" ] || [ "${FILE##*.}" = "php" ] || [ "${FILE##*.}" = "ini" ]; then
+        chmod 644 "$FILE"
+    fi
+}
+
+run_protected() {
+    # Fixes Ctrl+C killing the parent script
+    trap ':' INT
+    $1
+    trap - INT
+}
+
+# --- HEADLESS SELF-UPDATE (CLI - NOTIFY ONLY) ---
+perform_self_update_headless() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then /opt/bin/bash /opt/bin/keentool_update --check; return 0; fi
+    IFS='|' read -r N P R F <<EOF
+$T_SELF
+EOF
+    TMP_FILE="/tmp/keentool_bg.tmp"
+    curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
+    
+    if [ ! -s "$TMP_FILE" ]; then 
+        rm -f "$TMP_FILE"
+        exit 1
+    fi
+    
+    sed -i 's/\r$//' "$TMP_FILE"
+    L_VER=$(get_version "$P")
+    R_VER=$(get_version "$TMP_FILE")
+    
+    ver_compare "$R_VER" "$L_VER"
+    RES=$?
+    # If an update is available
+    if [ $RES -eq 1 ] || { [ $RES -eq 0 ] && [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; }; then
+        # 1. Save the available version to a temporary file for the menu
+        echo "$R_VER" > "/tmp/keentool_new_ver"
+        
+        MSG="Update Available: KeenTool v$R_VER is available. Check menu option 's'."
+        logger -t "KeenTool" "$MSG"
+        /opt/bin/email_sender.mod "KeenTool Update Available" "$MSG" &
+    else
+        # If up to date, remove any old warning flags
+        rm -f "/tmp/keentool_new_ver"
+    fi
+    
+    rm -f "$TMP_FILE"
+    exit 0
+}
+
+doctor() {
+    echo 'KeenTool v2.0.0'
+    for cmd in bash curl sqlite3 ipset iptables smbclient vnstat tar timeout sha256sum; do
+        command -v "$cmd" >/dev/null && printf 'OK %s\n' "$cmd" || printf 'MISSING %s\n' "$cmd"
+    done
+    df -h /opt
+    for f in /opt/etc/firewall_stats.db /opt/etc/pingtool/pingtool.db; do
+        [ ! -f "$f" ] || printf '%s: %s\n' "$f" "$(kt_sqlite "$f" 'PRAGMA quick_check;')"
+    done
+    echo 'Scheduled jobs:'; grep -E 'pingtool|traffic_manager|firewall|vpn_scan|abuse_reporter|smb_backup|keentool' /opt/etc/crontab 2>/dev/null || :
+    echo 'Service states:'; ps | grep -E 'lighttpd|ulogd|crond|vnstatd' | grep -v grep || :
+}
+case "${1:-}" in
+    --entware-check) shift; exec /opt/bin/entware_manager --check "$@" ;;
+    --entware-status) exec /opt/bin/entware_manager --status ;;
+    --entware-upgrade) exec /opt/bin/entware_manager --upgrade ;;
+    --entware-resume) exec /opt/bin/entware_manager --resume ;;
+    --doctor) doctor; exit $? ;;
+    --uninstall) shift; exec /opt/bin/keentool_uninstall "$@" ;;
+    --check-updates) exec /opt/bin/bash /opt/bin/keentool_update --check ;;
+    --update|-update) shift;exec /opt/bin/bash /opt/bin/keentool_update "$@" ;;
+esac
+# --- ARGUMENT HANDLING ---
+case "$1" in
+    -update|--update)
+        perform_self_update_headless
+        ;;
+esac
+
+# --- CONFIGURATORS ---
+
+save_dashboard_state() {
+    mkdir -p "/opt/etc/keentool"
+    local conf=/opt/etc/keentool/dashboard.conf tmp
+    tmp=$(mktemp "${conf}.XXXXXX") || return 1
+    [ ! -f "$conf" ] || sed '/^EN_\(VPN\|SCRIPTS\|DNS\|WIFI\|DHCP\|PROXY\|ULOGD\)=/d' "$conf" > "$tmp"
+    for key in EN_VPN EN_SCRIPTS EN_DNS EN_WIFI EN_DHCP EN_PROXY EN_ULOGD; do printf '%s=%q\n' "$key" "${!key}" >> "$tmp"; done
+    mv "$tmp" "$conf"
+
+}
+
+configure_logging_modules() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then echo 'Syslog-ng is administrator-managed; review docs/INSTALL.md for logging integration'; pause; return; fi
+    # Defaults
+    EN_VPN="yes"; EN_SCRIPTS="yes"; EN_DNS="yes"; EN_WIFI="yes"; EN_DHCP="yes"; EN_PROXY="yes"; EN_ULOGD="no"
+    
+    CONF="/opt/etc/syslog-ng.conf"
+    DASH_CONF="/opt/etc/keentool/dashboard.conf"
+    
+    # State Detection (Priority: Dashboard Conf > Syslog Conf)
+    if [ -f "$DASH_CONF" ]; then
+        # New Method: Read from state file (Decoupled)
+        . "$DASH_CONF"
+    elif [ -f "$CONF" ]; then
+        # Legacy Method: Guess from Syslog-ng
+        grep -q "filter(f_vpn); destination(d_vpn);" "$CONF" || EN_VPN="no"
+        grep -q "filter(f_scripts); destination(d_scripts);" "$CONF" || EN_SCRIPTS="no"
+        grep -q "filter(f_dns); destination(d_dns);" "$CONF" || EN_DNS="no"
+        grep -q "filter(f_wifi); destination(d_wifi);" "$CONF" || EN_WIFI="no"
+        grep -q "filter(f_dhcp); destination(d_dhcp);" "$CONF" || EN_DHCP="no"
+        grep -q "filter(f_proxy); destination(d_proxy);" "$CONF" || EN_PROXY="no"
+        grep -q "# ulogd_enabled" "$CONF" && EN_ULOGD="yes"
+    fi
+    # Auto-enable ULOGD if the log file exists and it is the first setup
+    if [ ! -f "$CONF" ] && [ -f "/opt/var/log/ulogd.log" ]; then EN_ULOGD="yes"; fi
+
+    # Helper function for Symlinks (used in both 'a' and 'h' options)
+    sync_symlinks() {
+        mkdir -p "$WEB_ROOT"
+        LOG_LIST="vpn keentool dns_proxy wifi_monitor ndhcps nginx_proxy ulogd"
+        for L in $LOG_LIST; do
+            # Create empty file if it doesn't exist (prevents broken link errors)
+            if [ ! -f "/opt/var/log/${L}.log" ]; then touch "/opt/var/log/${L}.log"; fi
+            chmod 644 "/opt/var/log/${L}.log"
+            # Create the link if missing
+            if [ ! -L "$WEB_ROOT/${L}.log" ]; then ln -sf "/opt/var/log/${L}.log" "$WEB_ROOT/${L}.log"; fi
+        done
+        # Main syslog
+        if [ ! -L "$WEB_ROOT/messages.log" ]; then ln -sf /opt/var/log/messages "$WEB_ROOT/messages.log"; fi
+    }
+
+    while true; do
+        header; echo -e "${BOLD}Modular Logging Configuration${RESET}"
+        if [ "$EN_VPN" = "yes" ]; then c_vpn="${GREEN}ON${RESET}"; else c_vpn="${RED}OFF${RESET}"; fi
+        if [ "$EN_SCRIPTS" = "yes" ]; then c_scr="${GREEN}ON${RESET}"; else c_scr="${RED}OFF${RESET}"; fi
+        if [ "$EN_DNS" = "yes" ]; then c_dns="${GREEN}ON${RESET}"; else c_dns="${RED}OFF${RESET}"; fi
+        if [ "$EN_WIFI" = "yes" ]; then c_wif="${GREEN}ON${RESET}"; else c_wif="${RED}OFF${RESET}"; fi
+        if [ "$EN_DHCP" = "yes" ]; then c_dhc="${GREEN}ON${RESET}"; else c_dhc="${RED}OFF${RESET}"; fi
+        if [ "$EN_PROXY" = "yes" ]; then c_prx="${GREEN}ON${RESET}"; else c_prx="${RED}OFF${RESET}"; fi
+        if [ "$EN_ULOGD" = "yes" ]; then c_ulo="${GREEN}ON${RESET}"; else c_ulo="${RED}OFF${RESET}"; fi
+        
+        echo -e " 1. VPN Events (OpenVPN/WireGuard)    [$c_vpn]"
+        echo -e " 2. Keentool Scripts (Traffic/Ping)   [$c_scr]"
+        echo -e " 3. DNS Proxy Errors (Timeout Spam)   [$c_dns]"
+        echo -e " 4. WiFi Monitor (Mediatek Spam)      [$c_wif]"
+        echo -e " 5. DHCP Events (ndhcps)              [$c_dhc]"
+        echo -e " 6. Reverse Proxy (Nginx SSL Errors)  [$c_prx]"
+        echo -e " 7. ULOGD Netfilter Log (Firewall)    [$c_ulo]"
+        echo ""
+        echo -e " ${BOLD}a. APPLY FULL (Syslog + HTML + Rotate)${RESET}"
+        echo -e " ${BOLD}h. APPLY HTML ONLY (Safe Mode)${RESET}"
+        echo " 0. Cancel / Back"
+        echo ""
+        echo -n "Select: "; read -r opt
+        
+        case $opt in
+            1) if [ "$EN_VPN" = "yes" ]; then EN_VPN="no"; else EN_VPN="yes"; fi ;;
+            2) if [ "$EN_SCRIPTS" = "yes" ]; then EN_SCRIPTS="no"; else EN_SCRIPTS="yes"; fi ;;
+            3) if [ "$EN_DNS" = "yes" ]; then EN_DNS="no"; else EN_DNS="yes"; fi ;;
+            4) if [ "$EN_WIFI" = "yes" ]; then EN_WIFI="no"; else EN_WIFI="yes"; fi ;;
+            5) if [ "$EN_DHCP" = "yes" ]; then EN_DHCP="no"; else EN_DHCP="yes"; fi ;;
+            6) if [ "$EN_PROXY" = "yes" ]; then EN_PROXY="no"; else EN_PROXY="yes"; fi ;;
+            7) if [ "$EN_ULOGD" = "yes" ]; then EN_ULOGD="no"; else EN_ULOGD="yes"; fi ;;
+            
+            h)
+                echo ""; echo -e "${CYAN}Updating Dashboard HTML only...${RESET}"
+                save_dashboard_state
+                sync_symlinks
+                reapply_dashboard_config
+                echo -e "${GREEN}Done. HTML & Links Updated.${RESET}"
+                sleep 1; return ;;
+                
+            a)
+                echo ""; echo -e "${CYAN}Applying Configuration...${RESET}"
+                save_dashboard_state
+                sync_symlinks
+                
+                # 2. GENERATE SYSLOG-NG
+                cat > /opt/etc/syslog-ng.conf <<EOF
+@version: 4.7
+@include "scl.conf"
+options { chain_hostnames(no); create_dirs(yes); keep_hostname(yes); use_fqdn(no); log_msg_size(16384); log_fifo_size(256); stats(freq(21600)); dns-cache(no); };
+source s_local { internal(); unix-dgram("/dev/log"); };
+source s_network { udp(ip("0.0.0.0") port(514)); };
+filter f_dns { program("https-dns-proxy"); };
+filter f_wifi { message("Network::Interface::Mtk::WifiMonitor") or message("WifiMonitor"); };
+filter f_dhcp { program("ndhcps"); };
+filter f_vpn { program("OpenVPN.*") or message("Wireguard") or message("wireguard") or message("WireGuard"); };
+filter f_scripts { 
+    program("traffic_manager") or program("pingtool") or program("Firewall_Stats") or program("firewall_stats") or 
+    program("Firewall_Update") or program("firewall_update") or program("Abuse_Reporter") or program("abuse_reporter") or 
+    program("VPN_Scanner") or program("vpn_scan") or program("blocklist_loader") or program("update_blocklist") or 
+    message("Firewall_Stats:") or message("Firewall_Update:") or message("Abuse_Reporter:") or message("VPN_Scanner:") or message("Keentool") or
+    (program("cron") and (message("traffic_manager.sh") or message("pingtool.sh") or message("firewall_stats.sh") or message("vpn_scan.sh") or message("abuse_reporter.sh") or message("update_blocklist.sh") or message("smb_backup_tool.sh") or message("keentool")));
+};
+filter f_proxy { program("nginx") or message("nginx:"); };
+filter f_clean { not filter(f_dns) and not filter(f_wifi) and not filter(f_dhcp) and not filter(f_vpn) and not filter(f_scripts) and not filter(f_proxy); };
+destination d_messages { file("/opt/var/log/messages"); };
+destination d_dns { file("/opt/var/log/dns_proxy.log"); };
+destination d_wifi { file("/opt/var/log/wifi_monitor.log"); };
+destination d_dhcp { file("/opt/var/log/ndhcps.log"); };
+destination d_vpn { file("/opt/var/log/vpn.log"); };
+destination d_scripts { file("/opt/var/log/keentool.log"); };
+destination d_proxy { file("/opt/var/log/nginx_proxy.log"); };
+log { source(s_local); source(s_network); filter(f_clean); destination(d_messages); };
+EOF
+                [ "$EN_DNS" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_dns); destination(d_dns); };' >> /opt/etc/syslog-ng.conf
+                [ "$EN_WIFI" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_wifi); destination(d_wifi); };' >> /opt/etc/syslog-ng.conf
+                [ "$EN_DHCP" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_dhcp); destination(d_dhcp); };' >> /opt/etc/syslog-ng.conf
+                [ "$EN_VPN" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_vpn); destination(d_vpn); };' >> /opt/etc/syslog-ng.conf
+                [ "$EN_SCRIPTS" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_scripts); destination(d_scripts); };' >> /opt/etc/syslog-ng.conf
+                [ "$EN_PROXY" = "yes" ] && echo 'log { source(s_local); source(s_network); filter(f_proxy); destination(d_proxy); };' >> /opt/etc/syslog-ng.conf
+                
+                # ULOGD Marker (for future compatibility if dash.conf is lost)
+                if [ "$EN_ULOGD" = "yes" ]; then echo "" >> /opt/etc/syslog-ng.conf; echo "# ulogd_enabled" >> /opt/etc/syslog-ng.conf; fi
+
+                # 3. GENERATE LOGROTATE (Syslog)
+                echo "/opt/var/log/messages { rotate 4 size 5M missingok notifempty compress postrotate /opt/etc/init.d/S01syslog-ng restart >/dev/null 2>&1 endscript }" > /opt/etc/logrotate.d/syslog-ng
+                
+                SECLOGS=""
+              
+                [ "$EN_DNS" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/dns_proxy.log"
+                [ "$EN_WIFI" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/wifi_monitor.log"
+                [ "$EN_DHCP" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/ndhcps.log"
+                [ "$EN_VPN" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/vpn.log"
+                [ "$EN_SCRIPTS" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/keentool.log"
+                [ "$EN_PROXY" = "yes" ] && SECLOGS="$SECLOGS /opt/var/log/nginx_proxy.log"
+                
+                if [ -n "$SECLOGS" ]; then
+                    echo "$SECLOGS {" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    monthly" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    rotate 2" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    size 5M" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    missingok" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    notifempty" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    compress" >> /opt/etc/logrotate.d/syslog-ng
+            
+                    echo "    postrotate" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "        /opt/etc/init.d/S01syslog-ng restart > /dev/null 2>&1" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "    endscript" >> /opt/etc/logrotate.d/syslog-ng
+                    echo "}" >> /opt/etc/logrotate.d/syslog-ng
+                fi
+
+                # Logrotate ULOGD (Separate Block)
+                if [ -f "/opt/var/log/ulogd.log" ]; then
+                    cat >> /opt/etc/logrotate.d/syslog-ng <<EOF
+
+/opt/var/log/ulogd.log {
+    rotate 4
+    size 10M
+    missingok
+    notifempty
+    compress
+    postrotate
+        killall -HUP ulogd 2>/dev/null || /opt/etc/init.d/S11ulogd restart >/dev/null 2>&1
+    endscript
+}
+EOF
+                fi
+
+                # 4. PATCH INDEX.HTML
+                reapply_dashboard_config
+
+                # 5. RESTART
+                echo " -> Restarting Syslog-ng..."
+    
+                /opt/etc/init.d/S01syslog-ng restart >/dev/null 2>&1
+                echo -e "${GREEN}Done. Configuration applied.${RESET}"
+                sleep 1; return ;;
+            0) return ;;
+        esac
+    done
+}
+
+configure_traffic() {
+    # 1. Safely extracts interfaces
+    CUR_IFACE=$(echo "$CMD_VNSTAT" | sed -n "s/.*traffic_manager.sh '\([^']*\)'.*/\1/p")
+    [ -z "$CUR_IFACE" ] && CUR_IFACE="ppp0"
+
+    while true; do
+        header
+        echo -e "${BOLD}Traffic Manager Configuration${RESET}"
+        echo ""
+        echo -e " Current Dashboard Targets: ${CYAN}${CUR_IFACE}${RESET}"
+        echo ""
+        
+        echo -e "${BOLD}Available Interfaces (VNStat DB):${RESET}"
+        if command -v vnstat >/dev/null 2>&1; then
+            vnstat --iflist 2>/dev/null | awk '{print "  - " $0}'
+        else
+            echo "  (VNStat not found)"
+        fi
+        
+        echo ""
+        echo " 1. Set Dashboard Interfaces (Multi-Tab support)"
+        echo " 2. Add New Interface to DB (vnstat --add)"
+        echo " 3. Remove Interface from DB (vnstat --remove)"
+        echo " 0. Back"
+        echo ""
+        echo -n "Select option: "; read -r opt
+        
+        case $opt in
+            1) 
+                echo -n "Enter Interfaces (space separated, e.g. ppp0 br0): "
+                read -r NEW_IF
+                # Pulisce spazi multipli o finali
+                NEW_IF=$(echo "$NEW_IF" | xargs)
+                if [ -n "$NEW_IF" ]; then
+                    # Update CMD_VNSTAT for the current session.
+                    NEW_CMD="root /opt/bin/traffic_manager.sh '$NEW_IF' >/opt/var/log/t_manager.log 2>&1"
+                    
+                    # Update the installed KeenTool file (this script).
+                    sed -i -E "s|CMD_VNSTAT=\"root /opt/bin/traffic_manager.sh.*\"|CMD_VNSTAT=\"$NEW_CMD\"|" "$0"
+                    
+                    # Find and replace cron entries while preserving quotes.
+                    if grep -q "traffic_manager.sh" "$CRON_FILE"; then
+                        echo " -> Updating Crontab..."
+                        grep -v "traffic_manager.sh" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
+                        echo "*/10 * * * * $NEW_CMD" >> "$CRON_FILE"
+                        sanitize_and_reload_cron
+                    fi
+                    
+                    # Update the global menu variable.
+                    CMD_VNSTAT="$NEW_CMD"
+                    CUR_IFACE="$NEW_IF"
+                    
+                    echo " -> Regenerating Dashboard instantly..."
+                    rm -f /opt/var/www/vnstat/index.html
+                    /opt/bin/traffic_manager.sh "$NEW_IF" >/dev/null 2>&1
+                    
+                    echo -e " -> ${GREEN}Targets set to: $NEW_IF${RESET}"
+                    sleep 1
+                fi
+                ;;
+            2)
+                echo -n "Enter Interface to ADD (e.g. usb0): "
+                read -r ADD_IF
+                if [ -n "$ADD_IF" ]; then
+                    echo " -> Adding $ADD_IF..."
+                    vnstat --add -i "$ADD_IF"
+                    /opt/etc/init.d/S32vnstat2 restart
+                    echo -e " -> ${GREEN}Done. Please allow ~10m for data collection.${RESET}"
+                    pause
+                fi
+                ;;
+            3)
+                echo -n "Enter Interface to REMOVE (e.g. eth0): "
+                read -r DEL_IF
+                if [ -n "$DEL_IF" ]; then
+                    echo " -> Removing $DEL_IF..."
+                    vnstat --remove -i "$DEL_IF" --force
+                    /opt/etc/init.d/S32vnstat2 restart
+                    echo -e " -> ${RED}Removed.${RESET}"
+                    pause
+                fi
+                ;;
+            0) return ;;
+        esac
+    done
+}
+
+configure_pingtool() {
+    P=/opt/etc/pingtool.conf
+    if [ ! -f "$P" ]; then
+        grep -E '^(PING_TARGET|PING_TARGET_V6|PING_DURATION|TRIGGER_LATENCY|RETENTION_DAYS|MAX_DISPLAY_POINTS|ENABLE_IPV6|EMAIL_ALERTS|WAN_LABEL|WAN_MONITOR_INTERVAL|WAN_SYSLOG_ENABLED|WAN_SYSLOG_FILE)=' /opt/bin/pingtool.sh > "$P"
+        chmod 600 "$P"
+    fi
+    if [ ! -f "$P" ]; then 
+        echo -e "${RED}Error: Ping Monitor is not installed.${RESET}"
+        pause
+        return
+    fi
+    
+    NEED_REFRESH=0
+    
+    while true; do
+        header
+        echo -e "${BOLD}Ping Monitor Configuration${RESET}"
+        
+        CUR_V4=$(grep '^PING_TARGET="' "$P" | cut -d'"' -f2)
+        CUR_V6=$(grep '^PING_TARGET_V6="' "$P" | cut -d'"' -f2)
+        CUR_MODE=$(grep '^ENABLE_IPV6="' "$P" | cut -d'"' -f2)
+        CUR_DUR=$(grep '^PING_DURATION=' "$P" | cut -d'=' -f2)
+        CUR_LAT=$(grep '^TRIGGER_LATENCY=' "$P" | cut -d'=' -f2)
+  
+        CUR_RET=$(grep '^RETENTION_DAYS=' "$P" | cut -d'=' -f2)
+        CUR_POINTS=$(grep '^MAX_DISPLAY_POINTS=' "$P" | cut -d'=' -f2); CUR_POINTS=${CUR_POINTS:-2000}
+        CUR_WAN=$(grep '^WAN_LABEL="' "$P" | cut -d'"' -f2); CUR_WAN=${CUR_WAN:-Auto (route interface)}
+        CUR_WAN_INTERVAL=$(grep '^WAN_MONITOR_INTERVAL=' "$P" | cut -d'=' -f2); CUR_WAN_INTERVAL=${CUR_WAN_INTERVAL:-5}
+		CUR_ALERTS=$(grep '^EMAIL_ALERTS="' "$P" | cut -d'"' -f2)
+		
+		if [ "$CUR_ALERTS" = "true" ]; then LBL_MAIL="${GREEN}ON${RESET}"; else LBL_MAIL="${RED}OFF${RESET}"; fi
+        
+        if [ "$CUR_MODE" = "true" ]; then LBL_MODE="${GREEN}Enabled${RESET}"; else LBL_MODE="${RED}Disabled${RESET}"; fi
+        
+        echo ""
+        echo -e " ${BOLD}Targets:${RESET}"
+        echo -e " 1. Set IPv4 Target      [Current: ${CYAN}$CUR_V4${RESET}]"
+        echo -e " 2. Set IPv6 Target      [Current: ${CYAN}$CUR_V6${RESET}]"
+        echo -e " 3. Toggle IPv6 Mode     [$LBL_MODE]"
+       
+        echo ""
+        echo -e " ${BOLD}Parameters:${RESET}"
+        echo -e " 4. Ping Duration        [Current: ${CYAN}${CUR_DUR}s${RESET}]"
+        echo -e " 5. Trigger Latency      [Current: ${CYAN}${CUR_LAT}ms${RESET}]"
+        echo -e " 6. DB Retention Days    [Current: ${CYAN}${CUR_RET} days${RESET}]"
+		echo -e " 7. Email Alerts         [$LBL_MAIL]"
+        echo -e " 8. Maximum Chart Points [Current: ${CYAN}${CUR_POINTS}${RESET}]"
+        echo -e " 9. Notification WAN     [Current: ${CYAN}${CUR_WAN}${RESET}]"
+        echo -e " 10. PPP Monitor Interval [Current: ${CYAN}${CUR_WAN_INTERVAL}s${RESET}]"
+        echo "    Retention controls original samples; chart points only control display detail."
+        echo ""
+  
+        echo " 0. Back"
+        echo ""
+        echo -n "Select setting to change: "; read -r opt
+        
+        case $opt in
+            1) echo -n "Enter new IPv4 Target (e.g., 1.1.1.1): "; read -r NEW_VAL
+               if [[ "$NEW_VAL" =~ ^[a-zA-Z0-9_.:-]+$ ]]; then
+                   sed -i 's/^PING_TARGET=".*"/PING_TARGET="'$NEW_VAL'"/' "$P"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
+               fi ;;
+            2) echo -n "Enter new IPv6 Target: "; read -r NEW_VAL
+               if [[ "$NEW_VAL" =~ ^[a-zA-Z0-9_.:-]+$ ]]; then
+                   sed -i 's/^PING_TARGET_V6=".*"/PING_TARGET_V6="'$NEW_VAL'"/' "$P"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
+               fi ;;
+            3) if [ "$CUR_MODE" = "true" ]; then NEW_MODE="false"; else NEW_MODE="true"; fi
+               sed -i 's/^ENABLE_IPV6=".*"/ENABLE_IPV6="'$NEW_MODE'"/' "$P"
+               echo -e " -> Mode switched to: $NEW_MODE"; NEED_REFRESH=1 ;;
+            4) echo -n "Enter Duration (seconds, e.g. 30): "; read -r NEW_VAL
+               if [[ "$NEW_VAL" =~ ^[0-9]+$ ]] && [ "$NEW_VAL" -ge 1 ] && [ "$NEW_VAL" -le 50 ]; then
+                   sed -i "s/^PING_DURATION=.*/PING_DURATION=$NEW_VAL/" "$P"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
+               fi ;;
+            5) echo -n "Enter Latency Threshold (ms, e.g. 50): "; read -r NEW_VAL
+               if [[ "$NEW_VAL" =~ ^[0-9]+$ ]]; then
+                   sed -i "s/^TRIGGER_LATENCY=.*/TRIGGER_LATENCY=$NEW_VAL/" "$P"
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
+               fi ;;
+            6) echo -n "Enter DB Retention (1-3650 days; lowering removes older samples on the next run): "; read -r NEW_VAL
+               if [[ "$NEW_VAL" =~ ^[0-9]+$ ]] && [ "$NEW_VAL" -ge 1 ] && [ "$NEW_VAL" -le 3650 ]; then
+                   if grep -q '^RETENTION_DAYS=' "$P";then sed -i "s/^RETENTION_DAYS=.*/RETENTION_DAYS=$NEW_VAL/" "$P";else printf '\nRETENTION_DAYS=%s\n' "$NEW_VAL" >> "$P";fi
+                   echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
+               else echo 'Retention must be between 1 and 3650 days.';fi ;;
+            7) 
+               if [ "$CUR_ALERTS" = "true" ]; then NEW_VAL="false"; else NEW_VAL="true"; fi
+               if grep -q "EMAIL_ALERTS=" "$P"; then
+                   sed -i 's/^EMAIL_ALERTS=".*"/EMAIL_ALERTS="'$NEW_VAL'"/' "$P"
+               else
+                   sed -i '/^ENABLE_IPV6=/a EMAIL_ALERTS="'$NEW_VAL'"' "$P"
+               fi
+               echo -e " -> Email Alerts: $NEW_VAL"
+    
+               ;;
+            8) echo -n "Enter maximum chart points (100-10000; default 2000): "; read -r NEW_VAL
+               if [[ "$NEW_VAL" =~ ^[0-9]+$ ]] && [ "$NEW_VAL" -ge 100 ] && [ "$NEW_VAL" -le 10000 ];then
+                   local points_tmp
+                   points_tmp=$(mktemp "$P.XXXXXX") || return 1
+                   if awk '!/^MAX_DISPLAY_POINTS=/' "$P" > "$points_tmp" && printf '\nMAX_DISPLAY_POINTS=%s\n' "$NEW_VAL" >> "$points_tmp" && chmod 600 "$points_tmp" && mv "$points_tmp" "$P";then
+                       echo 'Chart point limit updated; original samples are unchanged.'; NEED_REFRESH=1
+                   else rm -f "$points_tmp";echo 'Could not save the chart point limit.';fi
+               else echo 'Chart point limit must be between 100 and 10000.';fi ;;
+            9) echo -n "Enter WAN notification label (e.g. ppp0; empty = automatic route interface): "; read -r NEW_VAL
+               if [ -z "$NEW_VAL" ] || [[ "$NEW_VAL" =~ ^[a-zA-Z0-9_.:-]+$ ]];then
+                   local wan_tmp
+                   wan_tmp=$(mktemp "$P.XXXXXX") || return 1
+                   if awk '!/^WAN_LABEL=/' "$P" > "$wan_tmp" && printf '\nWAN_LABEL="%s"\n' "$NEW_VAL" >> "$wan_tmp" && chmod 600 "$wan_tmp" && mv "$wan_tmp" "$P";then
+                       echo 'Notification label updated. Probe routing is unchanged.'
+                   else rm -f "$wan_tmp";echo 'Could not save the WAN label.';fi
+               else echo 'Use letters, digits, underscores, dots, colons or hyphens.';fi ;;
+            10) echo -n "Enter PPP syslog polling interval (1-60 seconds; default 5): "; read -r NEW_VAL
+               if [[ "$NEW_VAL" =~ ^[0-9]+$ ]] && [ "$NEW_VAL" -ge 1 ] && [ "$NEW_VAL" -le 60 ];then
+                   local interval_tmp
+                   interval_tmp=$(mktemp "$P.XXXXXX") || return 1
+                   if awk '!/^WAN_MONITOR_INTERVAL=/' "$P" > "$interval_tmp" && printf '\nWAN_MONITOR_INTERVAL=%s\n' "$NEW_VAL" >> "$interval_tmp" && chmod 600 "$interval_tmp" && mv "$interval_tmp" "$P";then
+                       echo 'PPP monitor interval updated; ping schedule is unchanged.'
+                   else rm -f "$interval_tmp";echo 'Could not save the PPP interval.';fi
+               else echo 'PPP interval must be between 1 and 60 seconds.';fi ;;
+            0) 
+               if [ $NEED_REFRESH -eq 1 ]; then
+                   echo ""
+                   echo -e "${YELLOW}You made changes.${RESET}"
+                   echo -n " -> Run Pingtool now to update Dashboard data? (Takes ~${CUR_DUR}s) (y/n): "
+                   read -r refresh
+   
+                  if [ "$refresh" = "y" ] || [ "$refresh" = "Y" ]; then
+                       echo "Running Pingtool... Please wait..."
+                       run_protected /opt/bin/pingtool.sh
+                       echo -e "${GREEN}Done. Dashboard updated.${RESET}"
+                 
+                       sleep 1
+                   fi
+               fi
+               return ;;
+        esac
+        sleep 1
+    done
+}
+
+# --- SELF UPDATE (INTERACTIVE) ---
+action_self_update() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then /opt/bin/bash /opt/bin/keentool_update; return 0; fi
+    header; echo -e "${BOLD}Checking Keentool status...${RESET}"
+    IFS='|' read -r N P R F <<EOF
+$T_SELF
+EOF
+    TMP_FILE="/tmp/keentool.tmp"
+    echo -n " -> Contacting GitHub ($R)... "; curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
+    
+    if [ ! -s "$TMP_FILE" ]; then 
+        echo -e "${RED}Failed.${RESET}"; rm -f "$TMP_FILE"; pause; return
+    fi
+    
+    sed -i 's/\r$//' "$TMP_FILE"
+    L_VER=$(get_version "$P"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
+    
+    echo -e " ${GREEN}OK${RESET}"; echo ""
+    if [ $RES -eq 1 ]; then
+        echo -e "${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
+        echo -n " -> Apply & Restart? (y/n): "; read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
+            kt_validate "$TMP_FILE" || return 1; cp -p "$P" "${P}.previous" || return 1; mv "$TMP_FILE" "$P"; apply_perms "$P"
+            # Remove flag if exists
+            rm -f "/tmp/keentool_new_ver"
+            send_analytics "update"
+            echo -e "${GREEN}Updated.${RESET}"; sleep 1; exec "$P"
+        else rm -f "$TMP_FILE"; pause; fi
+    elif [ $RES -eq 2 ]; then
+        echo -e "${YELLOW}Local is Newer (Dev).${RESET}"; rm -f "$TMP_FILE"; pause
+    else
+        if [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; then
+            echo -e "${CYAN}MD5 Differs.${RESET}"
+            echo -n " -> Force Reinstall? (y/n): "; read -r ans
+            if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
+                kt_validate "$TMP_FILE" || return 1; cp -p "$P" "${P}.previous" || return 1; mv "$TMP_FILE" "$P"; apply_perms "$P"
+                echo "Reinstalling..."; sleep 1; exec "$P"
+            else rm -f "$TMP_FILE"; pause; fi
+        else echo -e "${GREEN}Up to date.${RESET}"; rm -f "$TMP_FILE"; pause; fi
+    fi
+}
+
+# --- SYSTEM SETUP ---
+setup_system() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then doctor; pause; return; fi
+    header
+    echo -e "${BOLD}System Pre-Flight Check${RESET}"; echo "---------------------------------------"
+    echo -e "Checking Core Packages: ${DIM}$DEPS_CORE${RESET}"; check_and_install_deps "$DEPS_CORE"
+    echo -e "Checking Web Environment..."
+    check_webserver_config "force"
+    echo -n "Checking Cron Service... "
+    if pidof cron >/dev/null; then echo -e "${GREEN}Running${RESET}"; else
+        echo -e "${RED}Stopped${RESET}"; echo -n " -> Start Cron? (y/n): "; read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then /opt/etc/init.d/S10cron start; echo -e "    ${GREEN}Started.${RESET}"; fi
+    fi
+	send_analytics "install"
+    sanitize_and_reload_cron
+    echo ""; echo -e "${BOLD}System Ready.${RESET}"; pause
+}
+
+# --- GLOBAL SCAN ---
+perform_global_scan() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then /opt/bin/bash /opt/bin/keentool_update; return 0; fi
+    echo -e "${BOLD}Checking for updates...${RESET}"
+    check_tool_status() {
+        local VNAME=$1; local LPATH=$2; local REPO=$3; local RFILE=$4
+        echo -n "."
+        if [ -f "$LPATH" ]; then
+            local L_VER=$(get_version "$LPATH"); local TMP="/tmp/check_${RFILE##*/}.tmp"
+            curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$REPO/main/$RFILE" -o "$TMP"
+            if [ -s "$TMP" ]; then
+                sed -i 's/\r$//' "$TMP"
+                local R_VER=$(get_version "$TMP"); ver_compare "$R_VER" "$L_VER"; local RES=$?
+                if [ $RES -eq 1 ]; then eval "${VNAME}=' -> ${MAGENTA}v${R_VER}${RESET}'"
+                # Added exception for Dashboard, Ping Monitor and Traffic Manager (auto-modifying files)
+                elif [ $RES -eq 0 ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP")" ] && [ "$RFILE" != "index.html" ] && [ "$RFILE" != "scripts/pingtool.sh" ] && [ "$RFILE" != "scripts/traffic_manager.sh" ]; then 
+                    eval "${VNAME}=' -> ${CYAN}Changed${RESET}'"
+                else eval "${VNAME}=''"; fi
+                rm -f "$TMP"
+            else eval "${VNAME}=''"; fi
+        else eval "${VNAME}=''"; fi
+    }
+    
+    IFS='|' read -r N P R F <<EOF
+$T_DASH
+EOF
+    check_tool_status "UPD_DASH" "$P" "$R" "$F"
+
+    IFS='|' read -r N P R F <<EOF
+$T_VNSTAT
+EOF
+    check_tool_status "UPD_VNSTAT" "$P" "$R" "$F"
+    
+    IFS='|' read -r N P R F <<EOF
+$T_PING
+EOF
+    check_tool_status "UPD_PING" "$P" "$R" "$F"
+    
+    check_tool_status "UPD_FW" "$FW_CORE_LOCAL" "$FW_REPO" "scripts/firewall_manager.sh"
+    
+    if [ -z "$UPD_FW" ] && [ -f "$FW_CORE_LOCAL" ]; then
+        
+        FW_SUBS="$BIN_DIR/firewall_manager.sh|scripts/firewall_manager.sh
+$BIN_DIR/firewall_monitor|scripts/firewall_monitor
+$BIN_DIR/firewall_stats.sh|scripts/firewall_stats.sh
+$BIN_DIR/vpn_scan.sh|scripts/vpn_scan.sh
+$BIN_DIR/abuse_reporter.sh|scripts/abuse_reporter.sh
+$NDM_DIR/100-firewall.sh|scripts/100-firewall.sh
+$INIT_DIR/S00ipset-load|scripts/S00ipset-load
+$FW_WEB_ROOT/index.html|www/index.html
+$FW_WEB_ROOT/firewall_api.php|www/firewall_api.php"
+
+        IFS=$'\n'; for ROW in $FW_SUBS; do
+            local SUB_L=$(echo "$ROW" | cut -d'|' -f1); local SUB_R=$(echo "$ROW" | cut -d'|' -f2)
+            if [ -f "$SUB_L" ]; then
+                echo -n "."; local SL_VER=$(get_version "$SUB_L"); local STMP="/tmp/chk_fw_sub.tmp"
+                curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$FW_REPO/main/$SUB_R" -o "$STMP"
+                if [ -s "$STMP" ]; then
+                    sed -i 's/\r$//' "$STMP"
+                    local SR_VER=$(get_version "$STMP"); ver_compare "$SR_VER" "$SL_VER"; local RES=$?
+                    if [ $RES -eq 1 ]; then UPD_FW=" -> ${MAGENTA}Patch${RESET}"; rm -f "$STMP"; break; fi
+                    # Ignore MD5 check for files that auto-modify via user settings
+                    if [ $RES -eq 0 ] && [ "$(get_md5 "$SUB_L")" != "$(get_md5 "$STMP")" ] && [ "$SUB_R" != "www/php.ini" ] && [ "$SUB_R" != "www/30-fastcgi.conf" ]; then UPD_FW=" -> ${CYAN}Patch${RESET}"; rm -f "$STMP"; break; fi
+                fi
+                rm -f "$STMP"
+            fi
+        done; unset IFS
+    fi
+    
+    IFS='|' read -r N P R F <<EOF
+$T_SMB
+EOF
+    check_tool_status "UPD_SMB" "$P" "$R" "$F"
+	
+	# NEW: Check Email Module
+    IFS='|' read -r N P R F <<EOF
+$T_MAILMOD
+EOF
+    check_tool_status "UPD_MAILMOD" "$P" "$R" "$F"
+
+    # NEW: Check Telegram Module
+    IFS='|' read -r N P R F <<EOF
+$T_TGMOD
+EOF
+    check_tool_status "UPD_TGMOD" "$P" "$R" "$F"
+    
+    # Check Self (Keentool)
+    IFS='|' read -r N P R F <<EOF
+$T_SELF
+EOF
+    check_tool_status "UPD_SELF" "$P" "$R" "$F"
+
+    echo " Done."; sleep 1
+}
+
+# --- DEPENDENCY & INSTALL ---
+check_and_install_deps() {
+    PKG_LIST="$1"; MISSING=""
+    for PKG in $PKG_LIST; do 
+        if opkg list-installed | grep -q "^$PKG"; then continue; fi
+        if command -v "$PKG" >/dev/null 2>&1; then continue; fi
+        MISSING="$MISSING $PKG"
+    done
+    if [ -n "$MISSING" ]; then
+        echo -e " -> ${YELLOW}Missing:${RESET} $MISSING"; echo -n " -> Install? (y/n): "; read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+            echo "    Installing..."; opkg update >/dev/null 2>&1; opkg install $MISSING
+            if echo "$PKG_LIST" | grep -q "lighttpd"; then check_webserver_config "check"; fi
+            if echo "$PKG_LIST" | grep -q "vnstat2"; then check_vnstat_config; fi
+        else return 1; fi
+    else echo -e " -> ${GREEN}OK${RESET}"; fi
+    if echo "$PKG_LIST" | grep -q "lighttpd"; then check_webserver_config "check"; fi
+    if echo "$PKG_LIST" | grep -q "vnstat2"; then check_vnstat_config; fi
+    return 0
+}
+
+check_vnstat_config() {
+    CONF="/opt/etc/vnstat.conf"
+    if [ ! -f "$CONF" ]; then
+        echo -n " -> ${YELLOW}Configure vnStat (Download Config)? (y/n): ${RESET}"; read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+            echo -n "    Downloading vnstat.conf from KeenTool repo... "
+            curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/KeenTool/main/vnstat.conf" -o "$CONF"
+            if [ -s "$CONF" ]; then
+                echo -e "${GREEN}OK${RESET}"; chmod 644 "$CONF"
+            else
+                echo -e "${RED}Failed (Using Minimal Fallback)${RESET}"
+                echo 'Interface ""' > "$CONF"; echo 'DatabaseDir "/opt/var/lib/vnstat"' >> "$CONF"
+            fi
+            if [ -x /opt/etc/init.d/S32vnstat2 ]; then /opt/etc/init.d/S32vnstat2 restart >/dev/null 2>&1; fi
+        fi
+    fi
+}
+
+check_webserver_config() {
+    MODE=$1; CONF="/opt/etc/lighttpd/lighttpd.conf"
+    if [ ! -d "$WEB_ROOT" ]; then mkdir -p "$WEB_ROOT"; fi
+    
+    if [ ! -f "$WEB_ROOT/index.html" ] || [ "$MODE" = "force" ]; then
+         echo -n " -> Downloading Dashboard to $WEB_ROOT... "
+         curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/KeenTool/main/index.html" -o "$WEB_ROOT/index.html"
+         [ -s "$WEB_ROOT/index.html" ] && chmod 644 "$WEB_ROOT/index.html"
+    fi
+    if [ -f "$CONF" ]; then
+        if grep -q "/opt/var/www/" "$CONF" && [ "$MODE" != "force" ]; then return 0; fi
+    fi
+    if [ "$MODE" != "force" ]; then
+        echo -n " -> ${YELLOW}Configure Lighttpd (Port 8080)? (y/n): ${RESET}"; read -r ans
+        [ "$ans" != "y" ] && [ "$ans" != "Y" ] && return 0
+    fi
+    mkdir -p /opt/etc/lighttpd
+    cat > "$CONF" <<EOF
+var.log_root    = "/opt/var/log/lighttpd/"
+var.server_root = "/opt/var/www/"
+var.state_dir   = "/opt/var/run/"
+var.home_dir    = "/opt/var/lib/lighttpd/"
+var.conf_dir    = "/opt/etc/lighttpd"
+var.vhosts_dir  = server_root + "/vhosts"
+var.cache_dir   = "/opt/var/cache/lighttpd"
+var.socket_dir  = home_dir + "/sockets"
+server.document-root = server_root
+server.upload-dirs = ( "/opt/tmp" )
+server.errorlog = log_root + "error.log"
+server.pid-file = state_dir + "lighttpd.pid"
+server.port = 81
+index-file.names = ( "index.php", "index.html", "index.htm" )
+static-file.exclude-extensions = ( ".pl", ".fcgi", ".cgi" )
+
+server.modules = (
+    "mod_access",
+    "mod_alias",
+    "mod_fastcgi"
+)
+
+include "/opt/etc/lighttpd/mime.conf"
+include "/opt/etc/lighttpd/conf.d/*.conf"
+EOF
+    [ -x /opt/etc/init.d/S80lighttpd ] && { /opt/etc/init.d/S80lighttpd restart >/dev/null 2>&1; echo -e "    ${GREEN}Configured & Restarted.${RESET}"; }
+}
+
+configure_dashboard_extras() {
+    # 1. Always link main message log
+    if [ ! -L "$WEB_ROOT/messages.log" ]; then
+        echo -n " -> Linking System Log to Web Root... "
+        ln -sf /opt/var/log/messages "$WEB_ROOT/messages.log"
+        echo -e "${GREEN}Done.${RESET}"
+    fi
+
+    # 2. Setup Services
+    if [ -x /opt/etc/init.d/S01syslog-ng ]; then
+        if ! pidof syslog-ng >/dev/null; then /opt/etc/init.d/S01syslog-ng start; fi
+    fi
+    if [ -f /opt/etc/logrotate.conf ]; then
+        chmod 644 /opt/etc/logrotate.conf
+        [ -d /opt/etc/logrotate.d ] && chmod 755 /opt/etc/logrotate.d
+        if ! grep -q "logrotate" "$CRON_FILE"; then
+            echo "0 4 * * * root /opt/sbin/logrotate /opt/etc/logrotate.conf" >> "$CRON_FILE"
+            sanitize_and_reload_cron
+        fi
+    fi
+
+    # 3. Handle Configuration (Silent vs Interactive)
+    if [ "$1" = "silent" ]; then
+        reapply_dashboard_config
+    else
+        configure_logging_modules
+    fi
+}
+
+# --- GENERIC INSTALL/UPDATE HELPERS ---
+install_file() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then /opt/bin/bash /opt/bin/keentool_update; return 0; fi
+    local REPO=$1 RFILE=$2 LPATH=$3 DIR TMP SAVE
+    DIR=$(dirname "$LPATH"); mkdir -p "$DIR"
+    TMP=$(mktemp "${LPATH}.XXXXXX") || return 1
+    if ! kt_download "$BASE_URL/$REPO/main/$RFILE" "$TMP" || ! kt_validate "$TMP"; then rm -f "$TMP"; echo 'Download/syntax validation failed'; return 1; fi
+    if [ -f "$LPATH" ]; then
+        SAVE=/opt/var/backups/keentool-updates/$(date +%Y%m%d_%H%M%S); mkdir -p "$SAVE"; cp -p "$LPATH" "$SAVE/$(basename "$LPATH")" || return 1
+    fi
+    apply_perms "$TMP"; mv "$TMP" "$LPATH"; apply_perms "$LPATH"
+    echo 'Installed verified file'
+
+}
+
+smart_process() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then /opt/bin/bash /opt/bin/keentool_update; return 0; fi
+    NAME=$1; LPATH=$2; REPO=$3; RFILE=$4
+    if [ ! -f "$LPATH" ]; then
+        echo -e "${BOLD}Installing: $NAME${RESET}"; echo -n " -> Confirm? (y/n): "; read -r ans
+        [ "$ans" = "y" ] || [ "$ans" = "Y" ] && install_file "$REPO" "$RFILE" "$LPATH"
+        return
+    fi
+    echo -n "Checking $NAME... "; TMP_FILE="/tmp/${RFILE##*/}.tmp"; curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$REPO/main/$RFILE" -o "$TMP_FILE"
+    if [ ! -s "$TMP_FILE" ]; then echo -e "${RED}Net Error${RESET}"; rm -f "$TMP_FILE"; return; fi
+    sed -i 's/\r$//' "$TMP_FILE"
+    L_VER=$(get_version "$LPATH"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
+    UPDATE_NEEDED=0; MSG=""
+    if [ $RES -eq 1 ]; then 
+        UPDATE_NEEDED=1; MSG="${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
+    elif [ $RES -eq 0 ] && [ "$NAME" != "Main Dashboard" ] && [ "$NAME" != "Ping Monitor" ] && [ "$NAME" != "Traffic Manager" ] && [ "$(get_md5 "$LPATH")" != "$(get_md5 "$TMP_FILE")" ]; then 
+        # Ignore MD5 check for files that auto-modify via user settings
+        UPDATE_NEEDED=1; MSG="${CYAN}Content Changed (Patch)${RESET}"
+    fi
+    if [ $UPDATE_NEEDED -eq 1 ]; then
+        echo -e "$MSG"; echo -n "    Apply? (y/n): "; read -r ans
+        [ "$ans" = "y" ] && { 
+            kt_validate "$TMP_FILE" || { echo 'Syntax check failed'; rm -f "$TMP_FILE"; return 1; }
+            cp -p "$LPATH" "${LPATH}.previous" || return 1
+            mv "$TMP_FILE" "$LPATH"
+            apply_perms "$LPATH"
+            echo -e "    ${GREEN}Updated.${RESET}"
+        } || rm -f "$TMP_FILE"
+    else
+        rm -f "$TMP_FILE"; echo -e "${GREEN}Up to date.${RESET}"
+    fi
+}
+
+# --- CRON MANAGEMENT ---
+sanitize_and_reload_cron() {
+    [ ! -f "$CRON_FILE" ] && touch "$CRON_FILE"
+    awk 'length($0) == 0 || !seen[$0]++' "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
+    if [ -s "$CRON_FILE" ] && [ "$(tail -c 1 "$CRON_FILE")" != "" ]; then echo "" >> "$CRON_FILE"; fi
+    chmod 600 "$CRON_FILE"
+    
+    # Fix: Remove user spool to avoid duplicate executions
+    if [ -f "$CRON_SPOOL_FILE" ]; then 
+        echo "Preserving user cron spool: $CRON_SPOOL_FILE"
+    fi
+    
+    if [ -x /opt/etc/init.d/S10cron ]; then /opt/etc/init.d/S10cron restart >/dev/null 2>&1; fi
+}
+
+action_verify_cron() {
+    header; echo -e "${BOLD}Verifying Crontab Integrity...${RESET}"
+    CRON_PATH="/opt/etc/crontab"
+    if [ ! -f "$CRON_PATH" ]; then echo -n " -> File missing. Creating... "; touch "$CRON_PATH"; echo -e "${GREEN}Created.${RESET}"; else echo -e " -> File exists."; fi
+    echo -n " -> Cleaning & Fixing Permissions... "
+    sanitize_and_reload_cron
+    echo -e "${GREEN}Done.${RESET}"
+    echo ""; echo -e "${GREEN}Verification Complete.${RESET}"; pause
+}
+
+# --- HELPER: Extract "pure" command (removes root prefix and redirects) ---
+get_clean_cmd_str() {
+    # Input example: "root /opt/bin/script.sh 'ppp0 br0' > /dev/null"
+    # Output: "/opt/bin/script.sh 'ppp0 br0'"
+    # Note: We must preserve the exact quotes for matching
+    echo "$1" | sed -E 's/^.*root //; s/ >.*//; s/ >>.*//' | sed 's/[[:space:]]*$//'
+}
+
+cron_cmd_active() { 
+    CMD_STR="$1"
+    # Identify unique string (path + args)
+    SEARCH_STR=$(get_clean_cmd_str "$CMD_STR")
+    # Use grep Fixed string (-F) to avoid regex issues with paths
+    grep -qF "$SEARCH_STR" "$CRON_FILE" 
+}
+
+get_cron_line() { 
+    CMD_STR="$1"
+    SEARCH_STR=$(get_clean_cmd_str "$CMD_STR")
+    grep -F "$SEARCH_STR" "$CRON_FILE" | head -n 1
+}
+
+interactive_cron_builder() {
+    CMD_TO_ADD="$1"
+    # 1. Prepare Display Name (Filename + Arguments)
+    CLEAN_CMD=$(get_clean_cmd_str "$CMD_TO_ADD")
+    BASENAME=$(basename "$(echo "$CLEAN_CMD" | awk '{print $1}')")
+    ARGS=$(echo "$CLEAN_CMD" | cut -d' ' -f2-)
+    
+    # If arguments exist, append them to the display name
+    [ "$ARGS" != "$CLEAN_CMD" ] && DISP_NAME="$BASENAME $ARGS" || DISP_NAME="$BASENAME"
+
+    # 2. Check for collisions
+    if grep -qF "$CLEAN_CMD" "$CRON_FILE"; then
+        echo -e "${YELLOW}Warning: Existing jobs found for $DISP_NAME:${RESET}"; 
+        grep -F "$CLEAN_CMD" "$CRON_FILE"; echo ""
+        echo -n "Do you want to REPLACE them with the new schedule? (y/n): "; read -r confirm
+        if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then echo "Operation cancelled."; return; fi
+        
+        # Remove only lines matching exact command+args
+        grep -vF "$CLEAN_CMD" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; echo -e "${RED}Old entries removed.${RESET}"
+    fi
+
+    # 3. Schedule Menu
+    echo -e "${CYAN}Configure Schedule ($DISP_NAME):${RESET}"
+    echo " 1. Every X Minutes"
+    echo " 2. Every X Hours"
+    echo " 3. Daily (Specific Time)"
+    echo " 4. Weekly (Specific Day & Time)"
+    echo " 5. Monthly (Specific Date & Time)"
+    echo -n "Select [1-5]: "; read -r opt
+    
+    SCHED=""
+    case $opt in
+        1) echo -n "Minutes (e.g. 10): "; read -r mins; [ -z "$mins" ] && mins="10"; SCHED="*/$mins * * * *" ;;
+        2) echo -n "Hours (e.g. 1): "; read -r hrs; [ -z "$hrs" ] && hrs="1"; SCHED="0 */$hrs * * *" ;;
+        3) echo -n "Hour (0-23): "; read -r hh; echo -n "Minute (0-59): "; read -r mm
+           [ -z "$hh" ] && hh="03"; [ -z "$mm" ] && mm="00"; SCHED="$mm $hh * * *" ;;
+        4) echo -n "Day of Week (0=Sun...6=Sat): "; read -r dow; echo -n "Hour (0-23): "; read -r hh
+           echo -n "Minute (0-59): "; read -r mm
+           [ -z "$dow" ] && dow="0"; [ -z "$hh" ] && hh="03"; [ -z "$mm" ] && mm="00"; SCHED="$mm $hh * * $dow" ;;
+        5) echo -n "Day of Month (1-31): "; read -r dom; echo -n "Hour (0-23): "; read -r hh
+           echo -n "Minute (0-59): "; read -r mm
+           [ -z "$dom" ] && dom="1"; [ -z "$hh" ] && hh="03"; [ -z "$mm" ] && mm="00"; SCHED="$mm $hh $dom * *" ;;
+        *) echo "Invalid. Defaulting to daily 04:00."; SCHED="0 4 * * *" ;;
+    esac
+    
+    # 4. Write to Crontab
+    echo -e " -> Adding: ${BOLD}$SCHED $CMD_TO_ADD${RESET}"
+    echo "$SCHED $CMD_TO_ADD" >> "$CRON_FILE"
+    sanitize_and_reload_cron
+    echo -e "    ${GREEN}Scheduled & Cron Reloaded.${RESET}"
+}
+
+remove_cron_cmd() {
+    CMD_TO_REM="$1"
+    # Precise identification via path+args
+    CLEAN_CMD=$(get_clean_cmd_str "$CMD_TO_REM")
+    
+    # Inverse grep (-v) on fixed string (-F)
+    grep -vF "$CLEAN_CMD" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"; sanitize_and_reload_cron
+    echo -e "    ${RED}Removed ($CLEAN_CMD) & Cron Reloaded.${RESET}"
+}
+
+manage_cron_menu() {
+    while true; do
+        clear
+        echo -e "${BOLD}${BLUE}======================================================${RESET}"
+        echo -e "${BOLD}${BLUE}   MANAGE CRON JOBS${RESET}"
+        echo -e "${BOLD}${BLUE}======================================================${RESET}"
+        echo ""
+        
+        i=1
+        for CMD in "$@"; do
+            # Build Smart Label (Filename + Args)
+            CLEAN_CMD=$(get_clean_cmd_str "$CMD")
+            BASENAME=$(basename "$(echo "$CLEAN_CMD" | awk '{print $1}')")
+            ARGS=$(echo "$CLEAN_CMD" | cut -d' ' -f2-)
+            
+            # If args exist, show them. Otherwise just filename.
+            if [ "$ARGS" != "$CLEAN_CMD" ]; then
+                DISP_NAME="$BASENAME $ARGS"
+            else
+                DISP_NAME="$BASENAME"
+            fi
+            
+            if cron_cmd_active "$CMD"; then
+                EXISTING=$(get_cron_line "$CMD"); RAW_M=$(echo "$EXISTING" | awk '{print $1}')
+                RAW_H=$(echo "$EXISTING" | awk '{print $2}')
+                RAW_D=$(echo "$EXISTING" | awk '{print $3}')
+                RAW_O=$(echo "$EXISTING" | awk '{print $4}')
+                RAW_W=$(echo "$EXISTING" | awk '{print $5}')
+           
+                READABLE=$(cron_to_human "$RAW_M" "$RAW_H" "$RAW_D" "$RAW_O" "$RAW_W")
+                echo -e " $i. [${GREEN}ON${RESET}] $DISP_NAME (${DIM}$READABLE${RESET})"
+            else
+                echo -e " $i. [${RED}OFF${RESET}] $DISP_NAME"
+            fi
+       
+             i=$((i+1))
+        done
+    
+        echo ""; echo " 0. Back"; echo ""
+        echo -n "Select Job to Manage: "; read -r sel
+        
+        if [ "$sel" = "0" ] || [ -z "$sel" ]; then return; fi
+        
+        idx=1; TARGET_CMD=""
+        for CMD in "$@"; do
+            if [ "$idx" -eq "$sel" ]; then TARGET_CMD="$CMD"; break; fi
+            idx=$((idx+1))
+        done
+        
+        if [ -n "$TARGET_CMD" ]; then
+            echo ""
+            # Recalculate name for visual feedback
+            CLEAN_CMD=$(get_clean_cmd_str "$TARGET_CMD")
+            BASENAME=$(basename "$(echo "$CLEAN_CMD" | awk '{print $1}')")
+            ARGS=$(echo "$CLEAN_CMD" | cut -d' ' -f2-)
+            [ "$ARGS" != "$CLEAN_CMD" ] && DISP_NAME="$BASENAME $ARGS" || DISP_NAME="$BASENAME"
+            
+            if cron_cmd_active "$TARGET_CMD"; then
+                echo -e "Selected: ${BOLD}$DISP_NAME${RESET} (Active)"
+                echo " 1. Edit Schedule"
+                echo " 2. Disable / Remove"
+                echo " 0. Cancel"
+                echo -n "Option: "; read -r subopt
+                case $subopt in
+                    1) interactive_cron_builder "$TARGET_CMD"; pause ;;
+                    2) remove_cron_cmd "$TARGET_CMD"; pause ;;
+                esac
+            else
+                echo -e "Selected: ${BOLD}$DISP_NAME${RESET} (Inactive)"
+                echo " 1. Enable (Configure Schedule)"
+                echo " 0. Cancel"
+                echo -n "Option: "; read -r subopt
+                case $subopt in
+                    1) interactive_cron_builder "$TARGET_CMD"; pause ;;
+                esac
+            fi
+        fi
+    done
+}
+
+boot_check() {
+    [ "${KT_MANAGED_PACKAGE:-false}" != true ] || return 0
+      if [ ! -f "/opt/bin/email_sender.mod" ]; then
+        curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/KeenTool/main/email_sender.mod" -o "/opt/bin/email_sender.mod"
+        if [ -s "/opt/bin/email_sender.mod" ]; then
+            chmod +x "/opt/bin/email_sender.mod"
+        else
+            rm -f "/opt/bin/email_sender.mod"
+        fi
+    fi
+
+    if [ ! -s "$ID_FILE" ]; then
+        get_device_id >/dev/null
+        send_analytics "update"
+    fi
+
+	# --- LEGACY CLEANUP ---
+    if grep -qF "firewall_stats.sh -report >" "$CRON_FILE"; then
+        grep -vF "firewall_stats.sh -report >" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
+        sanitize_and_reload_cron
+    fi
+}
+
+# --- ACTIONS ---
+action_ping() {
+    IFS='|' read -r N P R F <<EOF
+$T_PING
+EOF
+    while true; do
+        header
+        if [ -f "$P" ]; then VER=$(get_version "$P"); echo -e "$N Status: ${GREEN}Installed (v$VER)${RESET}"; else echo -e "$N Status: ${DIM}Not Installed${RESET}"; fi
+        echo ""; echo " 1. Install / Update"
+        echo " 2. Manage Cron"
+        echo " 3. Configure Settings (Targets, History & Charts)"
+        echo " 4. Uninstall"
+        echo ""; echo " 0. Back"; echo "";
+        echo -n "Select: "; read -r op
+        case $op in
+            1) 
+    header; check_and_install_deps "$DEPS_PING"; 
+    smart_process "$N" "$P" "$R" "$F"; sanitize_and_reload_cron; 
+    rm -f /opt/var/www/ping/index.html
+    if [ -n "$CMD_PING_BASE" ]; then manage_cron_menu "$CMD_PING_BASE $CMD_PING_ARGS"; fi
+    pause 
+    ;;
+            2) manage_cron_menu "$CMD_PING_BASE $CMD_PING_ARGS"; ;;
+            3) configure_pingtool ;;
+            4) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove file and cron? (y/n): "; read -r ans
+               if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                   if [ -f "$P" ]; then rm -f "$P"; echo -e "    File removed."; fi
+                   remove_cron_cmd "$CMD_PING_BASE"; echo -e "${GREEN}Done.${RESET}"
+               fi; pause ;;
+            0) return ;;
+        esac
+    done
+}
+
+action_traffic() {
+    IFS='|' read -r N P R F <<EOF
+$T_VNSTAT
+EOF
+    while true; do
+        header; if [ -f "$P" ]; then VER=$(get_version "$P"); echo -e "$N Status: ${GREEN}Installed (v$VER)${RESET}"; else echo -e "$N Status: ${DIM}Not Installed${RESET}"; fi
+        echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Configure Interface (Dashboard/DB)"; echo " 4. Uninstall"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
+        case $op in
+            1) 
+    			header; check_and_install_deps "$DEPS_VNSTAT"; 
+    			smart_process "$N" "$P" "$R" "$F"
+    			rm -f /opt/var/www/vnstat/*.html
+    			if [ -n "$CMD_VNSTAT" ]; then manage_cron_menu "$CMD_VNSTAT"; fi
+    			pause 
+    			;;
+            2) manage_cron_menu "$CMD_VNSTAT"; ;;
+            3) configure_traffic ;;
+            4) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove file and cron? (y/n): "; read -r ans; if [ "$ans" = "y" ] ||
+            [ "$ans" = "Y" ]; then if [ -f "$P" ]; then rm -f "$P"; echo -e "    File removed."; fi; remove_cron_cmd "$CMD_VNSTAT"; echo -e "${GREEN}Done.${RESET}"; fi; pause ;;
+            0) return ;;
+        esac
+    done
+}
+
+action_generic() {
+    T_DEF="$1"; T_CMD="$2"; RUN_OPT="$3"
+    IFS='|' read -r N P R F <<EOF
+$T_DEF
+EOF
+    while true; do
+        header
+        if [ -f "$P" ]; then VER=$(get_version "$P"); echo -e "$N Status: ${GREEN}Installed (v$VER)${RESET}"; else echo -e "$N Status: ${DIM}Not Installed${RESET}"; fi
+        echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Uninstall";
+        if [ "$RUN_OPT" = "yes" ]; then echo " 4. Run Tool (Interactive)"; fi
+        echo ""; echo " 0. Back"; echo "";
+        echo -n "Select: "; read -r op
+        case $op in
+            1) header; if [ "$N" = "SMB Backup" ]; then check_and_install_deps "$DEPS_SMB"; fi
+               if [ "$N" = "Traffic Manager" ]; then check_and_install_deps "$DEPS_VNSTAT"; fi
+               if [ "$N" = "Main Dashboard" ]; then 
+                   check_and_install_deps "$DEPS_DASH"
+                   smart_process "$N" "$P" "$R" "$F"; sanitize_and_reload_cron; 
+                   configure_dashboard_extras "silent"
+               else
+                   smart_process "$N" "$P" "$R" "$F"; sanitize_and_reload_cron
+               fi
+               
+               if [ -n "$T_CMD" ]; then manage_cron_menu "$T_CMD"; fi; pause ;;
+            2) if [ -n "$T_CMD" ]; then manage_cron_menu "$T_CMD"; else echo "No cron job defined."; pause; fi; ;;
+            3) header; echo -e "${BOLD}Uninstall $N${RESET}"; echo -n " -> Remove file and cron? (y/n): "; read -r ans
+               if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                   if [ -f "$P" ]; then rm -f "$P"; echo -e "    File removed."; else echo -e "    File not found."; fi
+                   if [ -n "$T_CMD" ]; then remove_cron_cmd "$T_CMD"; fi
+                   echo -e "${GREEN}Done.${RESET}"
+               fi; pause ;;
+            4) if [ "$RUN_OPT" = "yes" ]; then
+                   if [ -x "$P" ]; then
+                       header
+                       run_protected "$P"
+                       pause
+                   else
+           
+                       echo -e "${RED}Tool not found or not executable.${RESET}"
+                       pause
+                   fi
+               fi ;;
+            0) return ;;
+        esac
+    done
+}
+
+check_firewall_mods() {
+    echo -n "    Checking Kernel Modules... "
+    MISSING=""
+
+    # 1. FILE-BASED CHECK (Standard Modules)
+    # Check for modules that typically exist as .ko files or are listed in modules.builtin
+    FILE_MODS="xt_recent xt_multiport xt_NFLOG nfnetlink_log"
+
+    # Determine module path
+    KVER="4.9-ndm-5"
+    if [ -d "/lib/modules/$(uname -r)" ]; then KVER="$(uname -r)"; fi
+    MOD_DIR="/lib/modules/$KVER"
+
+    for M in $FILE_MODS; do
+        # Check if .ko file exists OR if it is listed in modules.builtin
+        if [ ! -f "$MOD_DIR/${M}.ko" ] && ! grep -q "$M" "$MOD_DIR/modules.builtin" 2>/dev/null; then
+            MISSING="$MISSING $M"
+        fi
+    done
+
+    # 2. FUNCTIONAL TEST (Specific for xt_connlimit)
+    # This module is often statically built into Keenetic kernels without file traces.
+    # We attempt to insert a dummy rule. If iptables accepts it, the module is present.
+    if ! iptables -A INPUT -p tcp --dport 9999 -m connlimit --connlimit-above 100 -j RETURN >/dev/null 2>&1; then
+         # Rule failed: Module is missing
+         MISSING="$MISSING xt_connlimit"
+    else
+         # Rule accepted: Module exists. Remove the dummy rule immediately.
+         iptables -D INPUT -p tcp --dport 9999 -m connlimit --connlimit-above 100 -j RETURN >/dev/null 2>&1
+    fi
+
+    # 3. FINAL REPORT
+    if [ -n "$MISSING" ]; then
+        echo -e "${RED}Failed${RESET}"
+        echo -e "${YELLOW}    [!] Missing Critical Modules:${RESET} ${BOLD}$MISSING${RESET}"
+        echo -e "    Please check 'Netfilter' components in Keenetic firmware."
+        return 1
+    else
+        echo -e "${GREEN}OK${RESET}"
+        return 0
+    fi
+}
+
+verify_new_firewall_reqs() {
+    echo -n " -> Checking Remote Suite Version... "
+    TMP_HOOK="/tmp/chk_fw_hook.sh"
+    curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$FW_REPO/main/scripts/100-firewall.sh" -o "$TMP_HOOK"
+    
+    IS_NEW_SUITE=0
+    if [ -s "$TMP_HOOK" ] && grep -q "NFLOG" "$TMP_HOOK"; then
+        IS_NEW_SUITE=1
+        echo -e "${MAGENTA}New v2.3+ (ULOGD) detected${RESET}"
+    else
+        echo -e "${CYAN}Standard/Legacy detected${RESET}"
+    fi
+    rm -f "$TMP_HOOK"
+
+    if [ "$IS_NEW_SUITE" -eq 1 ]; then
+        # A. ULOGD Installation (NFlog + PCAP)
+        if ! opkg list-installed | grep -q "^ulogd-mod-pcap"; then
+            echo -n "    -> New suite requires ${BOLD}ulogd (nflog/pcap)${RESET}. Installing... "
+            opkg update >/dev/null 2>&1
+            opkg install ulogd ulogd-mod-nflog ulogd-mod-pcap >/dev/null 2>&1
+            if [ $? -eq 0 ]; then echo -e "${GREEN}Installed${RESET}"; else echo -e "${RED}Failed${RESET}"; return 1; fi
+        fi
+
+        # B. ULOGD Settings
+        echo -n "    -> Configuring ulogd... "
+        cat > /opt/etc/ulogd.conf <<EOF
+[global]
+logfile="/opt/var/log/ulogd.log"
+loglevel=3
+plugin="/opt/lib/ulogd/ulogd_inppkt_NFLOG.so"
+plugin="/opt/lib/ulogd/ulogd_raw2packet_BASE.so"
+plugin="/opt/lib/ulogd/ulogd_output_PCAP.so"
+stack=log1:NFLOG,base1:BASE,pcap1:PCAP
+
+[log1]
+group=1
+
+[pcap1]
+file="/tmp/fw_syn_ring.pcap"
+sync=1
+EOF
+        chmod 644 /opt/etc/ulogd.conf
+        echo -e "${GREEN}Done${RESET}"
+
+        # C. Script S11ulogd
+        if [ ! -f "/opt/etc/init.d/S11ulogd" ]; then
+            echo -n "    -> Creating startup script (S11ulogd)... "
+            cat > /opt/etc/init.d/S11ulogd <<EOF
+#!/opt/bin/bash
+
+ENABLED=yes
+PROCS=ulogd
+ARGS="-d"
+PREARGS=""
+DESC=\$PROCS
+PATH=/opt/sbin:/opt/bin:/opt/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+. /opt/etc/init.d/rc.func
+EOF
+            chmod +x /opt/etc/init.d/S11ulogd
+            echo -e "${GREEN}Created${RESET}"
+        fi
+        
+        # Restart service.
+        /opt/etc/init.d/S11ulogd restart >/dev/null 2>&1
+
+        # D. Verify kernel modules.
+        check_firewall_mods
+        return $?
+    fi
+    return 0
+}
+
+action_firewall() {
+    while true; do
+        header; if [ -f "$FW_CORE_LOCAL" ]; then V_CORE=$(get_version "$FW_CORE_LOCAL"); S_MAIN="${GREEN}Installed (v$V_CORE)${RESET}"; else S_MAIN="${DIM}Missing${RESET}"; fi
+        echo -e "Firewall Suite Status: $S_MAIN"; echo ""; echo " 1. Install / Update"; echo " 2. Manage Cron"; echo " 3. Run Manager"; echo " 4. Run Monitor"; echo " 5. Uninstall Suite"; echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read -r op
+        case $op in
+            1) header; check_and_install_deps "$DEPS_FW"; RES_DEPS=$?
+               if [ $RES_DEPS -ne 0 ]; then 
+                   echo -n " -> Base deps missing. Continue? (y/n): "; read -r ans
+                   if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then pause; break; fi
+               fi
+               
+               verify_new_firewall_reqs
+               if [ $? -ne 0 ]; then
+                   echo ""
+                   echo -e "${RED}[ABORT] Critical requirements for the new Firewall Suite are missing.${RESET}"
+                   pause; break
+               fi
+               
+               EXISTING_KEY=""
+               if [ -s "$KEY_FILE" ]; then EXISTING_KEY=$(cat "$KEY_FILE" | tr -d '[:space:]'); fi
+               
+               if [ -n "$EXISTING_KEY" ]; then
+                   echo -e " -> Found AbuseIPDB Key: ${CYAN}${EXISTING_KEY:0:5}...${RESET} (Preserving)"
+               else
+                   echo -n " -> Configure AbuseIPDB Key for reports? (y/n): "; read -r ans
+                   if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                       echo -n "    Enter API Key: "; read -r KEY_TO_SET
+                       if [ -n "$KEY_TO_SET" ]; then
+                           echo -n "$KEY_TO_SET" > "$KEY_FILE"
+                           chmod 600 "$KEY_FILE"
+                           echo -e "    ${GREEN}Key Saved to $KEY_FILE${RESET}"
+                       fi
+                   fi
+               fi
+               
+               REPO="$FW_REPO"
+               smart_process "Manager" "$BIN_DIR/firewall_manager.sh" $REPO "scripts/firewall_manager.sh"
+               smart_process "Monitor" "$BIN_DIR/firewall_monitor" $REPO "scripts/firewall_monitor"
+               smart_process "Stats" "$BIN_DIR/firewall_stats.sh" $REPO "scripts/firewall_stats.sh"
+			   
+               if [ ! -d "$FW_WEB_ROOT" ]; then mkdir -p "$FW_WEB_ROOT"; fi
+               smart_process "Dash UI" "$FW_WEB_ROOT/index.html" $REPO "www/index.html"
+               smart_process "Dash API" "$FW_WEB_ROOT/firewall_api.php" $REPO "www/firewall_api.php"
+               
+               echo -n " -> Configuring FastCGI & PHP environment... "
+               if [ ! -d "/opt/etc/lighttpd/conf.d" ]; then mkdir -p "/opt/etc/lighttpd/conf.d"; fi
+               cat > "/opt/etc/lighttpd/conf.d/30-fastcgi.conf" <<'EOF'
+server.modules += ( "mod_fastcgi" )
+
+fastcgi.server = ( ".php" =>
+    ((
+        "socket" => "/tmp/php-fcgi.sock",
+        "bin-path" => "/opt/bin/php-cgi",
+        "max-procs" => 1,
+        "bin-environment" => (
+            "PHP_FCGI_CHILDREN" => "0",
+            "PHP_FCGI_MAX_REQUESTS" => "1000"
+        ),
+        "bin-copy-environment" => (
+            "PATH", "SHELL", "USER"
+        ),
+        "broken-scriptfilename" => "enable"
+    ))
+)
+EOF
+               chmod 644 "/opt/etc/lighttpd/conf.d/30-fastcgi.conf"
+               
+               echo 'Existing php.ini and lighttpd.conf preserved. Configure PHP via dedicated conf.d snippet if needed.'
+               if [ -f /opt/etc/lighttpd/lighttpd.conf ] && ! grep -q 'conf.d/\*.conf' /opt/etc/lighttpd/lighttpd.conf; then
+                   echo 'Note: add conf.d include to lighttpd.conf manually after checking existing config.'
+               fi
+               smart_process "Updater" "$BIN_DIR/update_blocklist.sh" $REPO "scripts/update_blocklist.sh"
+               smart_process "VPN Scan" "$BIN_DIR/vpn_scan.sh" $REPO "scripts/vpn_scan.sh"
+               smart_process "Reporter" "$BIN_DIR/abuse_reporter.sh" $REPO "scripts/abuse_reporter.sh"
+               smart_process "Netfilter" "$NDM_DIR/100-firewall.sh" $REPO "scripts/100-firewall.sh"
+               smart_process "Init" "$INIT_DIR/S00ipset-load" $REPO "scripts/S00ipset-load"
+               
+               # Restart Lighttpd to load FastCGI & PHP
+               if [ -x /opt/etc/init.d/S80lighttpd ]; then
+                   /opt/etc/init.d/S80lighttpd restart >/dev/null 2>&1
+               fi
+               
+               sanitize_and_reload_cron
+               pause ;;
+            2) manage_cron_menu "$CMD_FW_STAT" "$CMD_FW_UPD" "$CMD_FW_VPN" "$CMD_ABUSE" "$CMD_FW_REPORT_AUTO" "$CMD_FW_REPORT_DAILY" "$CMD_FW_REPORT_WEEKLY" "$CMD_FW_REPORT_MONTHLY"; ;;
+            3) [ -f "$BIN_DIR/firewall_manager.sh" ] && run_protected "$BIN_DIR/firewall_manager.sh" || { echo "Missing"; sleep 1; };;
+            4) [ -f "$BIN_DIR/firewall_monitor" ] && run_protected "$BIN_DIR/firewall_monitor" || { echo "Missing"; sleep 1; };;
+            5) /opt/bin/keentool_uninstall --tool firewall --keep-data; echo 'Preview only; apply via keentool --uninstall --tool firewall --keep-data --apply'; pause ;;
+            0) return ;;
+        esac
+    done
+}
+
+# --- MAIN MENU ---
+boot_check
+while true; do
+    # Check Core Deps silently for menu display
+    SYS_MSG="${GREEN}OK${RESET}"
+    for PKG in $DEPS_CORE; do
+        if ! opkg list-installed | grep -q "^$PKG" && ! command -v "$PKG" >/dev/null 2>&1; then
+            SYS_MSG="${RED}Missing Deps${RESET}"
+            break
+        fi
+    done
+
+    IFS='|' read -r N P R F <<EOF
+$T_VNSTAT
+EOF
+    if [ -f "$P" ]; then V=$(get_version "$P"); L1="${GREEN}v$V${RESET}"; else L1="${DIM}Missing${RESET}"; fi
+    IFS='|' read -r N P R F <<EOF
+$T_PING
+EOF
+    if [ -f "$P" ]; then V=$(get_version "$P"); L2="${GREEN}v$V${RESET}"; else L2="${DIM}Missing${RESET}"; fi
+    if [ -f "$FW_CORE_LOCAL" ]; then V=$(get_version "$FW_CORE_LOCAL"); L3="${GREEN}v$V${RESET}"; else L3="${DIM}Missing${RESET}"; fi
+    IFS='|' read -r N P R F <<EOF
+$T_SMB
+EOF
+    if [ -f "$P" ]; then V=$(get_version "$P"); [ "$V" = "0.0.0" ] && L4="${GREEN}Installed${RESET}" || L4="${GREEN}v$V${RESET}"; else L4="${DIM}Missing${RESET}"; fi
+    IFS='|' read -r N P R F <<EOF
+$T_DASH
+EOF
+    if [ -f "$P" ]; then V=$(get_version "$P"); [ "$V" = "0.0.0" ] && L5="${GREEN}Installed${RESET}" || L5="${GREEN}v$V${RESET}"; else L5="${DIM}Missing${RESET}"; fi
+
+    # --- DYNAMIC STATUS CHECK ---
+    
+    # 1. Email Status
+    if [ -f "$EMAIL_CONF" ] && [ -f "$EMAIL_PW_FILE" ]; then
+        EM_STATUS="${GREEN}Active${RESET}"
+    elif [ -f "${EMAIL_CONF}.disabled" ]; then
+        EM_STATUS="${YELLOW}Disabled${RESET}"
+    else
+        EM_STATUS="${DIM}Not Set${RESET}"
+    fi
+
+    # 2. Telegram Status
+    if [ -f "$TELEGRAM_CONF" ]; then
+        TG_STATUS="${GREEN}Active${RESET}"
+    elif [ -f "${TELEGRAM_CONF}.disabled" ]; then
+        TG_STATUS="${YELLOW}Disabled${RESET}"
+    else
+        TG_STATUS="${DIM}Not Set${RESET}"
+    fi
+
+    # 3. Auto-Update Status (Check Cron)
+    if cron_cmd_active "$CMD_SELF_UPD"; then
+        RAW_LINE=$(get_cron_line "$CMD_SELF_UPD")
+        # Extract first 5 fields (the schedule)
+        RAW_M=$(echo "$RAW_LINE" | awk '{print $1}')
+        RAW_H=$(echo "$RAW_LINE" | awk '{print $2}')
+        RAW_D=$(echo "$RAW_LINE" | awk '{print $3}')
+        RAW_O=$(echo "$RAW_LINE" | awk '{print $4}')
+        RAW_W=$(echo "$RAW_LINE" | awk '{print $5}')
+        
+        SCHED=$(cron_to_human "$RAW_M" "$RAW_H" "$RAW_D" "$RAW_O" "$RAW_W")
+        AU_STATUS="${GREEN}Active${RESET} (${DIM}$SCHED${RESET})"
+    else
+        AU_STATUS="${DIM}Disabled${RESET}"
+    fi
+
+    # 4. Check Update Flag (For instant display)
+    if [ -f "/tmp/keentool_new_ver" ]; then
+        NEW_V=$(cat "/tmp/keentool_new_ver")
+        # If not already populated by manual scan ('u'), use the file
+        if [ -z "$UPD_SELF" ]; then
+            UPD_SELF=" -> ${MAGENTA}v${NEW_V}${RESET}"
+        fi
+    fi
+
+    header
+    echo -e " ${BOLD}System:${RESET}"; echo -e " 0. ${CYAN}System Setup${RESET}            [$SYS_MSG]"
+    echo -e " e. ${CYAN}Email Notifications${RESET}    [$EM_STATUS]"
+    echo -e " t. ${CYAN}Telegram Notifications${RESET} [$TG_STATUS]"
+    echo ""; echo -e " ${BOLD}Tools:${RESET}"
+    echo -e " 1. Traffic Manager      [$L1]$UPD_VNSTAT"
+    echo -e " 2. Ping Monitor         [$L2]$UPD_PING"
+    echo -e " 3. Firewall Suite       [$L3]$UPD_FW"
+    echo -e " 4. SMB Backup Tool      [$L4]$UPD_SMB"
+    echo -e " 5. Main Dashboard       [$L5]$UPD_DASH"
+    echo ""; echo -e " ${BOLD}Global:${RESET}"
+    # KT_FIREWALL_ADMIN_MENU
+    echo " A. Change Firewall admin password"
+    echo " H. Security / system health / management networks"
+    echo -e " p. Entware updates / upgrade [$(wc -l </opt/etc/keentool/entware/available.txt 2>/dev/null || echo unchecked)]"
+    echo -e " P. Schedule Entware checks"
+    echo -e " u. Check for Updates (Tools)"
+    echo -e " s. ${MAGENTA}Update Keentool (Self)${RESET} $UPD_SELF"
+    echo -e " a. ${CYAN}Auto-Update${RESET}          [$AU_STATUS]"
+    echo -e " c. View Crontab"
+    echo -e " v. ${CYAN}Verify/Fix Crontab${RESET}"
+    echo -e " d. Diagnostics"
+    echo -e " U. Uninstall (preview / selective / complete)"
+    echo -e " q. Quit"
+    echo ""; echo -n "Select: "; read choice
+    case $choice in
+        H) /opt/bin/bash /opt/bin/firewall_security menu;read -r -p "Press Enter to continue..." ;;
+        0) setup_system ;;
+        e) configure_email ;;
+        t) configure_telegram ;;
+        
+        # Reset the UPD_... variables after each action
+        1) action_traffic; UPD_VNSTAT="" ;;
+        2) action_ping; UPD_PING="" ;; 
+        3) action_firewall; UPD_FW="" ;;
+        4) action_generic "$T_SMB" "$CMD_SMB" "yes"; UPD_SMB="" ;;
+        5) 
+            while true; do
+                header
+                echo -e "${BOLD}Main Dashboard Manager${RESET}"
+                echo ""; echo " 1. Install / Update"
+                echo " 2. Manage Logrotate (Cron)"
+                echo " 3. Configure Logging Modules (Syslog & HTML)"
+                echo " 4. Uninstall"
+                echo ""; echo " 0. Back"; echo ""; echo -n "Select: "; read d_opt
+                case $d_opt in
+                    1) check_and_install_deps "$DEPS_DASH"; smart_process "Main Dashboard" "$WEB_ROOT/index.html" "KeenTool" "index.html"; sanitize_and_reload_cron; configure_dashboard_extras "silent"; pause ;;
+                    2) manage_cron_menu "$CMD_LOGROTATE"; pause ;;
+                    3) configure_logging_modules ;;
+                    4) echo "Uninstalling..."; rm -f "$WEB_ROOT/index.html"; echo "Done."; pause ;;
+                    0) break ;;
+                esac
+            done
+            UPD_DASH=""
+            ;;
+        A)
+            if [ -f /opt/bin/firewall_admin_password ]; then
+                /opt/bin/bash /opt/bin/firewall_admin_password || echo "Password change failed; see message above."
+            else echo "Firewall admin password tool missing."; fi
+            pause ;;
+        p) /opt/bin/entware_manager --menu ;;
+        P) manage_cron_menu "root /opt/bin/keentool --entware-check --notify >>/opt/var/log/entware-check.log 2>&1"; pause ;;
+        u) perform_global_scan ;;
+        s) action_self_update ;;
+        a) manage_cron_menu "$CMD_SELF_UPD"; pause ;;
+        c) header; cat $CRON_FILE; pause ;;
+        v) action_verify_cron ;;
+        d) doctor; pause ;;
+        U) /opt/bin/keentool_uninstall --menu; exit 0 ;;
+        q) exit 0 ;;
+    esac
+done
+

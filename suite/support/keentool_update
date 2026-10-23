@@ -1,0 +1,60 @@
+#!/opt/bin/bash
+# KeenTool remote release updater 1.0.0 — 2026-10-22.
+set -Eeuo pipefail
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+umask 077
+check=false;yes=false;reinstall=false;local_package=''
+while [ "$#" -gt 0 ];do
+ case "$1" in --check)check=true;; --yes)yes=true;; --reinstall)reinstall=true;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--yes|--reinstall|--local /absolute/package/path]';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
+done
+bash_bin=${KT_UPDATE_BASH:-/opt/bin/bash}
+if [ -n "$local_package" ];then
+ [[ "$local_package" = /* ]] && [ -f "$local_package/RELEASE.json" ] && [ -f "$local_package/install.sh" ] || { echo 'Pass an extracted complete release directory' >&2;exit 1; }
+ (cd "$local_package" && sha256sum -c CHECKSUMS.sha256) >/dev/null
+ [ "$check" != true ] || { "$bash_bin" "$local_package/install.sh" --plan --mode upgrade;exit; }
+ exec "$bash_bin" "$local_package/install.sh" --apply --mode upgrade
+fi
+helper=${KT_UPDATE_HELPER:-/opt/lib/keentool/release_update.php}
+[ -f "$helper" ] || { echo 'Remote updater runtime missing; install the complete suite or use the standalone bootstrap.' >&2;exit 1; }
+php_cli='';for candidate in "${KT_UPDATE_PHP:-}" /opt/bin/php-cli /opt/bin/php8 /opt/bin/php;do
+ [ -n "$candidate" ] && [ -x "$candidate" ] || continue
+ if "$candidate" -r 'exit(PHP_SAPI === "cli" ? 0 : 1);' >/dev/null 2>&1;then php_cli=$candidate;break;fi
+done
+[ -n "$php_cli" ] || { echo 'PHP CLI is required for release verification' >&2;exit 1; }
+for tool in curl gzip;do command -v "$tool" >/dev/null || { echo "Missing updater dependency: $tool" >&2;exit 1; };done
+work=$(mktemp -d "${KT_UPDATE_TMP:-/opt/tmp}/keentool-update.XXXXXX")
+trap 'rm -rf "$work"' EXIT
+curl_opts=(-fsSL --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 180 --retry 2)
+status='';rc=0
+status=$(curl "${curl_opts[@]}" --max-filesize 1048576 -H 'Accept: application/vnd.github+json' -w '%{http_code}' 'https://api.github.com/repos/mattheweli/KeenTool/releases/latest' -o "$work/release.json") || rc=$?
+if [ "$status" = 404 ];then echo 'No published stable KeenTool release is available yet.';exit 0;fi
+[ "$rc" = 0 ] && [ "$status" = 200 ] || { echo "GitHub release check failed (HTTP $status, curl $rc); installed files are unchanged." >&2;exit 1; }
+info=$("$php_cli" "$helper" metadata "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "${KT_UPDATE_LEGACY:-/opt/bin/keentool}" < "$work/release.json")
+IFS=$'\t' read -r version current available archive_url checksum_url digest <<< "$info"
+if [ "$reinstall" = true ] && [ "$current" = "$version" ];then available=1;fi
+if [ "$available" != 1 ];then rm -f "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}";echo "KeenTool suite $current is current (latest stable: $version).";exit 0;fi
+"$php_cli" "$helper" flag "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}" "$version"
+echo "KeenTool suite update available: $current -> $version"
+[ "$check" != true ] || exit 0
+if [ "$yes" != true ];then
+ [ -t 0 ] || { echo 'Run keentool --update interactively, or use --yes to install explicitly.';exit 0; }
+ read -r -p 'Download, verify and install the complete release? [y/N] ' answer
+ [[ "$answer" = y || "$answer" = Y ]] || exit 0
+fi
+[ "$(id -u)" = 0 ] || { echo 'Run the upgrade as root' >&2;exit 1; }
+curl "${curl_opts[@]}" --max-filesize 1024 "$checksum_url" -o "$work/archive.sha256"
+curl "${curl_opts[@]}" --max-filesize 33554432 "$archive_url" -o "$work/archive.tar.gz"
+"$php_cli" "$helper" checksum "$work/archive.sha256" "$work/archive.tar.gz" "$version" "$digest" >/dev/null
+mkdir -m 700 "$work/package"
+# Validate paths/types and every file checksum while extracting into an empty private directory.
+gzip -dc "$work/archive.tar.gz" | "$php_cli" "$helper" extract "$work/package" "$version" >/dev/null
+[ "${KT_UPDATE_BOOTSTRAP:-false}" != true ] || echo 'Bootstrap verified. Existing public/alpha installation will use the same migration installer.'
+"$bash_bin" "$work/package/install.sh" --plan --mode upgrade
+child=''
+cancel(){ trap - INT TERM;[ -z "$child" ] || { kill -TERM "$child" 2>/dev/null || :;wait "$child" || :; };exit 143; }
+trap cancel INT TERM
+"$bash_bin" "$work/package/install.sh" --apply --mode upgrade & child=$!
+wait "$child";child=''
+trap - INT TERM
+rm -f "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}"
+echo 'Verified GitHub release installed. Review the installer backup path and refresh generated pages.'

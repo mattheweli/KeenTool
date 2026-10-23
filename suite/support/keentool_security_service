@@ -1,0 +1,50 @@
+#!/opt/bin/bash
+# KEENTOOL SECURITY SERVICE v1.0.0 — 2026-10-22, stable.
+export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+umask 077
+SELF=/opt/bin/keentool_security_service
+CLI=/opt/bin/firewall_security
+PID=/opt/var/run/keentool-security-service.pid
+alive(){ local p;p=$(cat "$PID" 2>/dev/null || :);[[ "$p" =~ ^[0-9]+$ ]] && kill -0 "$p" 2>/dev/null && [ -r "/proc/$p/cmdline" ] && tr '\0' ' ' < "/proc/$p/cmdline" | grep -qF "$SELF run"; }
+case "${1:-status}" in
+ start)
+  alive && { echo 'Security service already running';exit 0; }
+  [ ! -f /opt/etc/keentool/security/web-hardened ] || /opt/bin/bash /opt/lib/keentool-security/harden_web.sh --ensure-user || exit 1
+  /opt/bin/bash "$CLI" init || exit 1
+  mkdir -p /opt/var/log/keentool-security /opt/var/run
+  (trap '' HUP;exec /opt/bin/bash "$SELF" run </dev/null >> /opt/var/log/keentool-security/service.log 2>&1) &
+  for i in 1 2 3 4 5;do [ -S /opt/var/run/keentool-security/broker.sock ] && alive && { echo 'Security service started';exit 0; };sleep 1;done
+  echo 'Security service failed to start' >&2;exit 1;;
+ stop)
+  if alive;then kill -TERM "$(cat "$PID")";for i in $(seq 1 60);do alive || { echo 'Security service stopped';exit 0; };sleep 1;done;echo 'Security service is still stopping' >&2;exit 1;fi
+  echo 'Security service stopped';;
+ restart)/opt/bin/bash "$SELF" stop && /opt/bin/bash "$SELF" start;;
+ status)if alive && [ -S /opt/var/run/keentool-security/broker.sock ];then echo 'Security service running';else echo 'Security service stopped';exit 1;fi;;
+ run)
+  umask 077
+  if ! mkdir "$PID.lock" 2>/dev/null;then
+   alive && exit 0
+   owner=$(cat "$PID.lock/pid" 2>/dev/null || :)
+   if [ -z "$owner" ];then age=$(( $(date +%s) - $(/opt/bin/firewall_security path-mtime "$PID.lock" 2>/dev/null || echo 0) ));[ "$age" -ge 30 ] || { echo 'Security startup already in progress' >&2;exit 75; };fi
+   rm -f "$PID.lock/pid";rmdir "$PID.lock" 2>/dev/null || exit 1
+   mkdir "$PID.lock" || exit 1
+  fi
+  printf '%s\n' "$$" > "$PID.lock/pid"
+  echo "$$" > "$PID";broker='';monitor='';running=true;sleeper=''
+  trap 'running=false;[ -z "$broker" ] || kill "$broker" 2>/dev/null || :;[ -z "$sleeper" ] || kill "$sleeper" 2>/dev/null || :' TERM INT
+  trap 'rm -f "$PID" "$PID.lock/pid" /opt/var/run/keentool-security/broker.sock;rmdir "$PID.lock" 2>/dev/null || :' EXIT
+  /opt/bin/bash "$CLI" broker & broker=$!
+  while [ "$running" = true ];do
+   kill -0 "$broker" 2>/dev/null || break
+   if [ -z "$monitor" ] || ! kill -0 "$monitor" 2>/dev/null;then
+    [ -z "$monitor" ] || wait "$monitor" 2>/dev/null || :
+    /opt/bin/bash "$CLI" tick & monitor=$!
+   fi
+   /opt/bin/bash "$CLI" reconcile || :
+   interval=$(/opt/bin/bash "$CLI" interval 2>/dev/null);[[ "$interval" =~ ^[0-9]+$ ]] || interval=60
+   sleep "$interval" & sleeper=$!;wait "$sleeper" || :;sleeper=''
+  done
+  [ -z "$broker" ] || wait "$broker" 2>/dev/null || :
+  [ -z "$monitor" ] || wait "$monitor" 2>/dev/null || :;;
+ *)echo 'Usage: keentool_security_service {start|stop|restart|status}' >&2;exit 1;;
+esac

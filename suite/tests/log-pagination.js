@@ -1,0 +1,25 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const html=fs.readFileSync(__dirname+'/../projects/KeenTool/index.html','utf8');
+const nodes={};const node=id=>nodes[id]||(nodes[id]={innerText:'',textContent:'',open:true,scrollTop:0,clientHeight:20,get scrollHeight(){return this.innerText.split('\n').length*20;}});
+let replies=[],calls=[];const event={stopPropagation(){},preventDefault(){}};
+const ctx={logConfig:[{id:'main'},{id:'vpn'}],logPages:{},logsLoadedStatus:{},document:{getElementById:node},fmtBytes:n=>String(n),setTimeout:fn=>fn(),fetch:async url=>{calls.push(url);const next=replies.shift();assert(next,'Unexpected fetch');if(typeof next==='function')return next();return {ok:next.http!==500&&next.http!==429,status:next.http||200,json:async()=>next};}};
+vm.createContext(ctx);vm.runInContext('async function refreshLogSizes() {'+html.split('async function refreshLogSizes() {')[1].split('async function fetchLog(')[0],ctx);vm.runInContext('async function fetchLog('+html.split('async function fetchLog(')[1].split('function downloadLog(')[0],ctx);
+const page=(log,cursor)=>({status:'success',log,next_cursor:cursor,size_bytes:10000,loaded_bytes:log.length});
+(async()=>{
+ replies.push({status:'success',sizes:{main:2800000,vpn:0}});await ctx.refreshLogSizes();assert.equal(node('size_main').innerText,'(2800000)');assert.equal(node('size_vpn').innerText,'(0)');calls.length=0;
+ node('details_vpn').open=false;await ctx.fetchLog('vpn','vpn.log',true);assert.equal(calls.length,0);
+ replies.push(page('new\n','cursor1'),()=>{assert.equal(node('size_main').innerText,'(10000)');return {ok:true,status:200,json:async()=>page('old\n','cursor2')};},page('first\n',null));await ctx.fetchLog('main','messages.log',true);
+ assert.equal(node('content_main').innerText,'first\nold\nnew\n');assert.equal(calls.length,3);assert(calls[1].includes('cursor=cursor1'));assert(calls[2].includes('cursor=cursor2'));assert.equal(node('log_note_main').textContent,'');
+ node('content_main').scrollTop=7;replies.push(page('fresh complete\n',null));await ctx.fetchLog('main','messages.log',true);assert.equal(node('content_main').innerText,'fresh complete\n');
+ replies.push(page('incomplete\n','cursor3'),{http:500});await ctx.fetchLog('main','messages.log',true,event);assert.equal(node('content_main').innerText,'fresh complete\n');assert(node('log_note_main').textContent.includes('HTTP 500'));
+ replies.push({status:'success',reset_required:true});await ctx.fetchLog('main','messages.log',true,event);assert.equal(node('content_main').innerText,'fresh complete\n');assert(node('log_note_main').textContent.includes('changed'));
+ replies.push({http:429},page('after retry\n',null));await ctx.fetchLog('main','messages.log',true);assert.equal(node('content_main').innerText,'after retry\n');
+ replies.push(()=>{node('details_main').open=false;return {ok:true,status:200,json:async()=>page('cancelled partial','cursor4')};});await ctx.fetchLog('main','messages.log',true);assert.equal(node('content_main').innerText,'after retry\n');
+ const count=calls.length;await ctx.fetchLog('main','messages.log',true);assert.equal(calls.length,count);
+ node('details_main').open=true;replies.push(page('reopened complete\n',null));await ctx.fetchLog('main','messages.log',true);assert.equal(node('content_main').innerText,'reopened complete\n');
+ node('details_vpn').open=true;replies.push(page('VPN complete\n',null));await ctx.fetchLog('vpn','vpn.log',true);assert.equal(node('content_vpn').innerText,'VPN complete\n');assert.equal(node('content_main').innerText,'reopened complete\n');
+ assert(html.includes("log.primary ? 'open' : ''"));assert(html.includes("id: 'main', file: 'messages.log', label: 'System log', primary: true"));assert(html.includes('ontoggle="if(this.open)fetchLog'));assert(!html.includes('Load older entries'));assert(html.includes('>Save to file</button>'));
+ node('size_dns').innerText='(35000)';replies.push({http:500});await ctx.fetchLog('dns','dns_proxy.log',true);assert.equal(node('size_dns').innerText,'(35000)');
+ assert.equal(replies.length,0);
+ console.log('PASS: full log loads on expansion, automatic continuation without extra controls, closed-pane skipping/cancellation, complete-only publication, auto-refresh, retry/rotation handling and System log open by default.');
+})().catch(e=>{console.error(e);process.exitCode=1});

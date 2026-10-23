@@ -1,0 +1,207 @@
+#!/opt/bin/bash
+# WAN SYSLOG MONITOR v1.0.0 — 2026-10-22, stable
+# Changelog: a2: independent scan/delivery locks, config loading and service modes.
+# Previous changelog: PPP session events from syslog; persistent cursor, PID/interface mapping,
+# duplicate suppression, rotation recovery and retryable notification queue.
+# Called by Pingtool; never modifies syslog configuration or PPP routing.
+set -u
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+. "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
+CONF=${KT_PING_CONF:-/opt/etc/pingtool.conf}
+[ ! -f "$CONF" ] || . "$CONF"
+BOOT_ID=${KT_WAN_BOOT_ID:-$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || printf unknown)}
+MODE=${1:---once}
+case "$MODE" in --once|--scan|--deliver) ;; *) echo 'Usage: wan_syslog_monitor [--once|--scan|--deliver]' >&2;exit 1;;esac
+umask 077
+LOG=${WAN_SYSLOG_FILE:-/opt/var/log/messages}
+DIR=${KT_WAN_STATE:-${DB_DIR:-/opt/etc/pingtool}/wan-events}
+EMAIL=${KT_WAN_EMAIL:-/opt/bin/email_sender.mod}
+INCIDENT_LOG=${KT_WAN_INCIDENT_LOG:-${WEB_DIR:-/opt/var/www/ping}/incidents.txt}
+MAIL_ENABLED=${EMAIL_ALERTS:-true}
+FILTER=${WAN_LABEL:-}
+[[ "$FILTER" =~ ^ppp[0-9]+$ ]] || FILTER=''
+wan_deliver() {
+    mkdir -p "$DIR/outbox" "$DIR/sent" || return 1
+    if [ -f "$DIR/mail-lock/boot" ] && [ "$(cat "$DIR/mail-lock/boot")" != "$BOOT_ID" ];then rm -f "$DIR/mail-lock/pid" "$DIR/mail-lock/boot";rmdir "$DIR/mail-lock" 2>/dev/null || :;fi
+    if ! mkdir "$DIR/mail-lock" 2>/dev/null;then
+        owner=$(cat "$DIR/mail-lock/pid" 2>/dev/null || :)
+        [[ "$owner" =~ ^[0-9]+$ ]] && kill -0 "$owner" 2>/dev/null && return 0
+        rm -f "$DIR/mail-lock/pid" "$DIR/mail-lock/boot";rmdir "$DIR/mail-lock" 2>/dev/null || return 1
+        mkdir "$DIR/mail-lock" || return 1
+    fi
+    printf '%s\n' "$$" > "$DIR/mail-lock/pid"
+    printf '%s\n' "$BOOT_ID" > "$DIR/mail-lock/boot"
+    trap 'rm -f "$DIR/mail-lock/pid" "$DIR/mail-lock/boot";rmdir "$DIR/mail-lock" 2>/dev/null || :' EXIT
+# The first run silently learns existing sessions; it does not email old history.
+# Keep failed SMTP deliveries for the next check. Delivery is at-least-once.
+if [ "$MAIL_ENABLED" = true ] && [ -x "$EMAIL" ];then
+    for mail in "$DIR/outbox/"*;do
+        [ -f "$mail" ] || continue
+        IFS= read -r subject < "$mail";body=$(tail -n +2 "$mail")
+        if "$EMAIL" "$subject" "$body";then mv "$mail" "$DIR/sent/$(basename "$mail")";else break;fi
+        [ "$MODE" != --deliver ] || break
+    done
+elif [ "$MAIL_ENABLED" != true ];then
+    for mail in "$DIR/outbox/"*;do [ ! -f "$mail" ] || mv "$mail" "$DIR/sent/$(basename "$mail")";done
+fi
+# Bound delivered marker retention; the incremental cursor remains authoritative.
+find "$DIR/sent" -type f -mtime +90 -delete 2>/dev/null || :
+    rm -f "$DIR/mail-lock/pid" "$DIR/mail-lock/boot";rmdir "$DIR/mail-lock" 2>/dev/null || :
+    trap - EXIT
+}
+[ "$MODE" != --deliver ] || { wan_deliver;exit $?; }
+[ -r "$LOG" ] || { echo "WAN syslog unavailable: $LOG" >&2; exit 1; }
+mkdir -p "$DIR" || exit 1
+# Serialize independent manual/scheduled invocations, including SMTP retries.
+if [ -f "$DIR/lock/boot" ] && [ "$(cat "$DIR/lock/boot")" != "$BOOT_ID" ];then rm -f "$DIR/lock/pid" "$DIR/lock/boot";rmdir "$DIR/lock" 2>/dev/null || :;fi
+if ! mkdir "$DIR/lock" 2>/dev/null; then
+    owner=$(cat "$DIR/lock/pid" 2>/dev/null || :)
+    [[ "$owner" =~ ^[0-9]+$ ]] && kill -0 "$owner" 2>/dev/null && exit 0
+    rm -f "$DIR/lock/pid" "$DIR/lock/boot"; rmdir "$DIR/lock" 2>/dev/null || exit 1
+    mkdir "$DIR/lock" || exit 1
+fi
+printf '%s\n' "$$" > "$DIR/lock/pid"
+printf '%s\n' "$BOOT_ID" > "$DIR/lock/boot"
+trap 'rm -f "$DIR/lock/pid" "$DIR/lock/boot"; rmdir "$DIR/lock" 2>/dev/null || :' EXIT
+mkdir -p "$DIR/outbox" "$DIR/sent"
+declare -A interfaces down badclock
+identity='';offset=0;last_time=0;initial=true;prefix='';prefix_len=0;previous_boot=''
+if [ -s "$DIR/state" ];then
+    initial=false
+    while IFS=$'\t' read -r kind key value;do
+        case "$kind" in
+            boot) previous_boot=$key;;
+            cursor) identity=$key;offset=$value;;
+            prefix) prefix=$key;prefix_len=$value;;
+            last) last_time=$key;;
+            interface) interfaces["$key"]=$value;;
+            down) down["$key"]=$value;;
+            uncertain) badclock["$key"]=1;;
+        esac
+    done < "$DIR/state"
+fi
+if [ -n "$previous_boot" ] && [ "$previous_boot" != "$BOOT_ID" ];then
+    interfaces=()
+    for iface in "${!down[@]}";do badclock[$iface]=1;done
+fi
+[[ "$offset" =~ ^[0-9]+$ ]] && [[ "$prefix_len" =~ ^[0-9]+$ ]] || exit 1
+[[ "$last_time" =~ ^[0-9]+$ ]] || exit 1
+now=${KT_WAN_NOW:-$(date +%s)}
+year=$(date +%Y)
+# RFC3164 has no year: choose the nearest calendar year to the current time.
+# Refuse unreasonable dates; the active log is not an archive importer.
+log_epoch() {
+    local mon=$1 day=$2 clock=$3 month candidate best='' distance best_distance=9999999999 y
+    case "$mon" in Jan)month=01;;Feb)month=02;;Mar)month=03;;Apr)month=04;;May)month=05;;Jun)month=06;;Jul)month=07;;Aug)month=08;;Sep)month=09;;Oct)month=10;;Nov)month=11;;Dec)month=12;;*)return 1;;esac
+    for y in "$((year-1))" "$year" "$((year+1))";do
+        candidate=$(date -d "$y-$month-$day $clock" +%s 2>/dev/null) || continue
+        distance=$((now-candidate));[ "$distance" -ge 0 ] || distance=$((-distance))
+        if [ "$distance" -lt "$best_distance" ];then best=$candidate;best_distance=$distance;fi
+    done
+    [ -n "$best" ] && [ "$best_distance" -le 15811200 ] || return 1
+    printf '%s' "$best"
+}
+queue_event() {
+    local iface=$1 type=$2 epoch=$3 body=$4 host=${5:-unknown} id tmp
+    [ "$initial" = false ] || return
+    [ -z "$FILTER" ] || [ "$iface" = "$FILTER" ] || return
+    id=$(printf '%s' "$host|$iface|$type|$epoch" | sha256sum);id=${id%% *}
+    id="$(printf '%012d' "$epoch")-$type-$id"
+    [ ! -f "$DIR/sent/$id" ] && [ ! -f "$DIR/outbox/$id" ] || return
+    tmp=$(mktemp "$DIR/outbox/.mail.XXXXXX") || return 1
+    printf 'WAN %s %s (PPP syslog)\n%s\n' "$iface" "$type" "$body" > "$tmp"
+    mv "$tmp" "$DIR/outbox/$id"
+    [ ! -x /opt/bin/firewall_security ] || /opt/bin/bash /opt/bin/firewall_security event wan "$iface $type" "${body//$'\n'/ | }" "$epoch" || :
+    if [ -d "$(dirname "$INCIDENT_LOG")" ];then
+        printf '[%s] WAN %s %s (PPP syslog): %s\n' "$(date -d "@$epoch" '+%F %T' 2>/dev/null || printf '%s' "$epoch")" "$iface" "$type" "${body//$'\n'/ | }" >> "$INCIDENT_LOG"
+    fi
+}
+process_file() {
+    local file=$1 start=$2 line mon day clock host pid msg epoch key iface iface_label elapsed body end
+    end=$start
+    # Leave an incomplete trailing line for the next invocation.
+    while IFS= read -r line;do
+        end=$((end+${#line}+1))
+        if [[ "$line" =~ ^([A-Z][a-z][a-z])[[:space:]]+([0-9]+)[[:space:]]+([0-9:]+)[[:space:]]+([^[:space:]]+)[[:space:]]+pppd\[([0-9]+)\]:[[:space:]]*(.*)$ ]];then
+            mon=${BASH_REMATCH[1]};day=${BASH_REMATCH[2]};clock=${BASH_REMATCH[3]};host=${BASH_REMATCH[4]};pid=${BASH_REMATCH[5]};msg=${BASH_REMATCH[6]}
+            [[ "$host" =~ ^[a-zA-Z0-9_.:-]+$ ]] || continue
+            epoch=$(log_epoch "$mon" "$day" "$clock") || continue
+            if [ "$last_time" -gt "$epoch" ] || [[ "$msg" = *'System time change detected'* ]];then
+                for iface in "${!down[@]}";do badclock[$iface]=1;done
+            fi
+            last_time=$epoch;key="$host:$pid"
+            if [[ "$msg" =~ ^Using[[:space:]]interface[[:space:]](ppp[0-9]+) ]];then
+                interfaces[$key]="${BASH_REMATCH[1]}";continue
+            fi
+            iface=${interfaces[$key]:-}
+            [ -n "$iface" ] || continue
+            iface_label=$iface;iface="$host/$iface"
+            if [[ "$msg" = 'Serial link appears to be disconnected.' || "$msg" = 'Modem hangup' || "$msg" = 'Connection terminated.' ]];then
+                if [ -z "${down[$iface]:-}" ];then
+                    down[$iface]=$epoch
+                    body="Host: $host"$'\n'"WAN: $iface_label"$'\n'"PPP disconnect detected: $mon $day $clock"$'\n'"Reason: $msg"$'\n''Source: pppd syslog. Delivery may be delayed until connectivity returns.'
+                    queue_event "$iface_label" disconnected "$epoch" "$body" "$host"
+                fi
+            elif [[ "$msg" =~ ^local[[:space:]]+IP[[:space:]]address[[:space:]] ]];then
+                if [ -n "${down[$iface]:-}" ];then
+                    elapsed=$((epoch-down[$iface]))
+                    if [ "$elapsed" -ge 0 ] && [ -z "${badclock[$iface]:-}" ];then
+                        body="Host: $host"$'\n'"WAN: $iface_label · IPv4"$'\n'"PPP restored: $mon $day $clock"$'\n'"PPP downtime observed in syslog: $((elapsed/60))m $((elapsed%60))s ($elapsed seconds)."
+                    else
+                        body="Host: $host"$'\n'"WAN: $iface_label · IPv4"$'\n'"PPP restored: $mon $day $clock"$'\n''Duration unavailable: clock discontinuity detected.'
+                    fi
+                    body+=$'\n''IPv4 negotiation is complete. Internet reachability and IPv6 are verified separately by ping.'
+                    queue_event "$iface_label" recovered "$epoch" "$body" "$host"
+                    unset 'down[$iface]' 'badclock[$iface]'
+                fi
+            elif [[ "$msg" = 'Exit.' ]];then
+                unset 'interfaces[$key]'
+            fi
+        elif [[ "$line" = *'system time has been changed'* ]];then
+            for iface in "${!down[@]}";do badclock[$iface]=1;done
+        fi
+    done < <(tail -c "+$((start+1))" "$file")
+    processed_offset=$end
+}
+export LC_ALL=C
+current_id=$(kt_stat '%d:%i' "$LOG") || exit 1
+size=$(kt_stat '%s' "$LOG") || exit 1
+prefix_changed=false
+if [ "$prefix_len" -gt 0 ];then
+    current_prefix=$(head -c "$prefix_len" "$LOG" | sha256sum);current_prefix=${current_prefix%% *}
+    [ "$current_prefix" = "$prefix" ] || prefix_changed=true
+fi
+if [ "$identity" != "$current_id" ] || [ "$size" -lt "$offset" ] || [ "$prefix_changed" = true ];then
+    if [ "$initial" = false ];then
+        recovered_rotation=false
+        # logrotate rename: consume the unread tail before switching to the new file.
+        if [ "$identity" != "$current_id" ];then
+            for old in "$LOG.1" "$LOG.0";do
+                if [ -r "$old" ] && [ "$(kt_stat '%d:%i' "$old")" = "$identity" ];then process_file "$old" "$offset";recovered_rotation=true;break;fi
+            done
+        fi
+        if [ "$recovered_rotation" = false ];then
+            for iface in "${!down[@]}";do badclock[$iface]=1;done
+            echo 'WAN syslog cursor gap: rotation/truncation; open incident durations marked uncertain.' >&2
+        fi
+    fi
+    offset=0
+fi
+process_file "$LOG" "$offset"
+prefix_len=$processed_offset;[ "$prefix_len" -le 256 ] || prefix_len=256
+prefix=$(head -c "$prefix_len" "$LOG" | sha256sum);prefix=${prefix%% *}
+tmp=$(mktemp "$DIR/.state.XXXXXX") || exit 1
+{
+    printf 'boot\t%s\n' "$BOOT_ID"
+    printf 'cursor\t%s\t%s\nlast\t%s\n' "$current_id" "$processed_offset" "$last_time"
+    printf 'prefix\t%s\t%s\n' "$prefix" "$prefix_len"
+    for key in "${!interfaces[@]}";do printf 'interface\t%s\t%s\n' "$key" "${interfaces[$key]}";done
+    for iface in "${!down[@]}";do printf 'down\t%s\t%s\n' "$iface" "${down[$iface]}";done
+    for iface in "${!badclock[@]}";do printf 'uncertain\t%s\n' "$iface";done
+} > "$tmp"
+mv "$tmp" "$DIR/state" || exit 1
+# Release the scan lock before SMTP work, so new events can be recorded immediately.
+rm -f "$DIR/lock/pid" "$DIR/lock/boot";rmdir "$DIR/lock" 2>/dev/null || :
+trap - EXIT
+[ "$MODE" != --scan ] || exit 0
+wan_deliver

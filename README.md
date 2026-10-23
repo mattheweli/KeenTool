@@ -1,69 +1,24 @@
-<div align="center">
+# KeenTool 2.0.0
 
-### ❤️ Support the Project
-If you found this project helpful, consider buying me a coffee!
+Stable component sources for the KeenTool suite. Release date: 2026-10-22.
 
-<a href="https://paypal.me/MatteoRosettani">
-  <img src="https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate with PayPal" />
-</a>
+## Installation and updates
 
-<a href="https://revolut.me/matthew_eli">
-  <img src="https://img.shields.io/badge/Revolut-black?style=for-the-badge&logo=revolut&logoColor=white" alt="Donate with Revolut" />
-</a>
+Install the complete KeenTool 2.0.0 release from https://github.com/mattheweli/KeenTool/releases. The shared runtime, assets, authentication and security broker are required. Do not copy this component alone over an older installation.
 
-</div>
+For an extracted complete package, use /opt/bin/bash ./install.sh --plan and follow docs/INSTALL.md. Existing public-source and local-alpha installations use --mode upgrade. New installations require --interface and reviewed web/logging ownership options. Existing databases, configuration, credentials and upgrade schedules are preserved.
 
-# 📦 Keentool Manager
+## Changes
 
-**Keentool** is an advanced CLI Package Manager designed for **Keenetic Routers** running Entware. 
+- New coordinated 2.0.0 suite installation: fresh/upstream/alpha detection, verified file/configuration backups, atomic replacement, automatic/manual rollback and whole-package update entry point.
+- Uniform Keenetic-inspired responsive navigation, shared refresh with Off/manual controls, remembered navigation/density, readable tables and a full-width Security & Health overview. Remove development banners and show versions in copyright footers.
+- Dot thousands/comma decimals across rendered dashboard values; preserve raw technical data and arithmetic. Full expanded log views, bounded internal transport, log sizes and allowlisted read-only system logs without changing syslog rotation.
+- Password-only HTTPS administrator access shared with Settings/Security, typed settings with ranges/presets, revision conflict handling and guarded firewall changes.
+- Entware update monitoring/notifications and an explicitly requested maintenance worker that stops/restarts Entware services. Shared HTML/plain notification layout with safe tables, MTR rendering and semantic health colors.
+- Independent incremental PPP syslog monitor, root broker, ktweb web-isolation tools, boot scheduler check and private helper paths. BusyBox metadata fallback removes the GNU stat requirement.
 
-It acts as an "App Store," allowing you to easily install, update, and manage powerful scripts like **Traffic Manager**, **Ping Monitor**, **Firewall Suite**, and **SMB Backup** without dealing with complex manual commands.
+## Release baseline
 
-## ✨ Features
+Public main commit: 8d640c8b06968b0f24ce41feb1bc5b0a89c3f541. No tags or GitHub Releases existed at preparation time. Stable tag: v2.0.0.
 
-* **Interactive Menu:** Simple, text-based UI managed via SSH.
-* **One-Click Install:** Automatically downloads scripts, sets permissions, and creates directories.
-* **Dependency Resolution:** Automatically checks and installs required Entware packages (e.g., `vnstat2`, `ipset`, `lighttpd`) for each tool.
-* **Smart Updates:** Checks remote versions (GitHub) against local files. Prevents overwriting if you have a newer local version (Dev Mode).
-* **Cron Management:** Easily view, add, or remove automated jobs for your tools.
-* **System Setup:** Auto-configures the Web Server (`lighttpd` on port 81) for dashboard visualization.
-
-## 🧰 Included Tools
-
-| Tool | Description |
-| :--- | :--- |
-| **📊 Traffic Manager** | Beautiful HTML5 dashboard for daily/monthly traffic usage (VnStat). |
-| **⚡ Ping Monitor** | Real-time latency tracking with graphs for IPv4 and IPv6. |
-| **🛡️ Firewall Suite** | Advanced blocklists (IP sets), GeoIP stats, and active monitoring. |
-| **📂 SMB Backup** | Auto-backup your router config/files to a NAS or Windows Share. |
-
-## 🚀 Installation (One-Line Command)
-
-You can install Keentool with a single command. 
-
-1.  Connect to your router via SSH.
-2.  Copy and paste the following line:
-
-```bash
-opkg update && opkg install curl && curl -L https://raw.githubusercontent.com/mattheweli/keentool/main/keentool -o /opt/bin/keentool && chmod +x /opt/bin/keentool
-```
-
-(This command installs curl if missing, downloads the script to /opt/bin, and makes it executable).
-
-## 📖 Usage
-Once installed, simply type keentool in your terminal to launch the manager:
-
-```bash
-keentool
-```
-
-### First Run Recommended Steps:
-1. Select option 0. Setup System Dependencies first. This ensures lighttpd (Web Server) and common tools are installed.
-2. Select any tool (e.g., 1. Traffic Manager) to install it.
-3. Access your dashboards at http://YOUR_ROUTER_IP:81.
-
-## 🔄 Updating Keentool
-Keentool is designed to manage other tools. To update Keentool itself, simply re-run the installation command above.
-
-## 📄 License
-This project is open source. Feel free to contribute!
+See the complete package's CHANGELOG.md, VERSIONS.md, SECURITY.md and docs/VALIDATION.md for coordinated versions, installation, known feed limitations and test evidence. Development history is archived in docs/history/.

@@ -1,4 +1,7 @@
-#!/bin/sh
+#!/opt/bin/bash
+# KEENTOOL TELEGRAM MODULE v2.0.0
+# Release: 2026-10-22 | Stable. See CHANGELOG.md for release details.
+
 # ==============================================================================
 # KEENTOOL TELEGRAM MODULE v1.0.0
 # Description: Shared utility to send Telegram notifications via curl.
@@ -19,23 +22,10 @@ if [ -f "$CONF" ]; then
         exit 1
     fi
 
-    # Telegram formatting (Subject in bold)
-    # Replace standard line breaks with %0A for URL encoding
-    FORMATTED_BODY=$(echo "$BODY" | sed ':a;N;$!ba;s/\n/%0A/g')
-    TEXT="*${SUBJECT}*%0A${FORMATTED_BODY}"
-
-    curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-        -d chat_id="${TG_CHAT_ID}" \
-        -d text="${TEXT}" \
-        -d parse_mode="Markdown" > /dev/null
-        
-    RES=$?
-    if [ $RES -eq 0 ]; then
-        exit 0
-    else
-        logger -t "TelegramMod" "Curl Error: $RES"
-        exit 1
-    fi
+    TEXT=$(printf '%s\n\n%s' "$SUBJECT" "$BODY")
+    RESPONSE=$(curl -fsS --connect-timeout 10 --max-time 20 -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+        --data-urlencode "chat_id=$TG_CHAT_ID" --data-urlencode "text=$TEXT") || exit 1
+    printf '%s' "$RESPONSE" | grep -q '"ok":true' || exit 1
 else
     exit 0
 fi

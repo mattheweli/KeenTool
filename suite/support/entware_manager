@@ -1,0 +1,236 @@
+#!/opt/bin/bash
+# KEENTOOL ENTWARE MANAGER v1.0.0 — 2026-10-22
+# Changelog: a1: check packages, deduplicate email, explicit upgrade, detached worker, service stop/start, backup and recovery.
+# Check/notify, explicit upgrade, detached worker, service stop/start, logs and recovery.
+# No unattended upgrade; configurations and databases backed up, packages not rolled back.
+set -u
+export PATH=${KT_ENTWARE_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+STATE=${KT_ENTWARE_STATE:-/opt/etc/keentool/entware}
+RUNS=${KT_ENTWARE_RUNS:-/opt/var/backups/keentool-entware}
+LOCK=${KT_ENTWARE_LOCK:-/tmp/keentool-entware.lockdir}
+MAINT=${KT_ENTWARE_MAINT:-/opt/etc/keentool/maintenance}
+INIT=${KT_ENTWARE_INIT:-/opt/etc/init.d}
+OPKG=${KT_ENTWARE_OPKG:-/opt/bin/opkg}
+[ -x "$OPKG" ] || OPKG=$(command -v opkg || true)
+EMAIL=${KT_ENTWARE_EMAIL:-/opt/bin/email_sender.mod}
+SELF=$(readlink -f "$0")
+mkdir -p "$STATE" "$RUNS" || exit 1
+chmod 700 "$STATE" "$RUNS"
+umask 077
+log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
+acquire() {
+ if ! mkdir "$LOCK" 2>/dev/null;then
+  local pid;pid=$(cat "$LOCK/pid" 2>/dev/null || true)
+  if [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null;then
+   rm -f "$LOCK/pid";rmdir "$LOCK" 2>/dev/null || :
+   mkdir "$LOCK" 2>/dev/null || { log 'Entware task already running';return 75; }
+  else log 'Entware task already running';return 75;fi
+ fi
+ printf '%s\n' "$$" > "$LOCK/pid"
+}
+release() { [ "$(cat "$LOCK/pid" 2>/dev/null || true)" != "$$" ] || { rm -f "$LOCK/pid";rmdir "$LOCK" 2>/dev/null || :; }; }
+get_list() {
+ local dest=$1 raw;raw=$(mktemp "$STATE/.packages.XXXXXX") || return 1
+ if ! "$OPKG" list-upgradable > "$raw" 2> "$raw.err";then cat "$raw.err" >&2;rm -f "$raw" "$raw.err";return 1;fi
+ # Reject diagnostic output rather than treating it as a package list.
+ if ! awk 'NF && ($1 !~ /^[A-Za-z0-9][A-Za-z0-9+_.-]*$/ || $2!="-" || $4!="-"){bad=1}END{exit bad}' "$raw";then
+  log 'Unexpected opkg list-upgradable output';cat "$raw";rm -f "$raw" "$raw.err";return 1
+ fi
+ sort "$raw" > "$dest";rm -f "$raw" "$raw.err"
+}
+fingerprint() { sha256sum "$1" | awk '{print $1}'; }
+notify_updates() {
+ [ -s "$STATE/available.txt" ] || { rm -f "$STATE/notified.sha256";return 0; }
+ local digest;digest=$(fingerprint "$STATE/available.txt")
+ [ "$(cat "$STATE/notified.sha256" 2>/dev/null || true)" != "$digest" ] || return 0
+ if [ "${KT_ENTWARE_TEST:-false}" != true ];then
+  [ -s /opt/etc/keentool/mail/email.conf ] && [ -s /opt/etc/keentool/mail/emailpw.enc ] || { log 'Email not configured/enabled; notification pending';return 0; }
+ fi
+ [ -x "$EMAIL" ] || { log 'Email module missing';return 1; }
+ local count body;count=$(wc -l < "$STATE/available.txt")
+ body=$(printf '%s Entware updates are available.\n\n' "$count";cat "$STATE/available.txt";printf '\nOpen KeenTool, menu p (Entware), to review and start the upgrade manually. No packages are upgraded automatically.\n')
+ if "$EMAIL" "Entware: $count updates available" "$body";then
+  printf '%s\n' "$digest" > "$STATE/notified.sha256.tmp";mv "$STATE/notified.sha256.tmp" "$STATE/notified.sha256"
+  log 'Email notification sent'
+ else log 'Email failed; next check will retry';return 1;fi
+}
+check_updates() {
+ [ ! -e "$MAINT" ] || { log 'Maintenance active: check deferred';return 75; }
+ acquire || return $?
+ trap release EXIT
+ log 'Refreshing Entware package indexes'
+ if ! "$OPKG" update > "$STATE/update.log" 2>&1;then
+  cat "$STATE/update.log";log 'Index update failed; previous available list retained';return 1
+ fi
+ local tmp;tmp=$(mktemp "$STATE/.available.XXXXXX") || return 1
+ if ! get_list "$tmp";then rm -f "$tmp";return 1;fi
+ mv "$tmp" "$STATE/available.txt"
+ date +%s > "$STATE/checked.at"
+ printf '%s\n' "$(wc -l < "$STATE/available.txt") available updates";cat "$STATE/available.txt"
+ [ "$NOTIFY" != true ] || notify_updates
+}
+status() {
+ if [ -f "$STATE/available.txt" ];then printf 'Available packages: %s\n' "$(wc -l < "$STATE/available.txt")";cat "$STATE/available.txt";else echo 'No successful check yet';fi
+ [ ! -f "$STATE/checked.at" ] || echo "Last check (Unix time): $(cat "$STATE/checked.at")"
+ if [ -f "$STATE/latest-run" ];then local run;run=$(cat "$STATE/latest-run");echo "Run: $run";[ ! -f "$run/status" ] || cat "$run/status";fi
+ [ ! -e "$MAINT" ] || echo 'Maintenance flag active: use --resume after inspecting upgrade log'
+}
+services() {
+ local p
+ for p in "$INIT"/S*;do [ ! -f "$p" ] || [ ! -x "$p" ] || printf '%s\n' "$p";done | sort
+}
+wait_jobs() {
+ local elapsed pid active p
+ for ((elapsed=0;elapsed<120;elapsed+=5));do
+  active=false
+  for p in /tmp/{firewall-db,firewall-hook,firewall-update,abuse-reporter,firewall-enrichment,smb-backup,pingtool,traffic-manager,vpn-scan}.lockdir/pid;do
+   pid=$(cat "$p" 2>/dev/null || true)
+   if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null;then active=true;break;fi
+  done
+  [ "$active" = true ] || return 0
+  log 'Waiting for active suite jobs (up to 120 seconds)';sleep 5
+ done
+ log 'Active suite job did not finish; upgrade aborted';return 1
+}
+snapshot() {
+ local run=$1 db target
+ if [ "${KT_ENTWARE_TEST:-false}" = true ];then return 0;fi
+ "$OPKG" list-installed > "$run/packages-before.txt" || return 1
+ tar -czf "$run/configuration.tar.gz" -C /opt etc || return 1
+ mkdir -p "$run/databases"
+ while IFS= read -r db;do
+  target="$run/databases${db#/opt}";mkdir -p "$(dirname "$target")" || return 1
+  sqlite3 -bail -cmd '.timeout 10000' "$db" ".backup '$target'" || return 1
+  [ "$(sqlite3 "$target" 'PRAGMA quick_check;')" = ok ] || return 1
+ done < <(find /opt/etc /opt/var/lib -type f -name '*.db' 2>/dev/null)
+}
+restore_services() {
+ local run=$1 p bad=0
+ rm -f "$MAINT"
+ [ ! -f "$run/services.txt" ] || while IFS= read -r p;do
+  [ -x "$p" ] || { log "Service disappeared: $p";bad=1;continue; }
+  log "Starting $p"
+  if ! timeout 90 "$p" start;then log "Service start failed: $p";bad=1;fi
+ done < "$run/services.txt"
+ if [ -f "$run/daemons-before.txt" ];then
+  sleep 2
+  while read -r p;do
+   if ! pidof "$p" >/dev/null 2>&1;then log "Previously running daemon not found: $p";bad=1;fi
+  done < "$run/daemons-before.txt"
+ fi
+ return "$bad"
+}
+worker() {
+ local run=$1 expected=$2 rc=1 stopped=false p
+ acquire || return $?
+ trap release EXIT
+ cp "$SELF" "$run/worker-source.sh" 2>/dev/null || :
+ echo 'preparing' > "$run/status"
+ trap 'log "Signal received; restarting services"; if [ "$stopped" = true ];then restore_services "$run";fi;rm -f "$MAINT";echo interrupted > "$run/status";exit 1' INT TERM
+ if [ -e "$MAINT" ];then log 'Previous maintenance unresolved';return 75;fi
+ if ! get_list "$run/available.txt";then echo check-failed > "$run/status";return 1;fi
+ [ "$(fingerprint "$run/available.txt")" = "$expected" ] || { log 'Package list changed since confirmation: review again';echo list-changed > "$run/status";return 1; }
+ local -a packages=();while read -r p _;do packages+=("$p");done < "$run/available.txt"
+ [ "${#packages[@]}" -gt 0 ] || { echo no-updates > "$run/status";return 0; }
+ "$OPKG" --help 2>&1 | grep -q -- '--download-only' || { log 'opkg lacks --download-only';echo unsupported > "$run/status";return 1; }
+ if [ "${KT_ENTWARE_TEST:-false}" != true ];then
+  local free_kb;free_kb=$(df -Pk /opt | awk 'NR==2 {print $4}')
+  [[ "$free_kb" =~ ^[0-9]+$ ]] && [ "$free_kb" -ge 204800 ] || { log 'Need at least 200 MiB free on /opt';echo space-insufficient > "$run/status";return 1; }
+ fi
+ mkdir -p "$run/cache"
+ log 'Downloading packages/dependencies BEFORE stopping services'
+ if ! "$OPKG" --cache "$run/cache" --download-only upgrade "${packages[@]}";then echo download-failed > "$run/status";return 1;fi
+ services > "$run/services.txt"
+ if [ "${KT_ENTWARE_TEST:-false}" != true ] && command -v pidof >/dev/null;then
+  : > "$run/daemons-before.txt"
+  for p in lighttpd crond vnstatd ulogd syslog-ng dropbear;do pidof "$p" >/dev/null 2>&1 && echo "$p" >> "$run/daemons-before.txt" || :;done
+ fi
+ if [ ! -s "$run/services.txt" ];then log 'No Entware init services found; abort';echo service-list-empty > "$run/status";return 1;fi
+ printf '%s\n' "$$" > "$MAINT"
+ if ! wait_jobs;then rm -f "$MAINT";echo jobs-active > "$run/status";return 1;fi
+ # Stop in reverse startup order. Detached worker survives SSH service stop.
+ stopped=true;echo stopping-services > "$run/status"
+ while IFS= read -r p;do
+  log "Stopping $p"
+  if ! timeout 90 "$p" stop;then
+   log "Service stop failed: $p; aborting upgrade"
+   restore_services "$run";rm -f "$MAINT";echo stop-failed > "$run/status";return 1
+  fi
+ done < <(sort -r "$run/services.txt")
+ # Database snapshots are taken after daemons have stopped.
+ if ! snapshot "$run";then
+  restore_services "$run";rm -f "$MAINT";echo snapshot-failed > "$run/status";return 1
+ fi
+ echo upgrading > "$run/status"
+ [ ! -x /opt/bin/firewall_security ] || /opt/bin/bash /opt/bin/firewall_security event entware 'upgrade started' || :
+ log 'Starting confirmed Entware upgrade from package cache' 
+ "$OPKG" --cache "$run/cache" upgrade "${packages[@]}";rc=$?
+ printf '%s\n' "$rc" > "$run/opkg-exit-code"
+ # Release pause before init starts, so own hook can restore saved sets normally.
+ rm -f "$MAINT"
+ echo restarting-services > "$run/status"
+ if ! restore_services "$run";then echo "restart-failed (opkg exit $rc)" > "$run/status";return 1;fi
+ stopped=false
+ if [ "$rc" = 0 ];then echo completed > "$run/status";else echo "upgrade-errors (opkg exit $rc; services restarted)" > "$run/status";fi
+ "$OPKG" list-installed > "$run/packages-after.txt" 2>&1 || :
+ # Report outstanding upgrades even if opkg returned conffile warnings.
+ if get_list "$STATE/available.txt.tmp";then mv "$STATE/available.txt.tmp" "$STATE/available.txt";date +%s > "$STATE/checked.at";fi
+ if [ -x "$EMAIL" ];then
+  if [ "${KT_ENTWARE_TEST:-false}" = true ] || { [ -s /opt/etc/keentool/mail/email.conf ] && [ -s /opt/etc/keentool/mail/emailpw.enc ]; };then
+   "$EMAIL" 'Entware: upgrade result' "$(cat "$run/status"). Log: $run/upgrade.log. Configuration files ending in -opkg require manual review." || log 'Result email failed'
+  fi
+ fi
+ [ ! -x /opt/bin/firewall_security ] || /opt/bin/bash /opt/bin/firewall_security event entware "upgrade finished: $(cat "$run/status")" || :
+ log "Finished: $(cat "$run/status")"
+ return "$rc"
+}
+launch_upgrade() {
+ [ -t 0 ] || { echo 'Start the upgrade from an interactive SSH terminal';return 1; }
+ NOTIFY=false;check_updates || return $?
+ release;trap - EXIT
+ [ -s "$STATE/available.txt" ] || return 0
+ echo 'Entware services (including its SSH, web and DNS services, if installed) will be stopped and restarted.'
+ services
+ echo 'Package scripts may themselves start services during upgrade. Native SSH may stay reachable; Entware SSH may disconnect.'
+ echo 'Package/config backup is NOT an automatic downgrade of installed packages.'
+ read -r -p 'Type UPGRADE to proceed: ' answer
+ [ "$answer" = UPGRADE ] || return 0
+ local run digest
+ digest=$(fingerprint "$STATE/available.txt")
+ run="$RUNS/$(date +%Y%m%d_%H%M%S)-$$";mkdir -p "$run";chmod 700 "$run"
+ cp "$SELF" "$run/worker.sh";chmod 700 "$run/worker.sh"
+ printf '%s\n' "$run" > "$STATE/latest-run"
+ (trap '' HUP;exec /opt/bin/bash "$run/worker.sh" --worker "$run" "$digest") > "$run/upgrade.log" 2>&1 < /dev/null &
+ echo "$!" > "$run/pid"
+ echo "Upgrade worker launched. Log: $run/upgrade.log"
+ echo 'After reconnecting: keentool --entware-status'
+}
+resume_services() {
+ acquire || return $?;trap release EXIT
+ local run;run=$(cat "$STATE/latest-run" 2>/dev/null || true)
+ [ -f "$run/services.txt" ] || { echo 'No saved service list';return 1; }
+ local pid;pid=$(cat "$run/pid" 2>/dev/null || true)
+ if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null;then echo 'Worker still running: do not resume';return 1;fi
+ rm -f "$MAINT"
+ restore_services "$run"
+}
+NOTIFY=false
+case "${1:---menu}" in
+ --check) [ "${2:-}" != --notify ] || NOTIFY=true;check_updates;exit $?;;
+ --status) status;;
+ --upgrade) launch_upgrade;exit $?;;
+ --worker) worker "$2" "$3";exit $?;;
+ --resume) resume_services;exit $?;;
+ --menu)
+  while true;do
+   status;printf '\n1. Check updates\n2. Check and notify by email\n3. Upgrade (confirmation required)\n4. Latest upgrade status/log\n5. Resume services after interruption\n0. Back\n'
+   read -r -p 'Select: ' answer
+   case "$answer" in
+    1) "$SELF" --check;;2) "$SELF" --check --notify;;3) "$SELF" --upgrade;;
+    4) if [ -f "$STATE/latest-run" ];then tail -n 60 "$(cat "$STATE/latest-run")/upgrade.log";fi;;
+    5) read -r -p 'Restart saved services? Type RESUME: ' answer;[ "$answer" != RESUME ] || "$SELF" --resume;;
+    0) exit 0;;
+   esac
+  done;;
+ *) echo 'Usage: entware_manager --check [--notify] | --status | --upgrade | --resume | --menu';exit 1;;
+esac

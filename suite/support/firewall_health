@@ -1,0 +1,31 @@
+#!/opt/bin/bash
+# FIREWALL HEALTH v1.0.0 — 2026-10-22, stable
+# Read-only verification of every expected owned rule, chain, link and config revision.
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+umask 077
+. "${KT_FW_APPLY:-/opt/lib/keentool/firewall_apply.sh}" || exit 1
+CONF=${KT_FW_CONF:-/opt/etc/firewall.conf}
+ENABLE_FIREWALL=true;ENABLE_IPV6=true
+[ ! -f "$CONF" ] || . "$CONF"
+verify_saved() {
+ local tool=$1 family=$2 snapshot signature expected
+ [ -f "$FW_RUNTIME/canonical$family" ] || return 1
+ snapshot=$(command "$tool-save" -t filter) || return 1
+ signature=$(fw_saved_signature - <<< "$snapshot")
+ expected=$(cat "$FW_RUNTIME/canonical$family")
+ [ "$signature" = "$expected" ]
+}
+v4=false;v6=false;healthy=false;applied=false
+if [ "$ENABLE_FIREWALL" = false ];then
+ if fw_verify iptables /dev/null false && fw_verify ip6tables /dev/null false;then healthy=true;fi
+elif [ "$ENABLE_FIREWALL" = true ] && [ -f "$FW_RUNTIME/ready" ] && [ -f "$FW_RUNTIME/config.sha" ];then
+ hash=$(sha256sum "$CONF" 2>/dev/null | awk '{print $1}')
+ if [ "$hash" = "$(cat "$FW_RUNTIME/config.sha")" ] && [ "$(cat "$FW_RUNTIME/enabled" 2>/dev/null)" = true ] && [ "$(cat "$FW_RUNTIME/ipv6" 2>/dev/null)" = "$ENABLE_IPV6" ];then
+  verify_saved iptables 4 && v4=true
+  active6=false;[ "$ENABLE_IPV6" != true ] || active6=true
+  verify_saved ip6tables 6 && v6=true
+  if [ "$v4" = true ] && [ "$v6" = true ];then healthy=true;applied=true;fi
+ fi
+fi
+if [ "${1:-}" = --quiet ];then [ "$healthy" = true ];exit $?;fi
+printf '{"enabled":%s,"applied":%s,"healthy":%s,"ipv4_ok":%s,"ipv6_ok":%s}\n' "$ENABLE_FIREWALL" "$applied" "$healthy" "$v4" "$v6"
