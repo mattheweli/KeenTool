@@ -70,6 +70,15 @@ def main():
  if pr['draft']:
   gh('pr','ready',str(plan['pr']),'--repo',repo)
   require(api(prefix+'/pulls/'+str(plan['pr']))['draft'] is False,'PR still marked as draft')
+ if plan.get('merge'):
+  pr=api(prefix+'/pulls/'+str(plan['pr']))
+  if not pr['merged']:
+   require(api(prefix+'/git/ref/heads/main')['object']['sha']==plan['base_commit'],'Main advanced before approved merge')
+   merged=json.loads(gh('api',prefix+'/pulls/'+str(plan['pr'])+'/merge','--method','PUT','--input','-',payload={'sha':plan['target'],'merge_method':'merge','commit_title':'Merge approved '+plan['tag']+' stable release'}))
+   require(merged.get('merged') is True,'Approved PR merge failed')
+   pr=api(prefix+'/pulls/'+str(plan['pr']))
+  require(pr['merged'] is True and api(prefix+'/git/commits/'+pr['merge_commit_sha'])['tree']['sha']==plan['source_tree'],'Merged tree differs from the approved release')
+  print('Merged verified source: '+pr['merge_commit_sha'])
  print('Published and verified: '+release['html_url'])
 
 if __name__=='__main__':main()

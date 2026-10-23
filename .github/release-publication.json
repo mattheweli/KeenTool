@@ -31,5 +31,8 @@
       "size": 88,
       "digest": "sha256:9f97ef0f686dbc6976986990bad060015c07f67ec3b0a42777be05e2a606f4c2"
     }
-  }
+  },
+  "merge": true,
+  "base_commit": "1e799ec2abade673cd7a728872db0035b7c5fff6",
+  "source_tree": "b54a13fd79caf1fb172a8602bca8b0943efe3729"
 }
