@@ -1,0 +1,35 @@
+{
+  "repository": "mattheweli/KeenTool",
+  "release_id": 421862528,
+  "tag": "v2.0.3",
+  "target": "a717436c9c2a73ad19c135a72f0fb10f820f5655",
+  "validated_run": 39959401890,
+  "pr": 4,
+  "operation_ref": "refs/heads/operations/publish-updates-20261023",
+  "assets": {
+    "keentool-2.0.3-manifest.json": {
+      "size": 663,
+      "digest": "sha256:3124716894525c7f4993b729b44cf74a05b1e26b1fefd22e73679d8e9742b15d"
+    },
+    "keentool-2.0.3-manifest.json.sha256": {
+      "size": 95,
+      "digest": "sha256:937379c080154308ef58b8e0b1f7b7f61dfdda60dead8fcf1d3971a2c6ec0678"
+    },
+    "KeenTool-2.0.3-sources.tar.gz": {
+      "size": 584895,
+      "digest": "sha256:aef0b69c62a78e8e5db9a0daf38c77348d8e523ff3d49ce20210f8aed4325f9a"
+    },
+    "KeenTool-2.0.3-sources.tar.gz.sha256": {
+      "size": 96,
+      "digest": "sha256:a49185039c80800a5b5c70416c99c9289f6ae0623b7ea3fea703f4f65de8ae33"
+    },
+    "keentool-2.0.3.tar.gz": {
+      "size": 499066,
+      "digest": "sha256:83171d23b83e0d0307426fc9ec1a3ea06daf70c9bca88089b7a2dddc8cfd4c11"
+    },
+    "keentool-2.0.3.tar.gz.sha256": {
+      "size": 88,
+      "digest": "sha256:fc530eca0c79cbfcfad0ad685020ef2e492ffa5bef212a923746800727e6018b"
+    }
+  }
+}
