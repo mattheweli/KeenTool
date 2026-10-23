@@ -1,0 +1,178 @@
+[
+  {
+    "test": "admin-controls.js",
+    "status": "passed"
+  },
+  {
+    "test": "dashboard-availability.js",
+    "status": "passed"
+  },
+  {
+    "test": "density-controls.js",
+    "status": "passed"
+  },
+  {
+    "test": "firewall-indicator.js",
+    "status": "passed"
+  },
+  {
+    "test": "geography.js",
+    "status": "passed"
+  },
+  {
+    "test": "layout-controls.js",
+    "status": "passed"
+  },
+  {
+    "test": "log-controls.js",
+    "status": "passed"
+  },
+  {
+    "test": "log-pagination.js",
+    "status": "passed"
+  },
+  {
+    "test": "number-format.js",
+    "status": "passed"
+  },
+  {
+    "test": "port-details.js",
+    "status": "passed"
+  },
+  {
+    "test": "security-page.js",
+    "status": "passed"
+  },
+  {
+    "test": "security-ui.js",
+    "status": "passed"
+  },
+  {
+    "test": "settings-ui.js",
+    "status": "passed"
+  },
+  {
+    "test": "unified-refresh.js",
+    "status": "passed"
+  },
+  {
+    "test": "blocklist-diagnostics-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "blocklist-variation-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "cron-bootstrap-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "email-sender-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "entware-worker-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "firewall-config-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "firewall-counter-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "firewall-optimize-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "firewall-transaction-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "geography-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "legacy-migration-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "mail-layout-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "ping-history-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "ping-notifications-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "ping-settings-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "port-details-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "portable-stat-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "release-installer-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "remote-update-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "security-api-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "security-digest-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "security-engine-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "smb-backup-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "systemlog-pagination-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "traffic-export-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "uninstall-security-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "vpn-cursor-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "wan-service-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "wan-syslog-check.py",
+    "status": "passed"
+  },
+  {
+    "test": "web-isolation-check.py",
+    "status": "passed"
+  }
+]

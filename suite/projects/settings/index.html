@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- KeenTool Settings 1.0.0 — 2026-10-22, stable. Typed administrator configuration. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Settings</title>
+<link rel="icon" type="image/svg+xml" href="/assets/keentool.svg?v=1.0.0"><script src="/assets/keentool-format.js?v=1.0.0"></script>
+<link rel="stylesheet" href="/assets/keentool-ui.css?v=1.0.0">
+<script defer src="/assets/keentool-ui.js?v=1.0.0"></script><script defer src="/assets/keentool-security-page.js?v=1.0.0"></script><script defer src="/assets/keentool-settings.js?v=1.0.0"></script>
+<style>
+.kt-ui[data-kt-page="settings"] .header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+.kt-ui[data-kt-page="settings"] h1{margin:0;font-size:26px;font-weight:500}.settings-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}.settings-tabs button[aria-pressed="true"]{border-color:var(--primary-color);background:var(--ui-active)}
+.settings-panel{background:var(--background);border:1px solid var(--table-border);border-radius:8px;padding:24px}.settings-panel h2{font-size:18px;font-weight:600;margin:0 0 12px}.settings-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 24px;margin:24px 0}
+.settings-field{display:flex;flex-direction:column;gap:7px;min-width:0;font-size:14px}.settings-field>label,.settings-field>span:first-child{font-weight:600}.settings-field input:not([type="checkbox"]),.settings-field textarea,.settings-field select{width:100%;font:inherit;padding:8px 10px;border:1px solid var(--stroke);border-radius:3px;background:var(--background);color:var(--primary-text)}
+.settings-field textarea{resize:vertical;min-height:68px}.settings-field small{font-size:12px;line-height:1.5;color:var(--text-gray)}.settings-boolean{align-self:start}.settings-boolean input{width:18px;height:18px;accent-color:var(--primary-color)}
+.settings-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px;border-top:1px solid var(--table-border);padding-top:16px}#settings_notice{white-space:pre-wrap;overflow-wrap:anywhere;margin:16px 0}#settings_guard{border:1px solid var(--ui-warning);border-radius:6px;padding:20px;margin:20px 0;background:var(--background)}#settings_guard button{margin:8px 12px 0 0}
+@media(max-width:800px){.settings-fields{grid-template-columns:minmax(0,1fr)}.settings-panel{padding:18px}}
+.settings-section{min-width:0;border:1px solid var(--table-border);border-radius:6px;margin:24px 0;padding:0 20px 4px}
+.settings-section legend{font-size:16px;font-weight:600;padding:0 8px;color:var(--primary-color)}
+.settings-wide{grid-column:1/-1}.settings-field select{min-height:40px;background:var(--background);color:var(--primary-text);border:1px solid var(--stroke);border-radius:4px}
+.settings-range{color:var(--primary-color);font-variant-numeric:tabular-nums}
+.settings-field input[type="text"]{font-variant-numeric:tabular-nums;min-height:40px}
+.settings-field>.settings-boolean-control{display:flex;align-items:center;gap:10px;min-height:40px;padding:8px 10px;border:1px solid var(--stroke);border-radius:4px;font-weight:400;cursor:pointer}
+.settings-boolean-control input{flex-shrink:0;margin:0}.settings-boolean-control span{line-height:22px}
+@media(max-width:800px){.settings-section{padding:0 12px 4px}}
+</style></head><body class="kt-ui" data-kt-page="settings">
+<dialog id="admin_dialog" style="border:1px solid var(--stroke);border-radius:8px;max-width:360px"><form id="admin_login_form"><h3>Administrator access</h3><p><label>Password <input id="admin_password" type="password" required autocomplete="current-password" maxlength="72"></label></p><p id="admin_login_error" role="alert" style="color:var(--ui-danger)"></p><button type="submit" class="btn-action">Log in</button> <button type="button" class="btn-action" onclick="document.getElementById('admin_dialog').close()">Cancel</button></form></dialog>
+<header class="header"><h1>Settings</h1><div class="header-controls"><span id="admin_state">Read-only</span><button type="button" class="btn-action" id="admin_login_button" onclick="openAdminLogin()">Admin login</button><button type="button" class="btn-action" id="admin_logout_button" onclick="adminLogout()" hidden>Log out</button></div></header>
+<main><p>Use the existing Firewall administrator password to view and change settings.</p><p class="kt-list-note">Mail credentials, webserver/TLS setup, upgrades and job schedules remain managed from KeenTool. Saving settings does not download blocklists or delete database history.</p>
+<p id="settings_notice" role="status" aria-live="polite">Log in to load configuration.</p>
+<div data-admin-only hidden><div id="settings_guard" hidden role="alert"><p id="settings_guard_text"></p><button type="button" class="btn-action" id="settings_confirm">Confirm working configuration</button><button type="button" class="btn-action" id="settings_rollback">Roll back now</button></div><nav id="settings_tabs" class="settings-tabs" aria-label="Settings sections"></nav><div id="settings_forms"></div></div>
+</main><footer class="kt-page-footer">&copy; <span data-kt-year>2026</span> mattheweli<span class="kt-footer-meta">Settings 1.0.0</span></footer></body></html>

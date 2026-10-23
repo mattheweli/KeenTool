@@ -1,0 +1,16 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const html=fs.readFileSync(__dirname+'/../projects/KeenTool/index.html','utf8');
+const elements={},statuses={};
+const node=id=>elements[id]||(elements[id]={innerText:'',innerHTML:'',open:true,scrollHeight:100,scrollTop:0,clientHeight:100});
+const ctx={window:{},document:{getElementById:node},console,fmtBytes:n=>String(n),setBoxStatus:(id,online,text)=>statuses[id]=text};
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/../assets/keentool-format.js','utf8'),ctx);
+vm.runInContext(html.split('function renderCards() {')[1].split('// === LOG LOGIC ===')[0].replace(/^/,'function renderCards() {'),ctx);
+ctx.renderCards();assert.equal(statuses.ping_status,'DATA UNAVAILABLE');assert.equal(statuses.tr_status,'DATA UNAVAILABLE');
+ctx.window.PING_DATA={current:{v4:{ping:12,loss:0},v6:{ping:10}},targets:{v4:'192.0.2.1',v6:''},updated:'now'};
+ctx.renderCards();assert.equal(statuses.ping_status,'RUNNING');
+ctx.window.PING_DATA.current.v4.loss=100;ctx.renderCards();assert.equal(statuses.ping_status,'OFFLINE');
+ctx.window._ACTIVE_VNSTAT_IFACE='ppp0';ctx.window.TRAFFIC_DATA={ppp0:{interfaces:[{name:'ppp0',traffic:{day:[],month:[]},updated:{date:{day:1,month:1,year:2026},time:{hour:1,minute:1}}}]}};
+ctx.renderCards();assert.equal(statuses.tr_status,'RUNNING');
+ctx.logsLoadedStatus={};ctx.logPages={};ctx.fetch=async()=>({ok:false,status:403});
+vm.runInContext('async function fetchLog('+html.split('async function fetchLog(')[1].split('function downloadLog(')[0],ctx);
+(async()=>{await ctx.fetchLog('main','messages.log',true);assert(node('content_main').innerText.includes('HTTP 403'));assert(node('content_main').innerText.includes('does not confirm'));ctx.fetch=async(url)=>{assert(url.includes('action=systemlog&log_id=main'));return {ok:true,json:async()=>({status:'success',log:'private file preview',size_bytes:2000000,partial_preview:true})};};await ctx.fetchLog('main','messages.log',true);assert.equal(node('content_main').innerText,'private file preview');assert(node('size_main').innerText.includes('2000000'));console.log('PASS: missing monitor data differs from disabled service; loaded/down monitors and forbidden log diagnostics.');})().catch(e=>{console.error(e);process.exitCode=1});

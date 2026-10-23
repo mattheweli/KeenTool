@@ -1,4 +1,6 @@
-#!/bin/sh
+#!/opt/bin/bash
+# KEENTOOL MANAGER v2.0.0
+# Release: 2026-10-22 | Stable. See CHANGELOG.md for release details.
 
 # ==============================================================================
 # KEENTOOL MANAGER v1.3.4 (Stable)
@@ -18,7 +20,217 @@
 #   - UX: Main menu now reflects "Disabled" state for notifications.
 # ==============================================================================
 
-export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+# BEGIN GENERATED LEGACY MIGRATION
+# Runtime detection happens before sourcing any coordinated-suite libraries.
+kt_runtime_ready() {
+ [ -r "${KT_COMMON:-/opt/lib/keentool/common.sh}" ] &&
+ [ -r "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" ] &&
+ [ -r "${KT_UPDATE_COMMAND:-/opt/bin/keentool_update}" ] &&
+ [ -r "${KT_UPDATE_HELPER:-/opt/lib/keentool/release_update.php}" ]
+}
+kt_embedded_bootstrap() {
+# KeenTool stable bootstrap 1.0.0. Downloaded over trusted GitHub HTTPS; verify its source before running.
+set -Eeuo pipefail
+umask 077
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+work=$(mktemp -d "${KT_UPDATE_TMP:-/opt/tmp}/keentool-bootstrap.XXXXXX")
+child=''
+trap 'rm -rf "$work"' EXIT
+cancel(){ trap - INT TERM;[ -z "$child" ] || { kill -TERM "$child" 2>/dev/null || :;wait "$child" || :; };exit 143; }
+trap cancel INT TERM
+cat > "$work/release_update.php" <<'KT_BOOTSTRAP_PHP'
+<?php
+// KeenTool release verification/extraction 1.0.0. CLI only; downloaded code is never evaluated here.
+if(PHP_SAPI!=='cli')exit(1);
+umask(0077);
+function requireValue($ok,$message){if(!$ok)throw new RuntimeException($message);}
+function stableVersion($s){return is_string($s)&&preg_match('/^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$/D',$s);}
+function currentVersion($file,$legacy){
+ $j=is_file($file)?json_decode((string)file_get_contents($file),true):null;
+ if(is_array($j)&&stableVersion($j['version']??null))return $j['version'];
+ if(is_file($legacy)&&preg_match('/(?<![0-9.])([0-9]+\.[0-9]+\.[0-9]+(?:a[0-9]+)?)\b/',substr(file_get_contents($legacy),0,4096),$m))return $m[1];
+ return '0.0.0';
+}
+function newer($latest,$current){
+ preg_match('/^([0-9]+\.[0-9]+\.[0-9]+)(a[0-9]+)?$/D',$current,$m);$base=$m[1]??'0.0.0';
+ $a=array_map('intval',explode('.',$latest));$b=array_map('intval',explode('.',$base));return $a>$b||($a===$b&&!empty($m[2]));
+}
+function metadata($release,$installed,$legacy){
+ requireValue(is_array($release)&&($release['draft']??true)===false&&($release['prerelease']??true)===false,'Only a published stable release is eligible');
+ $tag=$release['tag_name']??'';requireValue(is_string($tag)&&str_starts_with($tag,'v')&&stableVersion(substr($tag,1)),'Invalid stable release tag');$version=substr($tag,1);$name='keentool-'.$version.'.tar.gz';$found=[];
+ foreach($release['assets']??[] as $asset){
+  if(!in_array($asset['name']??'',[$name,$name.'.sha256'],true))continue;
+  requireValue(!isset($found[$asset['name']]),'Duplicate release asset');
+  $expected='https://github.com/mattheweli/KeenTool/releases/download/'.$tag.'/'.$asset['name'];
+  requireValue(($asset['browser_download_url']??null)===$expected&&($asset['state']??'')==='uploaded','Unexpected release asset URL/state');
+  requireValue(is_int($asset['size']??null)&&$asset['size']>0&&$asset['size']<=33554432,'Release asset exceeds the download limit');$found[$asset['name']]=$asset;
+ }
+ requireValue(isset($found[$name],$found[$name.'.sha256']),'The stable release needs the complete suite archive and SHA-256 sidecar');
+ requireValue($found[$name.'.sha256']['size']<=1024,'Unexpected checksum asset size');
+ $digest=$found[$name]['digest']??'';requireValue($digest===''||preg_match('/^sha256:[0-9a-f]{64}$/D',$digest),'Unsupported asset digest');
+ $current=currentVersion($installed,$legacy);
+ return [$version,$current,newer($version,$current)?'1':'0',$found[$name]['browser_download_url'],$found[$name.'.sha256']['browser_download_url'],$digest?:'-'];
+}
+function exactRead($stream,$size){$out='';while(strlen($out)<$size&&!feof($stream)){$v=fread($stream,$size-strlen($out));requireValue($v!==false,'Archive read failed');$out.=$v;}requireValue(strlen($out)===$size,'Truncated archive');return $out;}
+function octalNumber($s){$s=trim($s,"\0 ");requireValue($s===''||preg_match('/^[0-7]{1,12}$/D',$s),'Unsupported archive numeric field');return $s===''?0:octdec($s);}
+function relativeName($name,$prefix){
+ requireValue(str_starts_with($name,$prefix),'Archive root mismatch');$rel=substr($name,strlen($prefix));
+ requireValue($rel!==''&&strlen($rel)<=220&&preg_match('~^[A-Za-z0-9_./-]+$~D',$rel)&&!in_array('..',explode('/',$rel),true)&&!in_array('.',explode('/',$rel),true)&&!str_contains($rel,'//'),'Unsafe archive path');return rtrim($rel,'/');
+}
+function extractVerified($dest,$version){
+ requireValue(stableVersion($version)&&is_dir($dest)&&count(scandir($dest))===2,'Empty private staging directory required');$prefix='keentool-'.$version.'/';$files=[];$pendingPath=null;$total=0;$count=0;$ended=false;
+ while(!feof(STDIN)){
+  $h=exactRead(STDIN,512);$total+=512;requireValue($total<=134217728,'Expanded archive exceeds the limit');
+  if($h===str_repeat("\0",512)){
+   requireValue(exactRead(STDIN,512)===$h,'Invalid archive terminator');
+   while(!feof(STDIN)){$tail=fread(STDIN,65536);requireValue($tail!==false&&trim($tail,"\0")==='','Unexpected archive trailer');$total+=strlen($tail);requireValue($total<=134217728,'Expanded archive exceeds the limit');}$ended=true;break;
+  }
+  $stored=octalNumber(substr($h,148,8));$check=substr_replace($h,str_repeat(' ',8),148,8);requireValue(array_sum(unpack('C*',$check))===$stored,'Archive header checksum mismatch');
+  $size=octalNumber(substr($h,124,12));requireValue($size<=8388608,'Archive member exceeds the limit');$kind=$h[156];
+  $name=rtrim(substr($h,0,100),"\0");$pre=rtrim(substr($h,345,155),"\0");if($pre!=='')$name=$pre.'/'.$name;
+  if($kind==='x'){
+   requireValue($size<=8192&&$pendingPath===null,'Unsupported extended header');$payload=exactRead(STDIN,$size);$at=0;
+   while($at<strlen($payload)){
+    requireValue(preg_match('/\G([0-9]+) ([^=\n]+)=/A',$payload,$m,0,$at),'Malformed extended header');$length=(int)$m[1];requireValue($length>strlen($m[0])&&$at+$length<=strlen($payload),'Invalid extended header length');$record=substr($payload,$at,$length);requireValue(str_ends_with($record,"\n"),'Invalid extended header record');$value=substr($record,strlen($m[0]),-1);
+    if($m[2]==='path'){$pendingPath=$value;}else requireValue(in_array($m[2],['mtime','atime','ctime','uid','gid','uname','gname'],true),'Unsupported extended archive key');$at+=$length;
+   }
+  }else{
+   requireValue(in_array($kind,["\0",'0','5'],true),'Archive links and special files are forbidden');if($pendingPath!==null){$name=$pendingPath;$pendingPath=null;}
+   if($name===rtrim($prefix,'/')||$name===$prefix){requireValue($kind==='5'&&$size===0,'Invalid archive root');}
+   else{
+    $rel=relativeName($name,$prefix);$target=$dest.'/'.$rel;
+    if($kind==='5'){requireValue($size===0,'Invalid directory member');if(!is_dir($target))requireValue(mkdir($target,0700,true),'Cannot create archive directory');}
+    else{
+     requireValue(!isset($files[$rel])&&!file_exists($target),'Duplicate archive member');requireValue(++$count<=1024,'Archive contains too many files');if(!is_dir(dirname($target)))requireValue(mkdir(dirname($target),0700,true),'Cannot create parent directory');$f=fopen($target,'xb');requireValue($f!==false,'Cannot create staged file');$remaining=$size;$hash=hash_init('sha256');
+     try{while($remaining){$data=exactRead(STDIN,min(65536,$remaining));requireValue(fwrite($f,$data)===strlen($data),'Staging write failed');hash_update($hash,$data);$remaining-=strlen($data);}}finally{fclose($f);}
+     $files[$rel]=hash_final($hash);chmod($target,0600);
+    }
+   }
+  }
+  if($kind==='x'||$kind==='5'){} // Regular payloads were streamed above.
+  $pad=(512-$size%512)%512;if($pad)exactRead(STDIN,$pad);$total+=$size+$pad;
+ }
+ requireValue($ended&&$pendingPath===null,'Incomplete archive');requireValue(isset($files['CHECKSUMS.sha256'],$files['RELEASE.json'],$files['install.sh'],$files['support/release_install.php']),'Incomplete suite archive');
+ $manifest=file_get_contents($dest.'/CHECKSUMS.sha256');$seen=[];
+ foreach(explode("\n",trim($manifest)) as $line){requireValue(preg_match('/^([0-9a-f]{64})  (.+)$/D',$line,$m),'Invalid file checksum manifest');$rel=relativeName($prefix.$m[2],$prefix);requireValue(!isset($seen[$rel])&&isset($files[$rel])&&hash_equals($files[$rel],$m[1]),'Package file checksum mismatch: '.$rel);$seen[$rel]=true;}
+ unset($files['CHECKSUMS.sha256']);requireValue(count($files)===count($seen),'Unlisted archive content');
+ $release=json_decode(file_get_contents($dest.'/RELEASE.json'),true);requireValue(is_array($release)&&($release['suite']??'')==='KeenTool'&&($release['version']??'')===$version&&($release['channel']??'')==='stable','Package metadata does not match the selected release');echo $dest;
+}
+try{
+ $action=$argv[1]??'';
+ if($action==='flag'){requireValue(stableVersion($argv[3]??''),'Invalid version flag');$tmp=tempnam(dirname($argv[2]),'.kt-version-');requireValue($tmp!==false,'Cannot stage version flag');try{requireValue(file_put_contents($tmp,$argv[3]."\n")!==false&&chmod($tmp,0600)&&rename($tmp,$argv[2]),'Cannot store version flag');}finally{if(is_file($tmp))unlink($tmp);}}
+ elseif($action==='metadata'){echo implode("\t",metadata(json_decode(stream_get_contents(STDIN),true),$argv[2],$argv[3]));}
+ elseif($action==='checksum'){
+  $s=trim(file_get_contents($argv[2]));$name='keentool-'.$argv[4].'.tar.gz';requireValue(preg_match('/^([0-9a-f]{64})  '.preg_quote($name,'/').'$/D',$s,$m),'Invalid checksum sidecar');$hash=hash_file('sha256',$argv[3]);requireValue(hash_equals($m[1],$hash),'Release archive SHA-256 mismatch');if(($argv[5]??'-')!=='-')requireValue(hash_equals('sha256:'.$hash,$argv[5]),'GitHub asset digest mismatch');echo $hash;
+ }elseif($action==='extract'){extractVerified($argv[2],$argv[3]);}
+ else throw new InvalidArgumentException('Unsupported verification action');
+}catch(Throwable $e){fwrite(STDERR,$e->getMessage()."\n");exit(1);}
+
+KT_BOOTSTRAP_PHP
+cat > "$work/keentool_update" <<'KT_BOOTSTRAP_SH'
+#!/opt/bin/bash
+# KeenTool remote release updater 1.0.0 — 2026-10-22.
+set -Eeuo pipefail
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+umask 077
+check=false;yes=false;reinstall=false;local_package=''
+while [ "$#" -gt 0 ];do
+ case "$1" in --check)check=true;; --yes)yes=true;; --reinstall)reinstall=true;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--yes|--reinstall|--local /absolute/package/path]';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
+done
+bash_bin=${KT_UPDATE_BASH:-/opt/bin/bash}
+if [ -n "$local_package" ];then
+ [[ "$local_package" = /* ]] && [ -f "$local_package/RELEASE.json" ] && [ -f "$local_package/install.sh" ] || { echo 'Pass an extracted complete release directory' >&2;exit 1; }
+ (cd "$local_package" && sha256sum -c CHECKSUMS.sha256) >/dev/null
+ [ "$check" != true ] || { "$bash_bin" "$local_package/install.sh" --plan --mode upgrade;exit; }
+ exec "$bash_bin" "$local_package/install.sh" --apply --mode upgrade
+fi
+helper=${KT_UPDATE_HELPER:-/opt/lib/keentool/release_update.php}
+[ -f "$helper" ] || { echo 'Remote updater runtime missing; install the complete suite or use the standalone bootstrap.' >&2;exit 1; }
+php_cli='';for candidate in "${KT_UPDATE_PHP:-}" /opt/bin/php-cli /opt/bin/php8 /opt/bin/php;do
+ [ -n "$candidate" ] && [ -x "$candidate" ] || continue
+ if "$candidate" -r 'exit(PHP_SAPI === "cli" ? 0 : 1);' >/dev/null 2>&1;then php_cli=$candidate;break;fi
+done
+[ -n "$php_cli" ] || { echo 'PHP CLI is required for release verification' >&2;exit 1; }
+for tool in curl gzip;do command -v "$tool" >/dev/null || { echo "Missing updater dependency: $tool" >&2;exit 1; };done
+work=$(mktemp -d "${KT_UPDATE_TMP:-/opt/tmp}/keentool-update.XXXXXX")
+trap 'rm -rf "$work"' EXIT
+curl_opts=(-fsSL --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 180 --retry 2)
+status='';rc=0
+status=$(curl "${curl_opts[@]}" --max-filesize 1048576 -H 'Accept: application/vnd.github+json' -w '%{http_code}' 'https://api.github.com/repos/mattheweli/KeenTool/releases/latest' -o "$work/release.json") || rc=$?
+if [ "$status" = 404 ];then echo 'No published stable KeenTool release is available yet.';exit 0;fi
+[ "$rc" = 0 ] && [ "$status" = 200 ] || { echo "GitHub release check failed (HTTP $status, curl $rc); installed files are unchanged." >&2;exit 1; }
+info=$("$php_cli" "$helper" metadata "${KT_UPDATE_INSTALLED:-/opt/etc/keentool/installed-release.json}" "${KT_UPDATE_LEGACY:-/opt/bin/keentool}" < "$work/release.json")
+IFS=$'\t' read -r version current available archive_url checksum_url digest <<< "$info"
+if [ "$reinstall" = true ] && [ "$current" = "$version" ];then available=1;fi
+if [ "$available" != 1 ];then rm -f "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}";echo "KeenTool suite $current is current (latest stable: $version).";exit 0;fi
+"$php_cli" "$helper" flag "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}" "$version"
+echo "KeenTool suite update available: $current -> $version"
+[ "$check" != true ] || exit 0
+if [ "$yes" != true ];then
+ [ -t 0 ] || { echo 'Run keentool --update interactively, or use --yes to install explicitly.';exit 0; }
+ read -r -p 'Download, verify and install the complete release? [y/N] ' answer
+ [[ "$answer" = y || "$answer" = Y ]] || exit 0
+fi
+[ "$(id -u)" = 0 ] || { echo 'Run the upgrade as root' >&2;exit 1; }
+curl "${curl_opts[@]}" --max-filesize 1024 "$checksum_url" -o "$work/archive.sha256"
+curl "${curl_opts[@]}" --max-filesize 33554432 "$archive_url" -o "$work/archive.tar.gz"
+"$php_cli" "$helper" checksum "$work/archive.sha256" "$work/archive.tar.gz" "$version" "$digest" >/dev/null
+mkdir -m 700 "$work/package"
+# Validate paths/types and every file checksum while extracting into an empty private directory.
+gzip -dc "$work/archive.tar.gz" | "$php_cli" "$helper" extract "$work/package" "$version" >/dev/null
+[ "${KT_UPDATE_BOOTSTRAP:-false}" != true ] || echo 'Bootstrap verified. Existing public/alpha installation will use the same migration installer.'
+"$bash_bin" "$work/package/install.sh" --plan --mode upgrade
+child=''
+cancel(){ trap - INT TERM;[ -z "$child" ] || { kill -TERM "$child" 2>/dev/null || :;wait "$child" || :; };exit 143; }
+trap cancel INT TERM
+"$bash_bin" "$work/package/install.sh" --apply --mode upgrade & child=$!
+wait "$child";child=''
+trap - INT TERM
+rm -f "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}"
+echo 'Verified GitHub release installed. Review the installer backup path and refresh generated pages.'
+
+KT_BOOTSTRAP_SH
+KT_UPDATE_BOOTSTRAP=true KT_UPDATE_HELPER="$work/release_update.php" "${KT_UPDATE_BASH:-/opt/bin/bash}" "$work/keentool_update" --reinstall "$@" <&0 & child=$!
+wait "$child";child=''
+trap - INT TERM
+}
+if ! kt_runtime_ready;then
+ kt_migration_menu=false
+ kt_migration_args=()
+ case "${1:-}" in
+  '') kt_migration_menu=true;;
+  --check-updates) kt_migration_args=(--check);;
+  --update|-update) shift;kt_migration_args=("$@");;
+  --help|-h)
+   echo 'KeenTool requires the coordinated suite runtime.'
+   echo 'Run keentool to migrate interactively, keentool --check-updates to check, or keentool --update --yes to explicitly install.'
+   exit 0;;
+  *) echo 'Complete suite migration required. Run keentool interactively before using this command.' >&2;exit 2;;
+ esac
+ echo 'Legacy or incomplete KeenTool installation detected. The complete suite must be installed before opening the new menu.'
+ kt_bootstrap_pid=''
+ trap '[ -z "$kt_bootstrap_pid" ] || { kill -TERM "$kt_bootstrap_pid" 2>/dev/null || :;wait "$kt_bootstrap_pid" || :; };exit 143' INT TERM
+ # Do not put this call in an if/|| condition: its subshell uses errexit.
+ kt_embedded_bootstrap "${kt_migration_args[@]}" <&0 & kt_bootstrap_pid=$!
+ wait "$kt_bootstrap_pid";kt_migration_result=$?
+ kt_bootstrap_pid='';trap - INT TERM
+ [ "$kt_migration_result" = 0 ] || exit "$kt_migration_result"
+ if kt_runtime_ready;then
+  if [ "$kt_migration_menu" = true ];then
+   exec "${KT_UPDATE_BASH:-/opt/bin/bash}" "${KT_MANAGER_PATH:-/opt/bin/keentool}"
+  fi
+ else
+  echo 'The migration has not been installed. Run keentool again to retry; existing configuration and databases are retained.'
+ fi
+ exit 0
+fi
+# END GENERATED LEGACY MIGRATION
+# KeenTool 2.0.0
+. "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
+# Shared runtime and components are updated together through verified release packages.
+KT_MANAGED_PACKAGE=true
+
 
 # --- CONFIGURATION ---
 REPO_USER="mattheweli"
@@ -38,7 +250,7 @@ KEY_FILE="/opt/etc/AbuseIPDB.key"
 EMAIL_DIR="/opt/etc/keentool/mail"
 EMAIL_CONF="$EMAIL_DIR/email.conf"
 EMAIL_PW_FILE="$EMAIL_DIR/emailpw.enc"
-EMAIL_ENC_KEY="keentool_internal_secret"
+EMAIL_ENC_KEY=$(cat /opt/etc/keentool/mail/encryption.key 2>/dev/null || printf 'keentool_internal_secret')
 
 # TELEGRAM CONFIGURATION
 TELEGRAM_DIR="/opt/etc/keentool/telegram"
@@ -96,7 +308,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v1.3.4 ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.0  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -397,6 +609,9 @@ configure_telegram() {
 
 configure_email() {
     mkdir -p "$EMAIL_DIR"
+    # Current credentials use the legacy key until the user saves a new password.
+
+    mkdir -p "$EMAIL_DIR"
     
     # --- EMAIL MANAGEMENT MENU (If configuration exists or is disabled) ---
     if [ -f "$EMAIL_CONF" ] || [ -f "${EMAIL_CONF}.disabled" ]; then
@@ -532,7 +747,15 @@ configure_email() {
     echo "PROTOCOL=\"$PROTOCOL\"" >> "$EMAIL_CONF"
 
     # Encrypt Password using OpenSSL
-    echo -n "$SMTP_PASS" | /opt/bin/openssl aes-256-cbc -pbkdf2 -out "$EMAIL_PW_FILE" -pass pass:$EMAIL_ENC_KEY
+    keyfile="$EMAIL_DIR/encryption.key"
+    if [ -s "$keyfile" ]; then EMAIL_ENC_KEY=$(cat "$keyfile")
+    else EMAIL_ENC_KEY=$(/opt/bin/openssl rand -hex 32) || return 1; fi
+    export KT_MAIL_KEY="$EMAIL_ENC_KEY"
+    tmp_pw=$(mktemp "$EMAIL_DIR/.password.XXXXXX") || return 1
+    if ! printf '%s' "$SMTP_PASS" | /opt/bin/openssl aes-256-cbc -pbkdf2 -out "$tmp_pw" -pass env:KT_MAIL_KEY; then rm -f "$tmp_pw"; return 1; fi
+    if [ ! -s "$keyfile" ]; then umask 077; printf '%s\n' "$EMAIL_ENC_KEY" > "$keyfile"; chmod 600 "$keyfile"; fi
+    chmod 600 "$tmp_pw"; mv "$tmp_pw" "$EMAIL_PW_FILE"
+    unset KT_MAIL_KEY
     
     # Secure permissions
     chmod 600 "$EMAIL_CONF"
@@ -576,11 +799,12 @@ run_protected() {
 
 # --- HEADLESS SELF-UPDATE (CLI - NOTIFY ONLY) ---
 perform_self_update_headless() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then /opt/bin/bash /opt/bin/keentool_update --check; return 0; fi
     IFS='|' read -r N P R F <<EOF
 $T_SELF
 EOF
     TMP_FILE="/tmp/keentool_bg.tmp"
-    curl -s -L "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
+    curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
     
     if [ ! -s "$TMP_FILE" ]; then 
         rm -f "$TMP_FILE"
@@ -610,6 +834,28 @@ EOF
     exit 0
 }
 
+doctor() {
+    echo 'KeenTool v2.0.0'
+    for cmd in bash curl sqlite3 ipset iptables smbclient vnstat tar timeout sha256sum; do
+        command -v "$cmd" >/dev/null && printf 'OK %s\n' "$cmd" || printf 'MISSING %s\n' "$cmd"
+    done
+    df -h /opt
+    for f in /opt/etc/firewall_stats.db /opt/etc/pingtool/pingtool.db; do
+        [ ! -f "$f" ] || printf '%s: %s\n' "$f" "$(kt_sqlite "$f" 'PRAGMA quick_check;')"
+    done
+    echo 'Scheduled jobs:'; grep -E 'pingtool|traffic_manager|firewall|vpn_scan|abuse_reporter|smb_backup|keentool' /opt/etc/crontab 2>/dev/null || :
+    echo 'Service states:'; ps | grep -E 'lighttpd|ulogd|crond|vnstatd' | grep -v grep || :
+}
+case "${1:-}" in
+    --entware-check) shift; exec /opt/bin/entware_manager --check "$@" ;;
+    --entware-status) exec /opt/bin/entware_manager --status ;;
+    --entware-upgrade) exec /opt/bin/entware_manager --upgrade ;;
+    --entware-resume) exec /opt/bin/entware_manager --resume ;;
+    --doctor) doctor; exit $? ;;
+    --uninstall) shift; exec /opt/bin/keentool_uninstall "$@" ;;
+    --check-updates) exec /opt/bin/bash /opt/bin/keentool_update --check ;;
+    --update|-update) shift;exec /opt/bin/bash /opt/bin/keentool_update "$@" ;;
+esac
 # --- ARGUMENT HANDLING ---
 case "$1" in
     -update|--update)
@@ -621,18 +867,16 @@ esac
 
 save_dashboard_state() {
     mkdir -p "/opt/etc/keentool"
-    cat > "/opt/etc/keentool/dashboard.conf" <<EOF
-EN_VPN="$EN_VPN"
-EN_SCRIPTS="$EN_SCRIPTS"
-EN_DNS="$EN_DNS"
-EN_WIFI="$EN_WIFI"
-EN_DHCP="$EN_DHCP"
-EN_PROXY="$EN_PROXY"
-EN_ULOGD="$EN_ULOGD"
-EOF
+    local conf=/opt/etc/keentool/dashboard.conf tmp
+    tmp=$(mktemp "${conf}.XXXXXX") || return 1
+    [ ! -f "$conf" ] || sed '/^EN_\(VPN\|SCRIPTS\|DNS\|WIFI\|DHCP\|PROXY\|ULOGD\)=/d' "$conf" > "$tmp"
+    for key in EN_VPN EN_SCRIPTS EN_DNS EN_WIFI EN_DHCP EN_PROXY EN_ULOGD; do printf '%s=%q\n' "$key" "${!key}" >> "$tmp"; done
+    mv "$tmp" "$conf"
+
 }
 
 configure_logging_modules() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then echo 'Syslog-ng is administrator-managed; review docs/INSTALL.md for logging integration'; pause; return; fi
     # Defaults
     EN_VPN="yes"; EN_SCRIPTS="yes"; EN_DNS="yes"; EN_WIFI="yes"; EN_DHCP="yes"; EN_PROXY="yes"; EN_ULOGD="no"
     
@@ -848,13 +1092,13 @@ configure_traffic() {
                 # Pulisce spazi multipli o finali
                 NEW_IF=$(echo "$NEW_IF" | xargs)
                 if [ -n "$NEW_IF" ]; then
-                    # Aggiorna CMD_VNSTAT per la sessione corrente
+                    # Update CMD_VNSTAT for the current session.
                     NEW_CMD="root /opt/bin/traffic_manager.sh '$NEW_IF' >/opt/var/log/t_manager.log 2>&1"
                     
-                    # Aggiorna il file keentool fisico (questo stesso script)
+                    # Update the installed KeenTool file (this script).
                     sed -i -E "s|CMD_VNSTAT=\"root /opt/bin/traffic_manager.sh.*\"|CMD_VNSTAT=\"$NEW_CMD\"|" "$0"
                     
-                    # Cerca e sostituisci nel crontab preservando gli apici
+                    # Find and replace cron entries while preserving quotes.
                     if grep -q "traffic_manager.sh" "$CRON_FILE"; then
                         echo " -> Updating Crontab..."
                         grep -v "traffic_manager.sh" "$CRON_FILE" > "$CRON_FILE.tmp" && mv "$CRON_FILE.tmp" "$CRON_FILE"
@@ -862,7 +1106,7 @@ configure_traffic() {
                         sanitize_and_reload_cron
                     fi
                     
-                    # Aggiorna la variabile globale per il menu
+                    # Update the global menu variable.
                     CMD_VNSTAT="$NEW_CMD"
                     CUR_IFACE="$NEW_IF"
                     
@@ -902,7 +1146,11 @@ configure_traffic() {
 }
 
 configure_pingtool() {
-    P="/opt/bin/pingtool.sh"
+    P=/opt/etc/pingtool.conf
+    if [ ! -f "$P" ]; then
+        grep -E '^(PING_TARGET|PING_TARGET_V6|PING_DURATION|TRIGGER_LATENCY|RETENTION_DAYS|MAX_DISPLAY_POINTS|ENABLE_IPV6|EMAIL_ALERTS|WAN_LABEL|WAN_MONITOR_INTERVAL|WAN_SYSLOG_ENABLED|WAN_SYSLOG_FILE)=' /opt/bin/pingtool.sh > "$P"
+        chmod 600 "$P"
+    fi
     if [ ! -f "$P" ]; then 
         echo -e "${RED}Error: Ping Monitor is not installed.${RESET}"
         pause
@@ -922,6 +1170,9 @@ configure_pingtool() {
         CUR_LAT=$(grep '^TRIGGER_LATENCY=' "$P" | cut -d'=' -f2)
   
         CUR_RET=$(grep '^RETENTION_DAYS=' "$P" | cut -d'=' -f2)
+        CUR_POINTS=$(grep '^MAX_DISPLAY_POINTS=' "$P" | cut -d'=' -f2); CUR_POINTS=${CUR_POINTS:-2000}
+        CUR_WAN=$(grep '^WAN_LABEL="' "$P" | cut -d'"' -f2); CUR_WAN=${CUR_WAN:-Auto (route interface)}
+        CUR_WAN_INTERVAL=$(grep '^WAN_MONITOR_INTERVAL=' "$P" | cut -d'=' -f2); CUR_WAN_INTERVAL=${CUR_WAN_INTERVAL:-5}
 		CUR_ALERTS=$(grep '^EMAIL_ALERTS="' "$P" | cut -d'"' -f2)
 		
 		if [ "$CUR_ALERTS" = "true" ]; then LBL_MAIL="${GREEN}ON${RESET}"; else LBL_MAIL="${RED}OFF${RESET}"; fi
@@ -940,6 +1191,10 @@ configure_pingtool() {
         echo -e " 5. Trigger Latency      [Current: ${CYAN}${CUR_LAT}ms${RESET}]"
         echo -e " 6. DB Retention Days    [Current: ${CYAN}${CUR_RET} days${RESET}]"
 		echo -e " 7. Email Alerts         [$LBL_MAIL]"
+        echo -e " 8. Maximum Chart Points [Current: ${CYAN}${CUR_POINTS}${RESET}]"
+        echo -e " 9. Notification WAN     [Current: ${CYAN}${CUR_WAN}${RESET}]"
+        echo -e " 10. PPP Monitor Interval [Current: ${CYAN}${CUR_WAN_INTERVAL}s${RESET}]"
+        echo "    Retention controls original samples; chart points only control display detail."
         echo ""
   
         echo " 0. Back"
@@ -948,12 +1203,12 @@ configure_pingtool() {
         
         case $opt in
             1) echo -n "Enter new IPv4 Target (e.g., 1.1.1.1): "; read -r NEW_VAL
-               if [ -n "$NEW_VAL" ]; then
+               if [[ "$NEW_VAL" =~ ^[a-zA-Z0-9_.:-]+$ ]]; then
                    sed -i 's/^PING_TARGET=".*"/PING_TARGET="'$NEW_VAL'"/' "$P"
                    echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
                fi ;;
             2) echo -n "Enter new IPv6 Target: "; read -r NEW_VAL
-               if [ -n "$NEW_VAL" ]; then
+               if [[ "$NEW_VAL" =~ ^[a-zA-Z0-9_.:-]+$ ]]; then
                    sed -i 's/^PING_TARGET_V6=".*"/PING_TARGET_V6="'$NEW_VAL'"/' "$P"
                    echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
                fi ;;
@@ -961,20 +1216,20 @@ configure_pingtool() {
                sed -i 's/^ENABLE_IPV6=".*"/ENABLE_IPV6="'$NEW_MODE'"/' "$P"
                echo -e " -> Mode switched to: $NEW_MODE"; NEED_REFRESH=1 ;;
             4) echo -n "Enter Duration (seconds, e.g. 30): "; read -r NEW_VAL
-               if [ -n "$NEW_VAL" ]; then
+               if [[ "$NEW_VAL" =~ ^[0-9]+$ ]] && [ "$NEW_VAL" -ge 1 ] && [ "$NEW_VAL" -le 50 ]; then
                    sed -i "s/^PING_DURATION=.*/PING_DURATION=$NEW_VAL/" "$P"
                    echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
                fi ;;
             5) echo -n "Enter Latency Threshold (ms, e.g. 50): "; read -r NEW_VAL
-               if [ -n "$NEW_VAL" ]; then
+               if [[ "$NEW_VAL" =~ ^[0-9]+$ ]]; then
                    sed -i "s/^TRIGGER_LATENCY=.*/TRIGGER_LATENCY=$NEW_VAL/" "$P"
                    echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
                fi ;;
-            6) echo -n "Enter DB Retention (days, e.g. 45): "; read -r NEW_VAL
-               if [ -n "$NEW_VAL" ]; then
-                   sed -i "s/^RETENTION_DAYS=.*/RETENTION_DAYS=$NEW_VAL/" "$P"
+            6) echo -n "Enter DB Retention (1-3650 days; lowering removes older samples on the next run): "; read -r NEW_VAL
+               if [[ "$NEW_VAL" =~ ^[0-9]+$ ]] && [ "$NEW_VAL" -ge 1 ] && [ "$NEW_VAL" -le 3650 ]; then
+                   if grep -q '^RETENTION_DAYS=' "$P";then sed -i "s/^RETENTION_DAYS=.*/RETENTION_DAYS=$NEW_VAL/" "$P";else printf '\nRETENTION_DAYS=%s\n' "$NEW_VAL" >> "$P";fi
                    echo -e " -> ${GREEN}Updated.${RESET}"; NEED_REFRESH=1
-               fi ;;
+               else echo 'Retention must be between 1 and 3650 days.';fi ;;
             7) 
                if [ "$CUR_ALERTS" = "true" ]; then NEW_VAL="false"; else NEW_VAL="true"; fi
                if grep -q "EMAIL_ALERTS=" "$P"; then
@@ -985,6 +1240,30 @@ configure_pingtool() {
                echo -e " -> Email Alerts: $NEW_VAL"
     
                ;;
+            8) echo -n "Enter maximum chart points (100-10000; default 2000): "; read -r NEW_VAL
+               if [[ "$NEW_VAL" =~ ^[0-9]+$ ]] && [ "$NEW_VAL" -ge 100 ] && [ "$NEW_VAL" -le 10000 ];then
+                   local points_tmp
+                   points_tmp=$(mktemp "$P.XXXXXX") || return 1
+                   if awk '!/^MAX_DISPLAY_POINTS=/' "$P" > "$points_tmp" && printf '\nMAX_DISPLAY_POINTS=%s\n' "$NEW_VAL" >> "$points_tmp" && chmod 600 "$points_tmp" && mv "$points_tmp" "$P";then
+                       echo 'Chart point limit updated; original samples are unchanged.'; NEED_REFRESH=1
+                   else rm -f "$points_tmp";echo 'Could not save the chart point limit.';fi
+               else echo 'Chart point limit must be between 100 and 10000.';fi ;;
+            9) echo -n "Enter WAN notification label (e.g. ppp0; empty = automatic route interface): "; read -r NEW_VAL
+               if [ -z "$NEW_VAL" ] || [[ "$NEW_VAL" =~ ^[a-zA-Z0-9_.:-]+$ ]];then
+                   local wan_tmp
+                   wan_tmp=$(mktemp "$P.XXXXXX") || return 1
+                   if awk '!/^WAN_LABEL=/' "$P" > "$wan_tmp" && printf '\nWAN_LABEL="%s"\n' "$NEW_VAL" >> "$wan_tmp" && chmod 600 "$wan_tmp" && mv "$wan_tmp" "$P";then
+                       echo 'Notification label updated. Probe routing is unchanged.'
+                   else rm -f "$wan_tmp";echo 'Could not save the WAN label.';fi
+               else echo 'Use letters, digits, underscores, dots, colons or hyphens.';fi ;;
+            10) echo -n "Enter PPP syslog polling interval (1-60 seconds; default 5): "; read -r NEW_VAL
+               if [[ "$NEW_VAL" =~ ^[0-9]+$ ]] && [ "$NEW_VAL" -ge 1 ] && [ "$NEW_VAL" -le 60 ];then
+                   local interval_tmp
+                   interval_tmp=$(mktemp "$P.XXXXXX") || return 1
+                   if awk '!/^WAN_MONITOR_INTERVAL=/' "$P" > "$interval_tmp" && printf '\nWAN_MONITOR_INTERVAL=%s\n' "$NEW_VAL" >> "$interval_tmp" && chmod 600 "$interval_tmp" && mv "$interval_tmp" "$P";then
+                       echo 'PPP monitor interval updated; ping schedule is unchanged.'
+                   else rm -f "$interval_tmp";echo 'Could not save the PPP interval.';fi
+               else echo 'PPP interval must be between 1 and 60 seconds.';fi ;;
             0) 
                if [ $NEED_REFRESH -eq 1 ]; then
                    echo ""
@@ -994,7 +1273,7 @@ configure_pingtool() {
    
                   if [ "$refresh" = "y" ] || [ "$refresh" = "Y" ]; then
                        echo "Running Pingtool... Please wait..."
-                       run_protected "$P"
+                       run_protected /opt/bin/pingtool.sh
                        echo -e "${GREEN}Done. Dashboard updated.${RESET}"
                  
                        sleep 1
@@ -1008,12 +1287,13 @@ configure_pingtool() {
 
 # --- SELF UPDATE (INTERACTIVE) ---
 action_self_update() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then /opt/bin/bash /opt/bin/keentool_update; return 0; fi
     header; echo -e "${BOLD}Checking Keentool status...${RESET}"
     IFS='|' read -r N P R F <<EOF
 $T_SELF
 EOF
     TMP_FILE="/tmp/keentool.tmp"
-    echo -n " -> Contacting GitHub ($R)... "; curl -s -L "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
+    echo -n " -> Contacting GitHub ($R)... "; curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
     
     if [ ! -s "$TMP_FILE" ]; then 
         echo -e "${RED}Failed.${RESET}"; rm -f "$TMP_FILE"; pause; return
@@ -1027,7 +1307,7 @@ EOF
         echo -e "${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
         echo -n " -> Apply & Restart? (y/n): "; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
-            mv "$TMP_FILE" "$P"; apply_perms "$P"
+            kt_validate "$TMP_FILE" || return 1; cp -p "$P" "${P}.previous" || return 1; mv "$TMP_FILE" "$P"; apply_perms "$P"
             # Remove flag if exists
             rm -f "/tmp/keentool_new_ver"
             send_analytics "update"
@@ -1040,7 +1320,7 @@ EOF
             echo -e "${CYAN}MD5 Differs.${RESET}"
             echo -n " -> Force Reinstall? (y/n): "; read -r ans
             if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
-                mv "$TMP_FILE" "$P"; apply_perms "$P"
+                kt_validate "$TMP_FILE" || return 1; cp -p "$P" "${P}.previous" || return 1; mv "$TMP_FILE" "$P"; apply_perms "$P"
                 echo "Reinstalling..."; sleep 1; exec "$P"
             else rm -f "$TMP_FILE"; pause; fi
         else echo -e "${GREEN}Up to date.${RESET}"; rm -f "$TMP_FILE"; pause; fi
@@ -1049,6 +1329,7 @@ EOF
 
 # --- SYSTEM SETUP ---
 setup_system() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then doctor; pause; return; fi
     header
     echo -e "${BOLD}System Pre-Flight Check${RESET}"; echo "---------------------------------------"
     echo -e "Checking Core Packages: ${DIM}$DEPS_CORE${RESET}"; check_and_install_deps "$DEPS_CORE"
@@ -1066,13 +1347,14 @@ setup_system() {
 
 # --- GLOBAL SCAN ---
 perform_global_scan() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then /opt/bin/bash /opt/bin/keentool_update; return 0; fi
     echo -e "${BOLD}Checking for updates...${RESET}"
     check_tool_status() {
         local VNAME=$1; local LPATH=$2; local REPO=$3; local RFILE=$4
         echo -n "."
         if [ -f "$LPATH" ]; then
             local L_VER=$(get_version "$LPATH"); local TMP="/tmp/check_${RFILE##*/}.tmp"
-            curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP"
+            curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$REPO/main/$RFILE" -o "$TMP"
             if [ -s "$TMP" ]; then
                 sed -i 's/\r$//' "$TMP"
                 local R_VER=$(get_version "$TMP"); ver_compare "$R_VER" "$L_VER"; local RES=$?
@@ -1119,7 +1401,7 @@ $FW_WEB_ROOT/firewall_api.php|www/firewall_api.php"
             local SUB_L=$(echo "$ROW" | cut -d'|' -f1); local SUB_R=$(echo "$ROW" | cut -d'|' -f2)
             if [ -f "$SUB_L" ]; then
                 echo -n "."; local SL_VER=$(get_version "$SUB_L"); local STMP="/tmp/chk_fw_sub.tmp"
-                curl -s -L "$BASE_URL/$FW_REPO/main/$SUB_R" -o "$STMP"
+                curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$FW_REPO/main/$SUB_R" -o "$STMP"
                 if [ -s "$STMP" ]; then
                     sed -i 's/\r$//' "$STMP"
                     local SR_VER=$(get_version "$STMP"); ver_compare "$SR_VER" "$SL_VER"; local RES=$?
@@ -1185,7 +1467,7 @@ check_vnstat_config() {
         echo -n " -> ${YELLOW}Configure vnStat (Download Config)? (y/n): ${RESET}"; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
             echo -n "    Downloading vnstat.conf from KeenTool repo... "
-            curl -s -L "$BASE_URL/KeenTool/main/vnstat.conf" -o "$CONF"
+            curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/KeenTool/main/vnstat.conf" -o "$CONF"
             if [ -s "$CONF" ]; then
                 echo -e "${GREEN}OK${RESET}"; chmod 644 "$CONF"
             else
@@ -1203,7 +1485,7 @@ check_webserver_config() {
     
     if [ ! -f "$WEB_ROOT/index.html" ] || [ "$MODE" = "force" ]; then
          echo -n " -> Downloading Dashboard to $WEB_ROOT... "
-         curl -s -L "$BASE_URL/KeenTool/main/index.html" -o "$WEB_ROOT/index.html"
+         curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/KeenTool/main/index.html" -o "$WEB_ROOT/index.html"
          [ -s "$WEB_ROOT/index.html" ] && chmod 644 "$WEB_ROOT/index.html"
     fi
     if [ -f "$CONF" ]; then
@@ -1274,24 +1556,28 @@ configure_dashboard_extras() {
 
 # --- GENERIC INSTALL/UPDATE HELPERS ---
 install_file() {
-    REPO=$1; RFILE=$2; LPATH=$3; DIR=$(dirname "$LPATH"); mkdir -p "$DIR"
-    echo -n " -> Downloading ${CYAN}${RFILE##*/}${RESET}... "; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$LPATH"
-    if [ -s "$LPATH" ]; then 
-        apply_perms "$LPATH"
-        echo -e "${GREEN}OK${RESET}"; return 0
-    else 
-        echo -e "${RED}Failed${RESET}"; rm -f "$LPATH"; return 1
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then /opt/bin/bash /opt/bin/keentool_update; return 0; fi
+    local REPO=$1 RFILE=$2 LPATH=$3 DIR TMP SAVE
+    DIR=$(dirname "$LPATH"); mkdir -p "$DIR"
+    TMP=$(mktemp "${LPATH}.XXXXXX") || return 1
+    if ! kt_download "$BASE_URL/$REPO/main/$RFILE" "$TMP" || ! kt_validate "$TMP"; then rm -f "$TMP"; echo 'Download/syntax validation failed'; return 1; fi
+    if [ -f "$LPATH" ]; then
+        SAVE=/opt/var/backups/keentool-updates/$(date +%Y%m%d_%H%M%S); mkdir -p "$SAVE"; cp -p "$LPATH" "$SAVE/$(basename "$LPATH")" || return 1
     fi
+    apply_perms "$TMP"; mv "$TMP" "$LPATH"; apply_perms "$LPATH"
+    echo 'Installed verified file'
+
 }
 
 smart_process() {
+    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then /opt/bin/bash /opt/bin/keentool_update; return 0; fi
     NAME=$1; LPATH=$2; REPO=$3; RFILE=$4
     if [ ! -f "$LPATH" ]; then
         echo -e "${BOLD}Installing: $NAME${RESET}"; echo -n " -> Confirm? (y/n): "; read -r ans
         [ "$ans" = "y" ] || [ "$ans" = "Y" ] && install_file "$REPO" "$RFILE" "$LPATH"
         return
     fi
-    echo -n "Checking $NAME... "; TMP_FILE="/tmp/${RFILE##*/}.tmp"; curl -s -L "$BASE_URL/$REPO/main/$RFILE" -o "$TMP_FILE"
+    echo -n "Checking $NAME... "; TMP_FILE="/tmp/${RFILE##*/}.tmp"; curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$REPO/main/$RFILE" -o "$TMP_FILE"
     if [ ! -s "$TMP_FILE" ]; then echo -e "${RED}Net Error${RESET}"; rm -f "$TMP_FILE"; return; fi
     sed -i 's/\r$//' "$TMP_FILE"
     L_VER=$(get_version "$LPATH"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
@@ -1305,6 +1591,8 @@ smart_process() {
     if [ $UPDATE_NEEDED -eq 1 ]; then
         echo -e "$MSG"; echo -n "    Apply? (y/n): "; read -r ans
         [ "$ans" = "y" ] && { 
+            kt_validate "$TMP_FILE" || { echo 'Syntax check failed'; rm -f "$TMP_FILE"; return 1; }
+            cp -p "$LPATH" "${LPATH}.previous" || return 1
             mv "$TMP_FILE" "$LPATH"
             apply_perms "$LPATH"
             echo -e "    ${GREEN}Updated.${RESET}"
@@ -1323,7 +1611,7 @@ sanitize_and_reload_cron() {
     
     # Fix: Remove user spool to avoid duplicate executions
     if [ -f "$CRON_SPOOL_FILE" ]; then 
-        rm -f "$CRON_SPOOL_FILE"
+        echo "Preserving user cron spool: $CRON_SPOOL_FILE"
     fi
     
     if [ -x /opt/etc/init.d/S10cron ]; then /opt/etc/init.d/S10cron restart >/dev/null 2>&1; fi
@@ -1504,8 +1792,9 @@ manage_cron_menu() {
 }
 
 boot_check() {
+    [ "${KT_MANAGED_PACKAGE:-false}" != true ] || return 0
       if [ ! -f "/opt/bin/email_sender.mod" ]; then
-        curl -s -L "$BASE_URL/KeenTool/main/scripts/email_sender.mod" -o "/opt/bin/email_sender.mod"
+        curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/KeenTool/main/email_sender.mod" -o "/opt/bin/email_sender.mod"
         if [ -s "/opt/bin/email_sender.mod" ]; then
             chmod +x "/opt/bin/email_sender.mod"
         else
@@ -1535,7 +1824,7 @@ EOF
         if [ -f "$P" ]; then VER=$(get_version "$P"); echo -e "$N Status: ${GREEN}Installed (v$VER)${RESET}"; else echo -e "$N Status: ${DIM}Not Installed${RESET}"; fi
         echo ""; echo " 1. Install / Update"
         echo " 2. Manage Cron"
-        echo " 3. Configure Settings (Targets & IPv6)"
+        echo " 3. Configure Settings (Targets, History & Charts)"
         echo " 4. Uninstall"
         echo ""; echo " 0. Back"; echo "";
         echo -n "Select: "; read -r op
@@ -1676,7 +1965,7 @@ check_firewall_mods() {
 verify_new_firewall_reqs() {
     echo -n " -> Checking Remote Suite Version... "
     TMP_HOOK="/tmp/chk_fw_hook.sh"
-    curl -s -L "$BASE_URL/$FW_REPO/main/scripts/100-firewall.sh" -o "$TMP_HOOK"
+    curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$FW_REPO/main/scripts/100-firewall.sh" -o "$TMP_HOOK"
     
     IS_NEW_SUITE=0
     if [ -s "$TMP_HOOK" ] && grep -q "NFLOG" "$TMP_HOOK"; then
@@ -1721,7 +2010,7 @@ EOF
         if [ ! -f "/opt/etc/init.d/S11ulogd" ]; then
             echo -n "    -> Creating startup script (S11ulogd)... "
             cat > /opt/etc/init.d/S11ulogd <<EOF
-#!/bin/sh
+#!/opt/bin/bash
 
 ENABLED=yes
 PROCS=ulogd
@@ -1736,10 +2025,10 @@ EOF
             echo -e "${GREEN}Created${RESET}"
         fi
         
-        # Riavvio servizio
+        # Restart service.
         /opt/etc/init.d/S11ulogd restart >/dev/null 2>&1
 
-        # D. Verifica Moduli Kernel
+        # D. Verify kernel modules.
         check_firewall_mods
         return $?
     fi
@@ -1813,178 +2102,10 @@ fastcgi.server = ( ".php" =>
 EOF
                chmod 644 "/opt/etc/lighttpd/conf.d/30-fastcgi.conf"
                
-               cat > "/opt/etc/php.ini" <<'EOF'
-[PHP]
-
-;;;;;;;;;;;;;;;;;;;;
-; Language Options ;
-;;;;;;;;;;;;;;;;;;;;
-
-engine = On
-;short_open_tag = Off
-precision = 12
-output_buffering = Off
-;output_handler =
-zlib.output_compression = Off
-;zlib.output_compression_level = -1
-;zlib.output_handler =
-implicit_flush = Off
-unserialize_callback_func =
-;unserialize_max_depth = 4096
-serialize_precision = 100
-;open_basedir =
-disable_functions =
-disable_classes =
-;highlight.string = #DD0000
-;highlight.comment = #FF9900
-;highlight.keyword = #007700
-;highlight.default = #0000BB
-;highlight.html = #000000
-;ignore_user_abort = On
-;realpath_cache_size = 16k
-;realpath_cache_ttl = 120
-;zend.enable_gc = On
-;zend.multibyte = Off
-;zend.script_encoding =
-;zend.exception_ignore_args = On
-;zend.exception_string_param_max_len = 0
-
-;;;;;;;;;;;;;;;;;
-; Miscellaneous ;
-;;;;;;;;;;;;;;;;;
-
-expose_php = On
-
-;;;;;;;;;;;;;;;;;;;
-; Resource Limits ;
-;;;;;;;;;;;;;;;;;;;
-
-max_execution_time = 30
-max_input_time = 60
-;max_input_nesting_level = 64
-;max_input_vars = 1000
-memory_limit = 8M
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Error handling and logging ;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-error_reporting = E_ALL & ~E_NOTICE & ~E_DEPRECATED
-display_errors = On
-display_startup_errors = Off
-log_errors = Off
-ignore_repeated_errors = Off
-ignore_repeated_source = Off
-report_memleaks = On
-;report_zend_debug = 0
-track_errors = Off
-;html_errors = Off
-;docref_root = "/phpmanual/"
-;docref_ext = .html
-;error_prepend_string = "<span style='color: #ff0000'>"
-;error_append_string = "</span>"
-;error_log = syslog
-;syslog.ident = php
-;syslog.facility = user
-;syslog.filter = ascii
-
-;;;;;;;;;;;;;;;;;
-; Data Handling ;
-;;;;;;;;;;;;;;;;;
-
-;arg_separator.output = "&amp;"
-;arg_separator.input = ";&"
-variables_order = "EGPCS"
-request_order = "GP"
-register_argc_argv = On
-auto_globals_jit = On
-;enable_post_data_reading = Off
-post_max_size = 8M
-auto_prepend_file =
-auto_append_file =
-default_mimetype = "text/html"
-;default_charset = "UTF-8"
-;internal_encoding =
-;input_encoding =
-;output_encoding =
-
-;;;;;;;;;;;;;;;;;;;;;;;;;
-; Paths and Directories ;
-;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;include_path = ".:/php/includes"
-;doc_root = "/opt/share/www"
-user_dir =
-extension_dir = "/opt/lib/php8"
-;sys_temp_dir = "/tmp"
-enable_dl = On
-;cgi.force_redirect = 1
-;cgi.nph = 1
-;cgi.redirect_status_env =
-cgi.fix_pathinfo = 1
-;cgi.discard_path = 1
-;fastcgi.impersonate = 1
-;fastcgi.logging = 0
-;cgi.rfc2616_headers = 0
-;cgi.check_shebang_line = 1
-
-;;;;;;;;;;;;;;;;
-; File Uploads ;
-;;;;;;;;;;;;;;;;
-
-file_uploads = On
-upload_tmp_dir = "/opt/tmp"
-upload_max_filesize = 2M
-max_file_uploads = 20
-
-;;;;;;;;;;;;;;;;;;
-; Fopen wrappers ;
-;;;;;;;;;;;;;;;;;;
-
-allow_url_fopen = On
-allow_url_include = Off
-;from = "john@doe.com"
-;user_agent = "PHP"
-default_socket_timeout = 60
-;auto_detect_line_endings = Off
-
-EOF
-               chmod 644 "/opt/etc/php.ini"
-               echo -e "${GREEN}Done${RESET}"
-               
-               echo -n " -> Updating lighttpd.conf... "
-               cat > "/opt/etc/lighttpd/lighttpd.conf" <<EOF
-var.log_root    = "/opt/var/log/lighttpd/"
-var.server_root = "/opt/var/www/"
-var.state_dir   = "/opt/var/run/"
-var.home_dir    = "/opt/var/lib/lighttpd/"
-var.conf_dir    = "/opt/etc/lighttpd"
-var.vhosts_dir  = server_root + "/vhosts"
-var.cache_dir   = "/opt/var/cache/lighttpd"
-var.socket_dir  = home_dir + "/sockets"
-
-server.document-root = server_root
-server.upload-dirs = ( "/opt/tmp" )
-server.errorlog = log_root + "error.log"
-server.pid-file = state_dir + "lighttpd.pid"
-server.port = 81
-
-index-file.names = ( "index.php", "index.html", "index.htm" )
-
-static-file.exclude-extensions = ( ".pl", ".fcgi", ".cgi" )
-
-server.modules = (
-    "mod_access",
-    "mod_alias",
-    "mod_fastcgi"
-)
-
-include "/opt/etc/lighttpd/mime.conf"
-include "/opt/etc/lighttpd/conf.d/*.conf"
-EOF
-               chmod 644 "/opt/etc/lighttpd/lighttpd.conf"
-               echo -e "${GREEN}Done${RESET}"
-               
+               echo 'Existing php.ini and lighttpd.conf preserved. Configure PHP via dedicated conf.d snippet if needed.'
+               if [ -f /opt/etc/lighttpd/lighttpd.conf ] && ! grep -q 'conf.d/\*.conf' /opt/etc/lighttpd/lighttpd.conf; then
+                   echo 'Note: add conf.d include to lighttpd.conf manually after checking existing config.'
+               fi
                smart_process "Updater" "$BIN_DIR/update_blocklist.sh" $REPO "scripts/update_blocklist.sh"
                smart_process "VPN Scan" "$BIN_DIR/vpn_scan.sh" $REPO "scripts/vpn_scan.sh"
                smart_process "Reporter" "$BIN_DIR/abuse_reporter.sh" $REPO "scripts/abuse_reporter.sh"
@@ -2001,21 +2122,7 @@ EOF
             2) manage_cron_menu "$CMD_FW_STAT" "$CMD_FW_UPD" "$CMD_FW_VPN" "$CMD_ABUSE" "$CMD_FW_REPORT_AUTO" "$CMD_FW_REPORT_DAILY" "$CMD_FW_REPORT_WEEKLY" "$CMD_FW_REPORT_MONTHLY"; ;;
             3) [ -f "$BIN_DIR/firewall_manager.sh" ] && run_protected "$BIN_DIR/firewall_manager.sh" || { echo "Missing"; sleep 1; };;
             4) [ -f "$BIN_DIR/firewall_monitor" ] && run_protected "$BIN_DIR/firewall_monitor" || { echo "Missing"; sleep 1; };;
-            5) header; echo -e "${BOLD}Uninstall Firewall Suite${RESET}"; echo -n " -> Remove ALL scripts and cron jobs? (y/n): "; read -r ans
-               if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-                   F_LIST="$BIN_DIR/firewall_manager.sh $BIN_DIR/firewall_monitor $BIN_DIR/firewall_stats.sh $BIN_DIR/update_blocklist.sh $BIN_DIR/vpn_scan.sh $BIN_DIR/abuse_reporter.sh $NDM_DIR/100-firewall.sh $INIT_DIR/S00ipset-load"
-                   for F in $F_LIST; do if [ -f "$F" ]; then rm -f "$F"; echo -e "    Removed $F"; fi; done
-				   if [ -d "$FW_WEB_ROOT" ]; then 
-                       rm -rf "$FW_WEB_ROOT"
-                       echo -e "    Removed Firewall Web UI ($FW_WEB_ROOT)"
-                   fi
-                   if [ -f "/opt/etc/lighttpd/conf.d/30-fastcgi.conf" ]; then
-                       rm -f "/opt/etc/lighttpd/conf.d/30-fastcgi.conf"
-                   fi
-              
-                   remove_cron_cmd "$CMD_FW_STAT"; remove_cron_cmd "$CMD_FW_UPD"; remove_cron_cmd "$CMD_FW_VPN"; remove_cron_cmd "$CMD_ABUSE"; remove_cron_cmd "root /opt/bin/firewall_stats.sh -report"
-                   echo -e "${GREEN}Uninstalled.${RESET}"
-               fi; pause ;;
+            5) /opt/bin/keentool_uninstall --tool firewall --keep-data; echo 'Preview only; apply via keentool --uninstall --tool firewall --keep-data --apply'; pause ;;
             0) return ;;
         esac
     done
@@ -2087,8 +2194,6 @@ EOF
         AU_STATUS="${DIM}Disabled${RESET}"
     fi
 
-    sanitize_and_reload_cron
-
     # 4. Check Update Flag (For instant display)
     if [ -f "/tmp/keentool_new_ver" ]; then
         NEW_V=$(cat "/tmp/keentool_new_ver")
@@ -2109,14 +2214,22 @@ EOF
     echo -e " 4. SMB Backup Tool      [$L4]$UPD_SMB"
     echo -e " 5. Main Dashboard       [$L5]$UPD_DASH"
     echo ""; echo -e " ${BOLD}Global:${RESET}"
+    # KT_FIREWALL_ADMIN_MENU
+    echo " A. Change Firewall admin password"
+    echo " H. Security / system health / management networks"
+    echo -e " p. Entware updates / upgrade [$(wc -l </opt/etc/keentool/entware/available.txt 2>/dev/null || echo unchecked)]"
+    echo -e " P. Schedule Entware checks"
     echo -e " u. Check for Updates (Tools)"
     echo -e " s. ${MAGENTA}Update Keentool (Self)${RESET} $UPD_SELF"
     echo -e " a. ${CYAN}Auto-Update${RESET}          [$AU_STATUS]"
     echo -e " c. View Crontab"
     echo -e " v. ${CYAN}Verify/Fix Crontab${RESET}"
+    echo -e " d. Diagnostics"
+    echo -e " U. Uninstall (preview / selective / complete)"
     echo -e " q. Quit"
     echo ""; echo -n "Select: "; read choice
     case $choice in
+        H) /opt/bin/bash /opt/bin/firewall_security menu;read -r -p "Press Enter to continue..." ;;
         0) setup_system ;;
         e) configure_email ;;
         t) configure_telegram ;;
@@ -2145,11 +2258,21 @@ EOF
             done
             UPD_DASH=""
             ;;
+        A)
+            if [ -f /opt/bin/firewall_admin_password ]; then
+                /opt/bin/bash /opt/bin/firewall_admin_password || echo "Password change failed; see message above."
+            else echo "Firewall admin password tool missing."; fi
+            pause ;;
+        p) /opt/bin/entware_manager --menu ;;
+        P) manage_cron_menu "root /opt/bin/keentool --entware-check --notify >>/opt/var/log/entware-check.log 2>&1"; pause ;;
         u) perform_global_scan ;;
         s) action_self_update ;;
         a) manage_cron_menu "$CMD_SELF_UPD"; pause ;;
         c) header; cat $CRON_FILE; pause ;;
         v) action_verify_cron ;;
+        d) doctor; pause ;;
+        U) /opt/bin/keentool_uninstall --menu; exit 0 ;;
         q) exit 0 ;;
     esac
 done
+

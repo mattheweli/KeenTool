@@ -1,0 +1,3 @@
+#!/opt/bin/bash
+# WAN MONITOR INIT v1.0.0 — 2026-10-22, stable
+exec /opt/bin/bash /opt/bin/wan_syslog_service "${1:-start}"

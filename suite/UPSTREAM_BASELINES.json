@@ -1,0 +1,47 @@
+[
+  {
+    "repository": "mattheweli/KeenTool",
+    "version": "2.0.0",
+    "tag": "v2.0.0",
+    "baseline_commit": "8d640c8b06968b0f24ce41feb1bc5b0a89c3f541",
+    "baseline_branch": "main",
+    "baseline_releases": [],
+    "baseline_tags": []
+  },
+  {
+    "repository": "mattheweli/keenetic-pingtool",
+    "version": "2.0.0",
+    "tag": "v2.0.0",
+    "baseline_commit": "bba63ac0b099f4001b6f91bb7314bc704f08e238",
+    "baseline_branch": "main",
+    "baseline_releases": [],
+    "baseline_tags": []
+  },
+  {
+    "repository": "mattheweli/Traffic_manager",
+    "version": "2.0.0",
+    "tag": "v2.0.0",
+    "baseline_commit": "1c5148ef576b2c97fb22f81471a0ace3eae6ea6f",
+    "baseline_branch": "main",
+    "baseline_releases": [],
+    "baseline_tags": []
+  },
+  {
+    "repository": "mattheweli/SMB_Backup_tool",
+    "version": "2.0.0",
+    "tag": "v2.0.0",
+    "baseline_commit": "48b1a83804c3dc9155b7eeb20f01c942c2f3e3c7",
+    "baseline_branch": "main",
+    "baseline_releases": [],
+    "baseline_tags": []
+  },
+  {
+    "repository": "mattheweli/keenetic-firewall",
+    "version": "4.0.0",
+    "tag": "v4.0.0",
+    "baseline_commit": "85567431ac3b5ba7c7f4e3a965b63db1d9c684ad",
+    "baseline_branch": "main",
+    "baseline_releases": [],
+    "baseline_tags": []
+  }
+]

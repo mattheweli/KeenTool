@@ -1,0 +1,14 @@
+#!/opt/bin/bash
+# KEENTOOL POLICY GUARD v1.0.0 — 2026-10-22, stable.
+# Independent guardian: it is deliberately not killed when the broker is stopped.
+set -eu
+umask 077
+id=${2:-}
+[[ "$id" =~ ^[a-f0-9]{48}$ ]] || { echo 'Invalid guard id' >&2;exit 1; }
+case "${1:-}" in
+ launch)
+  mkdir -p /opt/var/log/keentool-security
+  (trap '' HUP;exec /opt/bin/bash /opt/bin/firewall_security guard "$id" </dev/null >> /opt/var/log/keentool-security/guard.log 2>&1) &
+  pid=$!;sleep 1;kill -0 "$pid" 2>/dev/null || { echo 'Policy guardian did not stay alive' >&2;exit 1; };;
+ *)exit 1;;
+esac

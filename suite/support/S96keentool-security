@@ -1,0 +1,21 @@
+#!/opt/bin/bash
+# KEENTOOL SECURITY INIT v1.0.0 — 2026-10-22, stable.
+# Check the existing scheduler at install/boot; preserve its configuration and jobs.
+export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+ensure_cron() {
+    if pidof crond cron >/dev/null 2>&1; then echo 'Cron scheduler already running'; return 0; fi
+    local script candidates=()
+    for script in /opt/etc/init.d/S*cron /opt/etc/init.d/S*crond; do
+        [ ! -f "$script" ] || [ ! -x "$script" ] || candidates+=("$script")
+    done
+    [ "${#candidates[@]}" -eq 1 ] || { echo 'Cron stopped: exactly one executable Entware cron init script is required; no scheduler configuration changed' >&2; return 1; }
+    /opt/bin/bash "${candidates[0]}" start || return 1
+    sleep 1
+    pidof crond cron >/dev/null 2>&1 || { echo 'Cron init returned but no scheduler process was found; review its existing configuration' >&2; return 1; }
+    echo 'Existing cron scheduler started; schedules unchanged'
+}
+case "${1:-start}" in
+ ensure-cron) ensure_cron; exit $?;;
+ start|restart) ensure_cron || echo 'WARNING: scheduled monitor jobs will not run until cron is restored' >&2;;
+esac
+exec /opt/bin/bash /opt/bin/keentool_security_service "${1:-start}"

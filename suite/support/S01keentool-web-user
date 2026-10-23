@@ -1,0 +1,9 @@
+#!/opt/bin/bash
+# KEENTOOL WEB ACCOUNT INIT v1.0.0 — 2026-10-22, stable.
+# Recreate a volatile router account before lighttpd starts; never remove accounts at stop.
+case "${1:-start}" in
+ start|restart)
+  if [ -f /opt/etc/keentool/security/web-hardened ];then exec /opt/bin/bash /opt/lib/keentool-security/harden_web.sh --ensure-user;fi;;
+ stop)exit 0;;
+ *)exit 0;;
+esac
