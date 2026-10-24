@@ -1,4 +1,4 @@
-# Stable changelog — 2026-10-23
+# Stable changelog — 2026-10-24
 
 ## KeenTool 2.0.7 — 2026-10-24
 
