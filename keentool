@@ -1,6 +1,6 @@
 #!/opt/bin/bash
-# KEENTOOL MANAGER v2.0.6
-# Release: 2026-10-23 | Stable. See CHANGELOG.md for release details.
+# KEENTOOL MANAGER v2.0.7
+# Release: 2026-10-24 | Stable. See CHANGELOG.md for release details.
 
 # ==============================================================================
 # KEENTOOL MANAGER v1.3.4 (Stable)
@@ -507,7 +507,7 @@ if ! kt_runtime_ready;then
  exit 0
 fi
 # END GENERATED LEGACY MIGRATION
-# KeenTool 2.0.6
+# KeenTool 2.0.7
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 # Shared runtime and components are updated together through verified release packages.
 KT_MANAGED_PACKAGE=true
@@ -589,7 +589,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.6  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.7  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -1116,7 +1116,7 @@ EOF
 }
 
 doctor() {
-    echo 'KeenTool v2.0.6'
+    echo 'KeenTool v2.0.7'
     for cmd in bash curl sqlite3 ipset iptables smbclient vnstat tar timeout sha256sum; do
         command -v "$cmd" >/dev/null && printf 'OK %s\n' "$cmd" || printf 'MISSING %s\n' "$cmd"
     done
@@ -1579,6 +1579,16 @@ kt_managed_update() {
     fi
     rm -f "$receipt";return "$rc"
 }
+kt_entware_update_count() {
+    local count
+    # Redirect stderr before opening stdin; expose a count only after success.
+    if count=$(wc -l 2>/dev/null </opt/etc/keentool/entware/available.txt); then
+        printf '%s' "$count"
+    else
+        printf '%s' unchecked
+    fi
+}
+
 kt_component_version() {
     local component=$1 php
     for php in /opt/bin/php-cli /opt/bin/php8 /opt/bin/php;do
@@ -2525,7 +2535,7 @@ EOF
     # KT_FIREWALL_ADMIN_MENU
     echo " A. Change Firewall admin password"
     echo " H. Security / system health / management networks"
-    echo -e " p. Entware updates / upgrade [$(wc -l </opt/etc/keentool/entware/available.txt 2>/dev/null || echo unchecked)]"
+    echo -e " p. Entware updates / upgrade [$(kt_entware_update_count)]"
     echo -e " P. Schedule Entware checks"
     echo -e " u. Check all updates (KeenTool and tools)"
     echo " r. Verify / repair installed package files"
