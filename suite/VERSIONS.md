@@ -1,10 +1,10 @@
 # Stable component versions — 2026-10-23
 
-Suite release: **2.0.6**. Installer: **1.0.2**. Package manifest: **54 targets**.
+Suite release: **2.0.7**. Installer: **1.0.2**. Package manifest: **54 targets**.
 
 | Source | Stable version | Installed path |
 |---|---|---|
-| `projects/KeenTool/keentool` | 2.0.6 | `/opt/bin/keentool` |
+| `projects/KeenTool/keentool` | 2.0.7 | `/opt/bin/keentool` |
 | `projects/KeenTool/index.html` | 2.0.4 | `/opt/var/www/index.html` |
 | `projects/KeenTool/email_sender.mod` | 2.0.0 | `/opt/bin/email_sender.mod` |
 | `projects/KeenTool/telegram_sender.mod` | 2.0.0 | `/opt/bin/telegram_sender.mod` |
@@ -61,6 +61,6 @@ Suite release: **2.0.6**. Installer: **1.0.2**. Package manifest: **54 targets**
 
 | `support/dependencies.sh` | 1.0.0 | `/opt/lib/keentool/dependencies.sh` |
 
-Standalone bootstrap: 1.0.3. Installer entry: 1.0.2. Repository tags: KeenTool v2.0.6; keenetic-firewall v4.0.2. Pingtool/Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
+Standalone bootstrap: 1.0.3. Installer entry: 1.0.2. Repository tags: KeenTool v2.0.7; keenetic-firewall v4.0.2. Pingtool/Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
 
 Dashboard component: 2.0.4, independently tracked in RELEASE.json while staying in mattheweli/KeenTool. FILE_SCOPES.json assigns every install target to one component or the shared runtime. Selected component checks include shared dependencies; global checks cover all targets.

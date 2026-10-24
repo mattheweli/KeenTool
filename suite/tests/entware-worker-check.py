@@ -1,6 +1,24 @@
 from pathlib import Path
 import subprocess,tempfile,os,json,hashlib
 root=Path(__file__).resolve().parents[1]
+# Render the real menu counter; do not create a fake successful check result.
+manager=(root/'projects/KeenTool/keentool').read_text()
+line=next(row for row in manager.splitlines() if 'p. Entware updates / upgrade [' in row)
+with tempfile.TemporaryDirectory() as td:
+ state=Path(td)/'not-created';available=state/'available.txt'
+ helper=manager[manager.index('kt_entware_update_count() {'):manager.index('kt_component_version() {')]
+ command=helper.replace('/opt/etc/keentool/entware/available.txt',str(available))+'\n'+line
+ def render(expected):
+  result=subprocess.run(['bash','-c',command],text=True,capture_output=True)
+  assert result.returncode==0 and result.stderr=='', result.stdout+result.stderr
+  assert result.stdout.strip()=='p. Entware updates / upgrade ['+expected+']',result.stdout
+ render('unchecked');assert not state.exists()
+ state.mkdir();render('unchecked');assert not available.exists()
+ available.write_text('');render('0')
+ available.write_text('package-one - old - new\npackage-two - old - new\n');render('2')
+ available.unlink();render('unchecked');assert not available.exists()
+ available.mkdir();render('unchecked')
+print('PASS: actual Entware menu counter silently handles missing directory/file, empty/populated checks, deletion and read failure without creating state.')
 with tempfile.TemporaryDirectory() as td:
  b=Path(td);init=b/'init';init.mkdir();state=b/'state';opkg=b/'opkg';events=b/'events';packages=b/'packages';packages.write_text('testpkg - 1.0 - 2.0\n');email=b/'email'
  opkg.write_text('''#!/usr/bin/env python3

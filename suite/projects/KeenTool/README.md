@@ -2,7 +2,7 @@
 
 **A package manager and monitoring dashboard for Keenetic routers running Entware.** Manage the firewall, WAN/PPP connectivity, traffic history, SMB backups, notifications and Entware maintenance from a consistent CLI and web interface.
 
-Current coordinated release: **2.0.6**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
+Current coordinated release: **2.0.7**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
 
 ![System Dashboard: firewall, traffic, connection and security summaries](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/dashboard.png)
 
@@ -10,7 +10,7 @@ Current coordinated release: **2.0.6**. The Main Dashboard is independently vers
 
 | Component | Version | Purpose |
 |---|---:|---|
-| KeenTool manager | 2.0.6 | Installation, configuration, verified updates and maintenance |
+| KeenTool manager | 2.0.7 | Installation, configuration, verified updates and maintenance |
 | Main Dashboard | 2.0.4 | Shared overview and readable system/application logs |
 | [Firewall](https://github.com/mattheweli/keenetic-firewall) | 4.0.2 | IPv4/IPv6 filtering, blocklists, diagnostics and history |
 | [Connection Monitor](https://github.com/mattheweli/keenetic-pingtool) | 2.0.1 | Latency, jitter, packet loss and PPP event correlation |

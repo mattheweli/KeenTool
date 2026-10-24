@@ -1,7 +1,7 @@
 {
   "changes": [
-    "SMB Backup 2.0.1 corrects archive exclusions for the default /opt source, including live PCAP/logs, runtime sockets and locks.",
-    "Binary-safe SQLite detection eliminates Bash NUL-byte warnings while preserving coherent database snapshots.",
-    "Strict archive validation, remote checksum verification and existing settings/schedules are preserved."
+    "KeenTool 2.0.7 fixes the Entware menu counter when no successful check has created available.txt.",
+    "Missing or unreadable results display unchecked silently; an empty successful result still displays zero.",
+    "Only the manager changes; other component versions, settings, schedules and databases are preserved."
   ]
 }
