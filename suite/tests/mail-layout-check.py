@@ -46,7 +46,7 @@ html = render('Ping Alert: IPv6', '--- Diagnostic Report (MTR) ---\n' + unsuppor
 assert '<pre ' in html and unsupported in ''.join(Parse(html).text)
 # MTR can omit % on an unanswered hop; preserve hop order inside the table.
 for percent in ['100.0%', '100.0']:
-    report=mtr.replace('100.0%',percent)
+    report=mtr.replace('100.0%',percent).replace(' MPLS:', ' 4.|-- final.example.test                    0.0%    10   15.1  15.2  15.0  15.5   0.2\n MPLS:')
     for family,target in [('IPv4','8.8.8.8'),('IPv6','2001:4860:4860::8888')]:
         body=f'Target: {target}\nLatency: 12.376 ms (Threshold: 30 ms)\nPacket Loss: 3.333%\n--- Diagnostic Report (MTR) ---\n'+report
         html=render('Ping Alert: ppp0 · '+family,body)
@@ -54,7 +54,7 @@ for percent in ['100.0%', '100.0']:
         for row in re.findall(r'<tr>(.*?)</tr>',html,re.S):
             cells=re.findall(r'<td\b[^>]*>(.*?)</td>',row,re.S)
             if len(cells)==4 and text(cells[0]).isdigit():rows.append([text(c) for c in cells])
-        assert [row[0] for row in rows]==['1','2','3'],rows
+        assert [row[0] for row in rows]==['1','2','3','4'],rows
         assert rows[2][1]=='???' and '100.0%' in rows[2][2],rows
         assert all('???' not in text(block) for block in re.findall(r'<pre\b[^>]*>(.*?)</pre>',html,re.S))
         assert 'MPLS: Label 12345 &lt;literal&gt;' in html
