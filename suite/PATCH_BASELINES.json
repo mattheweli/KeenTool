@@ -1,8 +1,9 @@
 {
   "KeenTool": {
-    "version": "2.0.7",
-    "previous_tag": "v2.0.6",
-    "main": "f01280b85b2ee70a65e514bf0181c7715c5c8211"
+    "version": "2.0.8",
+    "manager_version": "2.0.7",
+    "previous_tag": "v2.0.7",
+    "main": "69f0e521a67c6f1ef12cb30864f2093ffe8fa9cf"
   },
   "keenetic-firewall": {
     "version": "4.0.2",
@@ -10,9 +11,9 @@
     "main": "9b5ad665d69285c76a1c02d4f02d62d8fc564661"
   },
   "keenetic-pingtool": {
-    "version": "2.0.1",
-    "previous_tag": "v2.0.0",
-    "main": "85e9ac9cb6f92527743d2bd52801af2d0cd5e335"
+    "version": "2.0.2",
+    "previous_tag": "v2.0.1",
+    "main": "f4dd51d49084909b25407e87424074cede029c47"
   },
   "Traffic_manager": {
     "version": "2.0.1",

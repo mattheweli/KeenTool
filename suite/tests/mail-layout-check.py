@@ -3,6 +3,7 @@ from pathlib import Path
 from html.parser import HTMLParser
 import os
 import quopri
+import re
 import subprocess
 
 root = Path(__file__).resolve().parents[1]
@@ -43,6 +44,29 @@ assert 'Target unreachable' in text(render('Ping Alert: ppp0 · IPv6', 'Packet L
 unsupported = 'Unknown MTR format\nraw 2001:db8::2 <unsafe>\nLast line'
 html = render('Ping Alert: IPv6', '--- Diagnostic Report (MTR) ---\n' + unsupported)
 assert '<pre ' in html and unsupported in ''.join(Parse(html).text)
+# MTR can omit % on an unanswered hop; preserve hop order inside the table.
+for percent in ['100.0%', '100.0']:
+    report=mtr.replace('100.0%',percent).replace(' MPLS:', ' 4.|-- final.example.test                    0.0%    10   15.1  15.2  15.0  15.5   0.2\n MPLS:')
+    for family,target in [('IPv4','8.8.8.8'),('IPv6','2001:4860:4860::8888')]:
+        body=f'Target: {target}\nLatency: 12.376 ms (Threshold: 30 ms)\nPacket Loss: 3.333%\n--- Diagnostic Report (MTR) ---\n'+report
+        html=render('Ping Alert: ppp0 · '+family,body)
+        rows=[]
+        for row in re.findall(r'<tr>(.*?)</tr>',html,re.S):
+            cells=re.findall(r'<td\b[^>]*>(.*?)</td>',row,re.S)
+            if len(cells)==4 and text(cells[0]).isdigit():rows.append([text(c) for c in cells])
+        assert [row[0] for row in rows]==['1','2','3','4'],rows
+        assert rows[2][1]=='???' and '100.0%' in rows[2][2],rows
+        assert all('???' not in text(block) for block in re.findall(r'<pre\b[^>]*>(.*?)</pre>',html,re.S))
+        assert 'MPLS: Label 12345 &lt;literal&gt;' in html
+        latency=re.search(r'<span style="font-weight:600;color:([^";]+)">12\.376 ms',html)
+        assert latency and latency[1]=='#00843d',html
+# The exact boundary is healthy; values above the threshold remain warning-colored.
+for value,color in [('30','#00843d'),('30.001','#966000')]:
+    html=render('Ping Alert: IPv6',f'Latency: {value} ms (Threshold: 30 ms)')
+    assert f'color:{color}">{value} ms' in html
+# Preserve unrecognized diagnostic rows as escaped text, rather than dropping them.
+html=render('Ping Alert: IPv6','--- Diagnostic Report (MTR) ---\n'+mtr.replace('100.0%','invalid-loss'))
+assert 'invalid-loss' in html and '<pre ' in html
 firewall = '''Firewall Daily Report
 Period: 17/10 09:00 to 18/10 09:00
 🛡️ Total Threats Blocked: 123456

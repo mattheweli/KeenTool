@@ -1,5 +1,5 @@
 <?php
-// KeenTool Mail Layout v1.0.0 — 2026-10-22, stable release.
+// KeenTool Mail Layout v1.0.1 — 2026-10-26, stable release.
 // Shared email-only renderer: escaped text, metric/report tables and lossless diagnostic fallback.
 function kmailEscape($text) { return htmlspecialchars((string)$text,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
 function kmailTitle($text) { return preg_replace('/^[^\p{L}\p{N}]+/u','',trim($text))??trim($text); }
@@ -18,8 +18,8 @@ function kmailMtr($report) {
     if(!preg_match('/^HOST:\s*.*?\s+Loss%\s+Snt\s+Last\s+Avg\s+Best\s+Wrst\s+StDev\s*$/m',$report))return kmailPre($report);
     $rows=[];$extra=[];$meta=[];
     foreach(explode("\n",$report) as $line){
-        if(preg_match('/^\s*(\d+)\.\|[-+`]*\s*(.+?)\s+([0-9.]+%)\s+(\d+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s*$/D',$line,$m)){
-            $rows[]=[kmailEscape($m[1]),'<span style="font-family:Consolas,monospace">'.kmailEscape($m[2]).'</span>','Loss <strong>'.kmailEscape($m[3]).'</strong><br>Sent '.kmailEscape($m[4]),'Avg <strong>'.kmailEscape($m[6]).'</strong> · Last '.kmailEscape($m[5]).'<br>Best '.kmailEscape($m[7]).' · Worst '.kmailEscape($m[8]).'<br>StDev '.kmailEscape($m[9])];
+        if(preg_match('/^\s*(\d+)\.\|[-+`]*\s*(.+?)\s+([0-9]+(?:\.[0-9]+)?)%?\s+(\d+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s*$/D',$line,$m)){
+            $rows[]=[kmailEscape($m[1]),'<span style="font-family:Consolas,monospace">'.kmailEscape($m[2]).'</span>','Loss <strong>'.kmailEscape($m[3].'%').'</strong><br>Sent '.kmailEscape($m[4]),'Avg <strong>'.kmailEscape($m[6]).'</strong> · Last '.kmailEscape($m[5]).'<br>Best '.kmailEscape($m[7]).' · Worst '.kmailEscape($m[8]).'<br>StDev '.kmailEscape($m[9])];
         }elseif(preg_match('/^Start:\s*(.*)$/',$line,$m))$meta[]='Started: '.$m[1];
         elseif(preg_match('/^HOST:\s*(.*?)\s+Loss%\s+Snt\s+Last\s+Avg\s+Best\s+Wrst\s+StDev\s*$/',$line,$m))$meta[]='Host: '.$m[1];
         elseif(trim($line)!=='')$extra[]=$line;

@@ -52,7 +52,8 @@ jobs:
           (cd "$RUNNER_TEMP/release-assets" && sha256sum "$name-$version-sources.tar.gz" > "$name-$version-sources.tar.gz.sha256")
           if [ "$name" = KeenTool ];then python3 suite/tools/package-suite.py "$RUNNER_TEMP/release-assets";fi
           printf 'RELEASE_TAG=v%s\n' "$version" >> "$GITHUB_ENV"
-          printf 'RELEASE_TITLE=%s %s\n' "$name" "$version" >> "$GITHUB_ENV"
+          if [ "$name" = KeenTool ];then title='KeenTool coordinated package';else title=$name;fi
+          printf 'RELEASE_TITLE=%s %s\n' "$title" "$version" >> "$GITHUB_ENV"
       - name: Create or refresh draft only
         shell: bash
         env:

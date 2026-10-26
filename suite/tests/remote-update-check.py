@@ -2,6 +2,19 @@
 from pathlib import Path
 import tempfile,subprocess,os,json,tarfile,hashlib,io,copy
 root=Path(__file__).resolve().parents[1];php='/tmp/keentool-security-runtime/root/usr/bin/php8.3'
+# A coordinated bundle can advance without changing the manager component.
+with tempfile.TemporaryDirectory() as td:
+ b=Path(td);overview=b/'overview';installed=b/'installed';legacy=b/'legacy'
+ components={'KeenTool':'2.0.7','keenetic-pingtool':'2.0.2','keenetic-firewall':'4.0.2','Traffic_manager':'2.0.1','SMB_Backup_tool':'2.0.1'}
+ overview.write_text(json.dumps({'suite':'KeenTool','channel':'stable','version':'2.0.8','components':components}))
+ installed.write_text(json.dumps({'version':'2.0.7','components':{**components,'keenetic-pingtool':'2.0.1'}}))
+ digest='sha256:'+hashlib.sha256(overview.read_bytes()).hexdigest()
+ def inspect(action,scope):return subprocess.run([php,'-n',str(root/'support/release_update.php'),action,str(overview),'2.0.8',digest,str(installed),str(legacy),scope],text=True,capture_output=True)
+ r=inspect('overview','keenetic-pingtool');assert r.returncode==0 and 'keenetic-pingtool: 2.0.1 -> 2.0.2' in r.stdout and 'KeenTool: 2.0.7 ->' not in r.stdout,r.stdout+r.stderr
+ r=inspect('selection','KeenTool');assert r.returncode==0 and r.stdout=='0',r.stdout+r.stderr
+ r=inspect('selection','keenetic-pingtool');assert r.returncode==0 and r.stdout=='1',r.stdout+r.stderr
+print('PASS: verified bundle 2.0.8 selects Pingtool 2.0.2 while manager 2.0.7 remains current.')
+
 with tempfile.TemporaryDirectory() as td:
  b=Path(td);bin=b/'bin';bin.mkdir();tmp=b/'tmp';tmp.mkdir();payload=b/'payload';payload.mkdir();(payload/'support').mkdir()
  (payload/'RELEASE.json').write_text(json.dumps({'suite':'KeenTool','version':'2.0.0','channel':'stable'}))
