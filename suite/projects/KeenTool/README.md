@@ -2,7 +2,7 @@
 
 **A package manager and monitoring dashboard for Keenetic routers running Entware.** Manage the firewall, WAN/PPP connectivity, traffic history, SMB backups, notifications and Entware maintenance from a consistent CLI and web interface.
 
-Current coordinated package: **2.0.8**; KeenTool manager: **2.0.7**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
+Current coordinated package: **2.0.9**; KeenTool manager: **2.0.8**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
 
 ![System Dashboard: firewall, traffic, connection and security summaries](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/dashboard.png)
 
@@ -10,7 +10,7 @@ Current coordinated package: **2.0.8**; KeenTool manager: **2.0.7**. The Main Da
 
 | Component | Version | Purpose |
 |---|---:|---|
-| KeenTool manager | 2.0.7 | Installation, configuration, verified updates and maintenance |
+| KeenTool manager | 2.0.8 | Installation, configuration, verified updates and maintenance |
 | Main Dashboard | 2.0.4 | Shared overview and readable system/application logs |
 | [Firewall](https://github.com/mattheweli/keenetic-firewall) | 4.0.2 | IPv4/IPv6 filtering, blocklists, diagnostics and history |
 | [Connection Monitor](https://github.com/mattheweli/keenetic-pingtool) | 2.0.2 | Latency, jitter, packet loss and PPP event correlation |
@@ -63,7 +63,7 @@ For a new router or a legacy/alpha migration, follow the complete [installation 
 /opt/bin/bash /opt/bin/keentool_security_service status
 ```
 
-CLI **u** checks all components; **r** explicitly verifies/repairs the whole package; **s** selects the manager update. Successful menu updates restart the manager. Tool actions check their own files, but accepted installation remains coordinated for shared-runtime compatibility.
+CLI **u** checks all components and offers one coordinated update after confirmation; **r** explicitly verifies/repairs the whole package. The redundant self-only **s** entry is removed. Successful menu updates restart the manager. Tool actions check their own files, but accepted installation remains coordinated for shared-runtime compatibility.
 
 ## Notifications and maintenance
 

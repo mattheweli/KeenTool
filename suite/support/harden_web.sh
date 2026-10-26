@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KEENTOOL WEB ISOLATION v1.0.0 — 2026-10-22, stable.
+# KEENTOOL WEB ISOLATION v1.0.1 — 2026-10-26, stable.
 # Narrow migration for the installed lighttpd + local PHP-CGI layout. No guessed user IDs.
 set -Eeuo pipefail
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -65,7 +65,9 @@ case "${1:---check}" in
    backup=$(cat "$MARK");[[ "$backup" = /opt/var/backups/keentool-web/* ]] || exit 1
    # The last field remains a managed path even in old records missing metadata.
    valid_permissions "$backup/permissions.tsv" || backup_warning "$backup"
-   while IFS= read -r path;do [[ "$path" = /opt/* ]] || continue;[ ! -e "$path" ] || chgrp ktweb "$path";done < <(awk -F '\t' '{print $NF}' "$backup/permissions.tsv")
+   if [ -f "$backup/permissions.tsv" ];then
+    while IFS= read -r path;do [[ "$path" = /opt/* ]] || continue;[ ! -e "$path" ] || chgrp ktweb "$path";done < <(awk -F '\t' '{print $NF}' "$backup/permissions.tsv")
+   fi
    for path in /opt/etc/keentool/admin/sessions/*;do [ ! -f "$path" ] || { chgrp ktweb "$path";chmod 660 "$path"; };done
    mkdir -p /opt/var/run/keentool-web;chown ktweb:ktweb /opt/var/run/keentool-web;chmod 770 /opt/var/run/keentool-web
   fi

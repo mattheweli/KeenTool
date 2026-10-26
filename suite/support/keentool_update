@@ -1,6 +1,10 @@
 #!/opt/bin/bash
-# KeenTool remote release updater 1.0.3 — 2026-10-23.
+# KeenTool remote release updater 1.0.4 — 2026-10-26.
 set -Eeuo pipefail
+# Recover a deleted working directory before starting child processes.
+if ! builtin pwd -P >/dev/null 2>&1; then
+    builtin cd / 2>/dev/null || { echo "Cannot recover the working directory" >&2; exit 1; }
+fi
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 umask 077
 check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false

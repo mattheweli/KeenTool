@@ -25,7 +25,7 @@ Automatic menu restart applies to updates initiated by 2.0.2 and later. Replacin
 
 ## Independent component checks and global overview
 
-Use **u. Check all updates (KeenTool and tools)** to review KeenTool, Firewall, Pingtool, Traffic Manager, SMB Backup and Main Dashboard together. The self-update action checks KeenTool; a tool's own action checks its component version, all owned program files and shared dependencies. A current Firewall 4.0.1 does not become an available update because KeenTool advances to 2.0.3. Independent Monitor/Stats/hook script versions still differ legitimately within a firewall component release.
+Use **u. Check / install updates (KeenTool and tools)** to review KeenTool, Firewall, Pingtool, Traffic Manager, SMB Backup and Main Dashboard together. The redundant main-menu self-update action is removed; a tool's own action checks its component version, all owned program files and shared dependencies. A current Firewall 4.0.1 does not become an available update because KeenTool advances to 2.0.3. Independent Monitor/Stats/hook script versions still differ legitimately within a firewall component release.
 
 ```sh
 /opt/bin/bash /opt/bin/keentool --check-updates
@@ -54,3 +54,9 @@ Repair asks before downloading the complete verified archive, then compares all 
 Main Dashboard stays in the KeenTool repository but has its own Dashboard version and menu scope. Its actual HTML version is compared separately from the manager, so a 2.0.2 dashboard is not labeled current merely because KeenTool is 2.0.3 or 2.0.4. The main Firewall summary shows the suite version, while Monitor/Stats versions remain separate in its submenu.
 
 This release changes KeenTool/Dashboard/bootstrap/updater/verifier only. Installer 1.0.2 and the firewall repository 4.0.1 are retained; no firewall rule or history policy changes are included.
+
+## Deleted current directory and legacy web backup warnings
+
+If an existing shell prints `getcwd: cannot access parent directories`, its current directory was removed. Run `cd /` before starting KeenTool. The manager, update handoff and standalone updater/bootstrap recover a missing directory before spawning further helpers. They leave a valid current directory unchanged. An interpreter can print one initial warning before any script code runs.
+
+A missing old web-isolation `permissions.tsv` cannot restore historical modes or ownership. The helper retains an explicit warning, skips reading the absent ledger and refuses historical permission rollback. It does not fabricate original metadata or turn this warning into evidence that the coordinated source update failed. Review the separate release transaction backup printed by the installer for source-update rollback.

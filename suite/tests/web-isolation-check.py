@@ -40,6 +40,13 @@ with tempfile.TemporaryDirectory() as td:
  active=fast.read_bytes();r=subprocess.run(['bash',str(script),'--check'],capture_output=True,text=True);assert r.returncode==0 and 'Original permissions were not recorded' in r.stderr
  r=subprocess.run(['bash',str(script),'--rollback'],capture_output=True,text=True);assert r.returncode!=0 and fast.read_bytes()==active;assert (opt/'etc/keentool/security/web-hardened').exists()
  r=subprocess.run(['bash',str(script),'--ensure-user'],capture_output=True,text=True);assert r.returncode==0,r.stdout+r.stderr
+ # A genuinely missing legacy ledger must warn without an awk open error or fake rollback data.
+ ledger.unlink()
+ r=subprocess.run(['bash',str(script),'--ensure-user'],capture_output=True,text=True)
+ assert r.returncode==0 and 'Original permissions were not recorded' in r.stderr and 'awk:' not in r.stderr,r.stdout+r.stderr
+ assert not ledger.exists() and fast.read_bytes()==active
+ r=subprocess.run(['bash',str(script),'--rollback'],capture_output=True,text=True)
+ assert r.returncode!=0 and fast.read_bytes()==active and not ledger.exists()
  ledger.write_bytes(valid)
  assert not (p/'stat-calls').exists()
  r=subprocess.run(['bash',str(script),'--rollback'],capture_output=True,text=True);assert r.returncode==0,r.stdout+r.stderr

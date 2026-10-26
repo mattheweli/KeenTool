@@ -1,6 +1,11 @@
 #!/opt/bin/bash
-# KEENTOOL MANAGER v2.0.7
-# Release: 2026-10-24 | Stable. See CHANGELOG.md for release details.
+# KEENTOOL MANAGER v2.0.8
+# Release: 2026-10-26 | Stable. See CHANGELOG.md for release details.
+
+# Recover a deleted working directory before starting child processes.
+if ! builtin pwd -P >/dev/null 2>&1; then
+    builtin cd / 2>/dev/null || { echo "Cannot recover the working directory" >&2; exit 1; }
+fi
 
 # ==============================================================================
 # KEENTOOL MANAGER v1.3.4 (Stable)
@@ -30,9 +35,13 @@ kt_runtime_ready() {
  [ -r "${KT_UPDATE_HELPER:-/opt/lib/keentool/release_update.php}" ]
 }
 kt_embedded_bootstrap() {
-# KeenTool stable bootstrap 1.0.3. Downloaded over trusted GitHub HTTPS; verify its source before running.
+# KeenTool stable bootstrap 1.0.4. Downloaded over trusted GitHub HTTPS; verify its source before running.
 set -Eeuo pipefail
 umask 077
+# Recover a deleted working directory before starting child processes.
+if ! builtin pwd -P >/dev/null 2>&1; then
+    builtin cd / 2>/dev/null || { echo "Cannot recover the working directory" >&2; exit 1; }
+fi
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 for essential in mktemp cat rm;do
  command -v "$essential" >/dev/null || { printf 'Missing bootstrap command: %s. Restore the router BusyBox utilities before migration.
@@ -362,8 +371,12 @@ try{
 KT_BOOTSTRAP_PHP
 cat > "$work/keentool_update" <<'KT_BOOTSTRAP_SH'
 #!/opt/bin/bash
-# KeenTool remote release updater 1.0.3 — 2026-10-23.
+# KeenTool remote release updater 1.0.4 — 2026-10-26.
 set -Eeuo pipefail
+# Recover a deleted working directory before starting child processes.
+if ! builtin pwd -P >/dev/null 2>&1; then
+    builtin cd / 2>/dev/null || { echo "Cannot recover the working directory" >&2; exit 1; }
+fi
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 umask 077
 check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false
@@ -507,7 +520,7 @@ if ! kt_runtime_ready;then
  exit 0
 fi
 # END GENERATED LEGACY MIGRATION
-# KeenTool 2.0.7
+# KeenTool 2.0.8
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 # Shared runtime and components are updated together through verified release packages.
 KT_MANAGED_PACKAGE=true
@@ -589,7 +602,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.7  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.8  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -1116,7 +1129,7 @@ EOF
 }
 
 doctor() {
-    echo 'KeenTool v2.0.7'
+    echo 'KeenTool v2.0.8'
     for cmd in bash curl sqlite3 ipset iptables smbclient vnstat tar timeout sha256sum; do
         command -v "$cmd" >/dev/null && printf 'OK %s\n' "$cmd" || printf 'MISSING %s\n' "$cmd"
     done
@@ -1568,6 +1581,7 @@ configure_pingtool() {
 
 # One coordinated update per menu action; restart only after an actual successful install.
 kt_managed_update() {
+    if ! builtin pwd -P >/dev/null 2>&1; then builtin cd / 2>/dev/null || { echo "Cannot recover the working directory" >&2; return 1; }; fi
     local component=${1:-} receipt rc=0
     receipt=$(mktemp "${KT_RUN_DIR:-/tmp}/keentool-menu-update.XXXXXX") || return 1
     local args=();if [ "$component" = --repair ];then args=(--repair);elif [ -n "$component" ];then args=(--component "$component");fi
@@ -1596,48 +1610,6 @@ kt_component_version() {
         "$php" -r '$r=@json_decode(@file_get_contents($argv[1]),true);$v=$r["components"][$argv[2]]??"unknown";echo preg_match("/^[0-9]+\\.[0-9]+\\.[0-9]+$/D",$v)?$v:"unknown";' /opt/etc/keentool/installed-release.json "$component" 2>/dev/null && return
     done
     printf unknown
-}
-
-# --- SELF UPDATE (INTERACTIVE) ---
-action_self_update() {
-    if [ "${KT_MANAGED_PACKAGE:-false}" = true ]; then kt_managed_update KeenTool; return $?; fi
-    header; echo -e "${BOLD}Checking Keentool status...${RESET}"
-    IFS='|' read -r N P R F <<EOF
-$T_SELF
-EOF
-    TMP_FILE="/tmp/keentool.tmp"
-    echo -n " -> Contacting GitHub ($R)... "; curl -fsSL --connect-timeout 10 --max-time 60 --retry 1 "$BASE_URL/$R/main/$F" -o "$TMP_FILE"
-    
-    if [ ! -s "$TMP_FILE" ]; then 
-        echo -e "${RED}Failed.${RESET}"; rm -f "$TMP_FILE"; pause; return
-    fi
-    
-    sed -i 's/\r$//' "$TMP_FILE"
-    L_VER=$(get_version "$P"); R_VER=$(get_version "$TMP_FILE"); ver_compare "$R_VER" "$L_VER"; RES=$?
-    
-    echo -e " ${GREEN}OK${RESET}"; echo ""
-    if [ $RES -eq 1 ]; then
-        echo -e "${MAGENTA}Update: v$L_VER -> v$R_VER${RESET}"
-        echo -n " -> Apply & Restart? (y/n): "; read -r ans
-        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
-            kt_validate "$TMP_FILE" || return 1; cp -p "$P" "${P}.previous" || return 1; mv "$TMP_FILE" "$P"; apply_perms "$P"
-            # Remove flag if exists
-            rm -f "/tmp/keentool_new_ver"
-            send_analytics "update"
-            echo -e "${GREEN}Updated.${RESET}"; sleep 1; exec "$P"
-        else rm -f "$TMP_FILE"; pause; fi
-    elif [ $RES -eq 2 ]; then
-        echo -e "${YELLOW}Local is Newer (Dev).${RESET}"; rm -f "$TMP_FILE"; pause
-    else
-        if [ "$(get_md5 "$P")" != "$(get_md5 "$TMP_FILE")" ]; then
-            echo -e "${CYAN}MD5 Differs.${RESET}"
-            echo -n " -> Force Reinstall? (y/n): "; read -r ans
-            if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then 
-                kt_validate "$TMP_FILE" || return 1; cp -p "$P" "${P}.previous" || return 1; mv "$TMP_FILE" "$P"; apply_perms "$P"
-                echo "Reinstalling..."; sleep 1; exec "$P"
-            else rm -f "$TMP_FILE"; pause; fi
-        else echo -e "${GREEN}Up to date.${RESET}"; rm -f "$TMP_FILE"; pause; fi
-    fi
 }
 
 # --- SYSTEM SETUP ---
@@ -2449,6 +2421,7 @@ EOF
 # --- MAIN MENU ---
 boot_check
 while true; do
+    if ! builtin pwd -P >/dev/null 2>&1; then builtin cd / 2>/dev/null || { echo "Cannot recover the working directory" >&2; exit 1; }; fi
     # Check Core Deps silently for menu display
     SYS_MSG="${GREEN}OK${RESET}"
     for PKG in $DEPS_CORE; do
@@ -2512,15 +2485,6 @@ EOF
         AU_STATUS="${DIM}Disabled${RESET}"
     fi
 
-    # 4. Check Update Flag (For instant display)
-    if [ -f "/tmp/keentool_new_ver" ]; then
-        NEW_V=$(cat "/tmp/keentool_new_ver")
-        # If not already populated by manual scan ('u'), use the file
-        if [ -z "$UPD_SELF" ]; then
-            UPD_SELF=" -> ${MAGENTA}v${NEW_V}${RESET}"
-        fi
-    fi
-
     header
     echo -e " ${BOLD}System:${RESET}"; echo -e " 0. ${CYAN}System Setup${RESET}            [$SYS_MSG]"
     echo -e " e. ${CYAN}Email Notifications${RESET}    [$EM_STATUS]"
@@ -2537,9 +2501,8 @@ EOF
     echo " H. Security / system health / management networks"
     echo -e " p. Entware updates / upgrade [$(kt_entware_update_count)]"
     echo -e " P. Schedule Entware checks"
-    echo -e " u. Check all updates (KeenTool and tools)"
+    echo -e " u. Check / install updates (KeenTool and tools)"
     echo " r. Verify / repair installed package files"
-    echo -e " s. ${MAGENTA}Update Keentool (Self)${RESET} $UPD_SELF"
     echo -e " a. ${CYAN}Auto-Update${RESET}          [$AU_STATUS]"
     echo -e " c. View Crontab"
     echo -e " v. ${CYAN}Verify/Fix Crontab${RESET}"
@@ -2587,7 +2550,6 @@ EOF
         P) manage_cron_menu "root /opt/bin/keentool --entware-check --notify >>/opt/var/log/entware-check.log 2>&1"; pause ;;
         u) perform_global_scan; pause ;;
         r) kt_managed_update --repair; pause ;;
-        s) action_self_update; pause ;;
         a) manage_cron_menu "$CMD_SELF_UPD"; pause ;;
         c) header; cat $CRON_FILE; pause ;;
         v) action_verify_cron ;;
