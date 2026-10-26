@@ -10,12 +10,13 @@ with tempfile.TemporaryDirectory() as td:
   assert calls.read_text().splitlines()==['--component keenetic-firewall'];assert not list(p.glob('keentool-menu-update.*'))
   if mode=='install':assert 'CURRENT MENU 2.0.5' in r.stdout and 'OLD MENU AFTER' not in r.stdout
   else:assert 'CURRENT MENU' not in r.stdout and ('OLD MENU AFTER: 9' if mode=='fail' else 'OLD MENU AFTER: 0') in r.stdout
- # Explicit repair uses its own option; self update selects KeenTool, global scan leaves scope open.
+ # Explicit repair is separate; the unified global update leaves component scope open.
  calls.unlink();r=subprocess.run(['bash','-c',fn+'\nkt_managed_update --repair'],env=dict(env,KT_TEST_MODE='current'),text=True,capture_output=True)
  assert r.returncode==0 and calls.read_text().splitlines()==['--repair']
- assert 'true ]; then kt_managed_update KeenTool; return $?; fi' in source[source.index('action_self_update() {'):source.index('perform_global_scan() {')]
+ assert 'action_self_update() {' not in source and 's) action_self_update' not in source
+ assert 'Update Keentool (Self)' not in source and 'echo -e " s.' not in source
  assert 'true ]; then kt_managed_update; return $?; fi' in source[source.index('perform_global_scan() {'):source.index('smart_process() {')]
- assert 'r) kt_managed_update --repair; pause ;;' in source and 'Check all updates (KeenTool and tools)' in source
+ assert 'r) kt_managed_update --repair; pause ;;' in source and 'Check / install updates (KeenTool and tools)' in source
  # Production firewall menu must not enter the legacy file/dependency/web/cron path.
  firewall=source[source.index('action_firewall() {'):source.index('\n    for PKG in $DEPS_CORE')]
  # End the excerpt at the next function, not its body.

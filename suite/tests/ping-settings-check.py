@@ -1,6 +1,6 @@
 from pathlib import Path
 import tempfile,subprocess
-b=Path(__file__).resolve().parents[1];s=(b/'projects/KeenTool/keentool').read_text();start=s.index('configure_pingtool()');end=s.index('# --- SELF UPDATE',start);fn=s[start:end]
+b=Path(__file__).resolve().parents[1];s=(b/'projects/KeenTool/keentool').read_text();start=s.index('configure_pingtool()');end=s.index('\nkt_managed_update() {',start);fn=s[start:end]
 with tempfile.TemporaryDirectory() as td:
  p=Path(td)/'pingtool.conf';original='PING_TARGET="8.8.8.8"\nPING_TARGET_V6="::1"\nENABLE_IPV6="true"\nPING_DURATION=30\nTRIGGER_LATENCY=30\nRETENTION_DAYS=45\nEMAIL_ALERTS="true"\nCUSTOM_SETTING="preserve"\n';p.write_text(original)
  code='header(){ :; };pause(){ :; };sleep(){ :; };'+fn.replace('P=/opt/etc/pingtool.conf', 'P="'+str(p)+'"')+'\nconfigure_pingtool'

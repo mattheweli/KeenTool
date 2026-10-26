@@ -1,13 +1,14 @@
-# KeenTool coordinated package 2.0.8
+# KeenTool coordinated package 2.0.9
 
-## Pingtool 2.0.2 / coordinated package 2.0.8 — 2026-10-26
+## KeenTool manager 2.0.8 / coordinated package 2.0.9 — 2026-10-26
 
-- Include the configured latency threshold in IPv6 ping-warning email bodies, matching IPv4. The shared renderer can now color a healthy latency green when packet loss is the reason for the warning. Threshold comparison and alert triggers are unchanged.
-- Update shared Mail Layout to 1.0.1: accept standard MTR report loss fields with or without a percent marker. Normalize the displayed suffix and keep unanswered hops such as `3.|-- ??? 100.0 ...` in their original table position. Retain escaped fallback output for genuinely unsupported diagnostics and MPLS details.
-- Extend regressions for actual IPv4/IPv6 alert bodies, below/exact/above-threshold colors, answered/unanswered hops, both loss formats, ordered table rows and diagnostic fallback escaping.
+- Remove the redundant main-menu `s. Update Keentool (Self)` entry, its interactive single-manager replacement path and its self-only flag display. Use `u. Check / install updates (KeenTool and tools)` to review all components and shared file differences, then confirm the coordinated installation. Keep explicit repair (`r`), component submenus, existing headless notification/check commands and scheduled jobs compatible.
+- Recover from a deleted current working directory using Bash builtins before manager startup, menu redraws/update handoff and updater/bootstrap child processes. Preserve a valid current directory. An already-started parent shell/interpreter may emit its initial warning before script code runs; `cd /` before invoking the command repairs that existing shell immediately.
+- Shared web-isolation helper 1.0.1: do not invoke awk on a missing legacy `permissions.tsv` file. Keep the warning that original permission rollback is unavailable; do not invent old metadata, create a fake ledger or replace active web configuration.
+- Add isolated regressions for deleted directories, update restart/decline/error handling, a unified menu, generated bootstrap parity and missing permission ledgers with rollback refused safely.
 
-The manager remains **KeenTool 2.0.7**. The complete package advances to **2.0.8** solely to distribute Pingtool 2.0.2 and shared Mail Layout 1.0.1 through verified upgrades. Firewall, Traffic Manager, SMB Backup and Main Dashboard versions are unchanged. No probe algorithm, notification trigger/cooldown, cron, configuration, credentials or database policy changes.
+The manager advances to **2.0.8** because its behavior changes; the verified package advances to **2.0.9**. The updater/bootstrap advance to 1.0.4. All other component versions and configuration, credentials, schedules, databases and firewall rules are preserved. An update transcript ending in `stable installed` and `Verified GitHub release installed` represents a completed installation even when these historical environment/backup warnings were printed.
 
 ## Update
 
-Run `/opt/bin/bash /opt/bin/keentool --update`, or select Install / Update under Ping Monitor. Install the complete coordinated package so the alert producer and shared mail renderer update together. The manager continues to identify itself as 2.0.7. Only newly generated notifications use the corrected layout; previously delivered emails are unchanged. Existing settings, credentials, schedules and databases are preserved. Automated tests use isolated fixtures; live SMTP delivery and router reboot are not claimed.
+From an existing shell, first run `cd /`, then `/opt/bin/bash /opt/bin/keentool --update`. In the updated menu, use **u** to review and confirm updates. Existing settings, credentials, cron and databases remain preserved. Missing historical web-isolation permission records cannot be reconstructed by this patch; the warning remains accurate and permission rollback stays unavailable for that old backup. Automated validation uses isolated fixtures, not a live router.

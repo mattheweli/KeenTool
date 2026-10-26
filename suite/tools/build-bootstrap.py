@@ -5,9 +5,13 @@ import sys
 root=Path(__file__).resolve().parents[1]
 php=(root/'support/release_update.php').read_text();shell=(root/'support/keentool_update').read_text();dependencies=(root/'support/dependencies.sh').read_text()
 out='''#!/opt/bin/bash
-# KeenTool stable bootstrap 1.0.3. Downloaded over trusted GitHub HTTPS; verify its source before running.
+# KeenTool stable bootstrap 1.0.4. Downloaded over trusted GitHub HTTPS; verify its source before running.
 set -Eeuo pipefail
 umask 077
+# Recover a deleted working directory before starting child processes.
+if ! builtin pwd -P >/dev/null 2>&1; then
+    builtin cd / 2>/dev/null || { echo "Cannot recover the working directory" >&2; exit 1; }
+fi
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 for essential in mktemp cat rm;do
  command -v "$essential" >/dev/null || { printf 'Missing bootstrap command: %s. Restore the router BusyBox utilities before migration.\n' "$essential" >&2;exit 1; }
