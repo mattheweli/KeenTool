@@ -1,6 +1,6 @@
 # Keenetic Connection Monitor / Pingtool
 
-**IPv4/IPv6 latency, jitter, packet-loss history and PPP-aware WAN notifications** for Keenetic routers with Entware. Current component: **2.0.1**.
+**IPv4/IPv6 latency, jitter, packet-loss history and PPP-aware WAN notifications** for Keenetic routers with Entware. Current component: **2.0.2**.
 
 ![Connection Monitor with latency, jitter and time-range controls](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/ping.png)
 
@@ -9,7 +9,7 @@
 - Separate IPv4/IPv6 targets, current results and historical latency/jitter/loss charts.
 - Time-based views: one hour, one day, one week, 30 days and maximum available history.
 - Original sample counts versus rendered chart points, coverage dates for both families, optional bucket peaks and logarithmic chart axes.
-- Warning thresholds, MTR diagnostics and optional email/Telegram integration.
+- Warning thresholds, MTR diagnostics and optional email/Telegram integration. IPv4/IPv6 email latency colors use the configured threshold; unanswered MTR hops remain in the diagnostic table.
 - Incremental PPP syslog monitoring for actual WAN events, independent from scheduled ping sampling.
 - Existing syslog-ng and logrotate settings are preserved; rotation/truncation/partial-line handling belongs to the reader.
 

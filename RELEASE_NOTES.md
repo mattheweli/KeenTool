@@ -1,15 +1,13 @@
-# KeenTool 2.0.7
+# KeenTool coordinated package 2.0.8
 
-## KeenTool 2.0.7 — 2026-10-24
+## Pingtool 2.0.2 / coordinated package 2.0.8 — 2026-10-26
 
-Relative to v2.0.6 (main `f01280b85b2ee70a65e514bf0181c7715c5c8211`).
+- Include the configured latency threshold in IPv6 ping-warning email bodies, matching IPv4. The shared renderer can now color a healthy latency green when packet loss is the reason for the warning. Threshold comparison and alert triggers are unchanged.
+- Update shared Mail Layout to 1.0.1: accept standard MTR report loss fields with or without a percent marker. Normalize the displayed suffix and keep unanswered hops such as `3.|-- ??? 100.0 ...` in their original table position. Retain escaped fallback output for genuinely unsupported diagnostics and MPLS details.
+- Extend regressions for actual IPv4/IPv6 alert bodies, below/exact/above-threshold colors, answered/unanswered hops, both loss formats, ordered table rows and diagnostic fallback escaping.
 
-- Fix the Main Menu Entware update counter when `/opt/etc/keentool/entware/available.txt` has not been created by a successful check. Redirect stderr before opening stdin and display a count only on a successful read, so a missing directory/file displays `[unchecked]` without a shell error between the H and p menu entries.
-- Preserve the difference between unchecked and zero available updates. Rendering the menu neither creates a fake empty result nor performs an Entware check/upgrade; a successful existing check still displays its package count.
-- Extend isolated Entware regression checks to render the actual menu line with missing parent/state, empty and populated results, deleted results and failed reads. Verify silent fallback and no state-directory creation.
-
-Only the KeenTool manager advances to 2.0.7. Dashboard 2.0.4, SMB Backup 2.0.1, Pingtool/Traffic 2.0.1 and Firewall 4.0.2 remain unchanged. Installer, credentials, configuration, cron schedules and databases are unchanged.
+The manager remains **KeenTool 2.0.7**. The complete package advances to **2.0.8** solely to distribute Pingtool 2.0.2 and shared Mail Layout 1.0.1 through verified upgrades. Firewall, Traffic Manager, SMB Backup and Main Dashboard versions are unchanged. No probe algorithm, notification trigger/cooldown, cron, configuration, credentials or database policy changes.
 
 ## Update
 
-Run `/opt/bin/bash /opt/bin/keentool --update`. The verified coordinated installer preserves existing settings, credentials, schedules and databases. Only the manager has a new component version. Validation uses isolated fixtures; no live router reboot or live Entware upgrade is claimed.
+Run `/opt/bin/bash /opt/bin/keentool --update`, or select Install / Update under Ping Monitor. Install the complete coordinated package so the alert producer and shared mail renderer update together. The manager continues to identify itself as 2.0.7. Only newly generated notifications use the corrected layout; previously delivered emails are unchanged. Existing settings, credentials, schedules and databases are preserved. Automated tests use isolated fixtures; live SMTP delivery and router reboot are not claimed.

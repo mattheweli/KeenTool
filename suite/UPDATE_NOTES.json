@@ -1,7 +1,7 @@
 {
   "changes": [
-    "KeenTool 2.0.7 fixes the Entware menu counter when no successful check has created available.txt.",
-    "Missing or unreadable results display unchecked silently; an empty successful result still displays zero.",
-    "Only the manager changes; other component versions, settings, schedules and databases are preserved."
+    "Pingtool 2.0.2 includes the configured IPv6 email latency threshold, matching IPv4 colors.",
+    "Shared Mail Layout 1.0.1 keeps MTR hops without a percent marker inside the table, preserving hop order and diagnostic fallback.",
+    "Package 2.0.8 distributes these fixes; KeenTool manager remains 2.0.7 and other tool versions/settings are unchanged."
   ]
 }

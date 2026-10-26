@@ -1,6 +1,6 @@
 # Stable component versions — 2026-10-23
 
-Suite release: **2.0.7**. Installer: **1.0.2**. Package manifest: **54 targets**.
+Suite/package release: **2.0.8** (manager **2.0.7**). Installer: **1.0.2**. Package manifest: **54 targets**.
 
 | Source | Stable version | Installed path |
 |---|---|---|
@@ -8,7 +8,7 @@ Suite release: **2.0.7**. Installer: **1.0.2**. Package manifest: **54 targets**
 | `projects/KeenTool/index.html` | 2.0.4 | `/opt/var/www/index.html` |
 | `projects/KeenTool/email_sender.mod` | 2.0.0 | `/opt/bin/email_sender.mod` |
 | `projects/KeenTool/telegram_sender.mod` | 2.0.0 | `/opt/bin/telegram_sender.mod` |
-| `projects/keenetic-pingtool/scripts/pingtool.sh` | 2.0.1 | `/opt/bin/pingtool.sh` |
+| `projects/keenetic-pingtool/scripts/pingtool.sh` | 2.0.2 | `/opt/bin/pingtool.sh` |
 | `projects/Traffic_manager/Script/traffic_manager.sh` | 2.0.1 | `/opt/bin/traffic_manager.sh` |
 | `projects/SMB_Backup_tool/Script/smb_backup_tool.sh` | 2.0.1 | `/opt/bin/smb_backup_tool.sh` |
 | `projects/keenetic-firewall/scripts/firewall_monitor` | 4.0.0 | `/opt/bin/firewall_monitor` |
@@ -49,7 +49,7 @@ Suite release: **2.0.7**. Installer: **1.0.2**. Package manifest: **54 targets**
 | `support/settings_engine.php` | 1.0.1 | `/opt/lib/keentool-security/settings_engine.php` |
 | `projects/settings/index.html` | 1.0.2 | `/opt/var/www/settings/index.html` |
 | `assets/keentool-settings.js` | 1.0.0 | `/opt/var/www/assets/keentool-settings.js` |
-| `support/mail_layout.php` | 1.0.0 | `/opt/lib/keentool-mail/mail_layout.php` |
+| `support/mail_layout.php` | 1.0.1 | `/opt/lib/keentool-mail/mail_layout.php` |
 | `assets/keentool-format.js` | 1.0.0 | `/opt/var/www/assets/keentool-format.js` |
 | `support/keentool_update` | 1.0.3 | `/opt/bin/keentool_update` |
 | `support/release_install.php` | 1.0.1 | `/opt/lib/keentool/release_install.php` |
@@ -61,6 +61,6 @@ Suite release: **2.0.7**. Installer: **1.0.2**. Package manifest: **54 targets**
 
 | `support/dependencies.sh` | 1.0.0 | `/opt/lib/keentool/dependencies.sh` |
 
-Standalone bootstrap: 1.0.3. Installer entry: 1.0.2. Repository tags: KeenTool v2.0.7; keenetic-firewall v4.0.2. Pingtool/Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
+Standalone bootstrap: 1.0.3. Installer entry: 1.0.2. Repository tags: KeenTool package v2.0.8 (manager 2.0.7); keenetic-firewall v4.0.2. Pingtool v2.0.2; Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
 
 Dashboard component: 2.0.4, independently tracked in RELEASE.json while staying in mattheweli/KeenTool. FILE_SCOPES.json assigns every install target to one component or the shared runtime. Selected component checks include shared dependencies; global checks cover all targets.

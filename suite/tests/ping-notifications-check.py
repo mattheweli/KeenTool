@@ -98,5 +98,26 @@ NOW=8100; LOSS=0; PING_TARGET=1.1.1.1; step
         run(setup + 'NOW=10000; step')
     assert (root / 'mail.log').read_text().count('Sampled interval unavailable') == 2
 
+# Execute the actual warning email producers with mocked MTR/mail, never network.
+alerts=s[s.index('# --- Alert Logic IPv4 ---'):s.index('# Warning clearance is logged locally;')]
+with tempfile.TemporaryDirectory() as td:
+    folder=Path(td); mail=folder/'email'
+    mail.write_text('#!/bin/bash\ncase "$1" in *IPv6*) family=6;; *) family=4;; esac\nprintf "%b\\n" "$2" > "$ALERT_FIXTURE/mail$family"\n')
+    mail.chmod(0o755)
+    setup=f"export ALERT_FIXTURE='{td}'; INCIDENT_LOG='{td}/incidents'; EMAIL_MOD='{mail}'\n"+r"""
+ENABLE_IPV6=true; EMAIL_ALERTS=true; TRIGGER_LATENCY=30
+AVG_PING=12.376; AVG_PING_V6=12.376; LOSS=3.333; LOSS_V6=3.333
+LABEL_V4='ppp0 · IPv4'; LABEL_V6='ppp0 · IPv6'
+PING_TARGET=8.8.8.8; PING_TARGET_V6=2001:4860:4860::8888
+mtr(){ printf 'fixture MTR report\n'; }
+timeout(){ shift; "$@"; }
+"""
+    result=subprocess.run(['bash','-c',setup+alerts.replace('/tmp',td)+'\nwait\n'],text=True,capture_output=True)
+    assert result.returncode==0,result.stdout+result.stderr
+    for family,target in [(4,'8.8.8.8'),(6,'2001:4860:4860::8888')]:
+        body=(folder/f'mail{family}').read_text()
+        assert f'Target: {target}' in body and 'Latency: 12.376 ms (Threshold: 30 ms)' in body and 'Packet Loss: 3.333%' in body,body
+print('PASS: actual IPv4/IPv6 warning producers include the same configured latency threshold; MTR and SMTP mocked.')
+
 assert '"Ping Alert: $LABEL_V4"' in s and '"Ping Alert: $LABEL_V6"' in s
 print('PASS: warning-only email suppression, legacy migration, complete-loss timing, partial recovery, deduplication, IPv4/IPv6 independence, persistent state, target changes, clock errors and WAN labels; no SMTP.')
