@@ -157,7 +157,8 @@ sys.exit(0 if code=='200' else 22)
  assert r.returncode!=0 and 'Overview installation target mismatch' in r.stderr and not capture.exists(),r.stdout+r.stderr
  # New-capability installers receive explicit retention without changing legacy argv.
  overview.write_text(json.dumps({**candidate,'targets':targets,'changes':['Verified retention policy.']}));publish_overview()
- r=run('--component','keenetic-firewall','--yes','--no-backup');assert r.returncode!=0 and 'older installer cannot discard' in r.stderr and not capture.exists(),r.stdout+r.stderr
+ r=run('--component','keenetic-firewall','--yes','--no-backup');assert r.returncode!=0 and 'older installer cannot discard' in r.stderr,r.stdout+r.stderr
+ assert capture.read_text().splitlines()==['--plan --mode upgrade'];capture.unlink()
  policy=b/'backup-policy';env['KT_TEST_POLICY']=str(policy)
  (payload/'install.sh').write_text('#!/bin/bash\n# KT_INSTALL_BACKUP_RETENTION_V1\nprintf "%s\\n" "$*" >> "$KT_TEST_INSTALL"\nif [ "$1" = --apply ];then printf "%s" "$KT_INSTALL_BACKUP_POLICY" > "$KT_TEST_POLICY";fi\n')
  checksums();pack();publish_overview()
