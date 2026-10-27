@@ -247,13 +247,13 @@ function overviewStatus($j,$installedFile,$legacy,$scope,$selectionOnly=false,$r
  if($audit['verified']){
   echo 'Files verified: '.$audit['checked'].'; differences: '.count($audit['issues']).".\n";
   ktCliIssues($audit['issues']);
- }else echo "Installed files have not been verified: this older overview contains versions only.\n";
- if($newerComponents)echo 'Coordinated update blocked: newer installed components ('.implode(', ',$newerComponents)."). Downgrades are not permitted.\n";
+ }else ktCliText('Installed files have not been verified: this older overview contains versions only.');
+ if($newerComponents)ktCliText('Coordinated update blocked: newer installed components ('.implode(', ',$newerComponents).'). Downgrades are not permitted.');
  if(!$selected){echo $audit['verified']?"Selected component versions and files match, or a downgrade is blocked.\n":"No newer component version found; file verification is still required.\n";return;}
  ktCliSection('Changes in the coordinated installation:');foreach($changed as $line)ktCliText($line,'  - ');
- if($audit['issues'])echo ' - Repair '.count($audit['issues'])." missing, modified or incorrectly permissioned files in the selected scope.\n";
- echo 'Shared runtime and installer: coordinated suite '.$current.' -> '.$j['version'].".\n";
- echo "Installation applies the complete verified package, including unchanged components, to keep shared files compatible.\n";
+ if($audit['issues'])ktCliText('Repair '.count($audit['issues']).' missing, modified or incorrectly permissioned files in the selected scope.','  - ');
+ ktCliText('Shared runtime and installer: coordinated suite '.$current.' -> '.$j['version'].'.');
+ ktCliText('Installation applies the complete verified package, including unchanged components, to keep shared files compatible.');
  if($j['changes']??[]){ktCliSection('Release notes');foreach($j['changes'] as $i=>$line)ktCliText($line,sprintf('  %d. ',$i+1));}
 }
 function exactRead($stream,$size){$out='';while(strlen($out)<$size&&!feof($stream)){$v=fread($stream,$size-strlen($out));requireValue($v!==false,'Archive read failed');$out.=$v;}requireValue(strlen($out)===$size,'Truncated archive');return $out;}
