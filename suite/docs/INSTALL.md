@@ -99,3 +99,11 @@ The main menu checks all five component versions together; a tool menu checks on
 ## Component file verification in 2.0.4
 
 Install / Update now checks all selected component source files and shared dependencies against the lightweight verified release overview before asking to download/apply the full package. A current declared version does not suppress missing or stale files. Dashboard has its own scope/version within the KeenTool repository. The global overview covers all six components and all 54 targets.
+
+## Recovery backup choice (package 2.0.11+)
+
+The installer asks whether to keep a recovery backup after a successful install. Choose Yes for a permanent manual-rollback copy, or No to remove verified temporary recovery copies when the transaction and service starts complete. Existing backups are not deleted. This is not a full NAS/database backup policy.
+
+Use `install.sh --apply --keep-backup` or `install.sh --apply --no-backup`. For remote updates use `keentool --update --keep-backup` or `keentool --update --no-backup`; add `--yes` to accept an unattended update explicitly. Unattended runs without a backup flag keep recovery copies for compatibility. `--plan` and check-only operations never ask or create recovery copies.
+
+No-backup mode uses a private durable directory under `/opt/var/lib/keentool-release/transactions` while installing. Automatic rollback remains available on errors/signals. Copies are removed after success or a completed automatic restore. If recovery fails or the process is killed without a catchable signal, keep that directory for manual recovery; do not delete it blindly. The updater forwards a resolved choice to its installer, so it is asked once. An installer launched by an older background updater can read the controlling terminal for the first choice.

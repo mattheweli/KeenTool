@@ -2,6 +2,8 @@
 
 ## Automated evidence
 
+Package 2.0.11 adds checks for complete grouped/wrapped CLI output, machine-selection compatibility, interactive and legacy-background retention prompts, explicit policy forwarding, success/rollback cleanup, old archive/data preservation, failed-restore retention and constrained symlink-safe cleanup. The current workflow artifact records the results for the exact release commit; the counts below describe earlier baseline evidence.
+
 The 2.0.5 checks additionally verify configured producer/browser freshness, exact thresholds, Off/legacy behavior, cross-tab refresh changes and interval propagation in public snapshots. Documentation screenshot rendering uses actual templates with synthetic fixtures; see docs/demo/.
 
 The 2.0.4 checks cover every selected source target and shared dependency, unchanged-version drift, missing files, bad modes, unrelated component exclusion, actual Dashboard HTML versions, correct Firewall summary and overview/archive target consistency.

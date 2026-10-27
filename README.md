@@ -2,7 +2,7 @@
 
 **A package manager and monitoring dashboard for Keenetic routers running Entware.** Manage the firewall, WAN/PPP connectivity, traffic history, SMB backups, notifications and Entware maintenance from a consistent CLI and web interface.
 
-Current coordinated package: **2.0.10**; KeenTool manager: **2.0.8**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
+Current coordinated package: **2.0.11**; KeenTool manager: **2.0.9**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
 
 ![System Dashboard: firewall, traffic, connection and security summaries](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/dashboard.png)
 
@@ -10,7 +10,7 @@ Current coordinated package: **2.0.10**; KeenTool manager: **2.0.8**. The Main D
 
 | Component | Version | Purpose |
 |---|---:|---|
-| KeenTool manager | 2.0.8 | Installation, configuration, verified updates and maintenance |
+| KeenTool manager | 2.0.9 | Installation, configuration, verified updates and maintenance |
 | Main Dashboard | 2.0.4 | Shared overview and readable system/application logs |
 | [Firewall](https://github.com/mattheweli/keenetic-firewall) | 4.0.2 | IPv4/IPv6 filtering, blocklists, diagnostics and history |
 | [Connection Monitor](https://github.com/mattheweli/keenetic-pingtool) | 2.0.2 | Latency, jitter, packet loss and PPP event correlation |
@@ -45,6 +45,8 @@ On an existing supported installation:
 ```
 
 KeenTool's **Check all updates** lists each component independently. A tool's **Install / Update** checks its version, all owned files and shared dependencies against verified SHA-256 hashes and permissions. It reports missing/modified files even when the declared version is current. Review the proposed coordinated installation before confirming the archive download. Configuration, credentials, cron schedules and databases are preserved by the normal transaction-backed upgrade; the printed backup supports file rollback.
+
+Update output groups component versions, changed/missing files and wrapped release notes. During installation choose whether to keep a recovery backup. `--keep-backup` retains a manual rollback copy; `--no-backup` removes temporary recovery copies after success. Temporary rollback protection remains active while installing. Existing backups are untouched; unattended `--yes` runs keep recovery backups unless an explicit flag selects otherwise. These flags concern installation recovery, not SMB or SQLite-maintenance backups.
 
 For a new router or a legacy/alpha migration, follow the complete [installation guide](https://github.com/mattheweli/KeenTool/blob/main/suite/docs/INSTALL.md). Fresh-install web/logging adoption is explicit: review it before replacing an existing listener or logging pipeline. Use `/opt/bin/bash`, root and Entware mounted at `/opt`. Dependencies are checked before installation; `--install-deps` explicitly permits installing missing Entware packages. No general `opkg upgrade` is performed by the suite updater.
 

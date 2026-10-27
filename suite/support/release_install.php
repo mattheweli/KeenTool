@@ -1,7 +1,14 @@
 <?php
-// KeenTool release file transaction 1.0.1. CLI only; no database or firewall rewrites.
+// KeenTool release file transaction 1.0.2. CLI only; no database or firewall rewrites.
 if (PHP_SAPI !== 'cli') exit(1);
 umask(0077);
+
+function ktCliSection($title){echo "\n".$title."\n".str_repeat('-',min(78,strlen($title)))."\n";}
+function ktCliText($text,$prefix='  '){
+ $width=max(20,78-strlen($prefix));$wrapped=wordwrap((string)$text,$width,"\n",false);
+ echo $prefix.str_replace("\n","\n".str_repeat(' ',strlen($prefix)),$wrapped)."\n";
+}
+
 function rootpath($p){return rtrim(getenv('KT_INSTALL_ROOT')?:'','/').$p;}
 function checked($v,$message){if(!$v)throw new RuntimeException($message);return $v;}
 function regular($p){for($a=$p;$a!==dirname($a);$a=dirname($a))if(is_link($a))throw new RuntimeException('Symlink path rejected: '.$a);if(file_exists($p)&&!is_file($p))throw new RuntimeException('Regular file required: '.$p);}
@@ -65,6 +72,32 @@ function plan($base,$mode,$iface,$web,$logging){
  $init=[];foreach(['lighttpd','ulogd','vnstat'] as $service){$scripts=array_values(array_filter(glob(rootpath('/opt/etc/init.d/S*'.$service.'*')),fn($p)=>is_file($p)&&is_executable($p)&&!is_link($p)));if(($service==='lighttpd'&&$web)||($service==='ulogd'&&$captureChange)||($service==='vnstat'&&$mode==='fresh'))checked(count($scripts)===1,'Exactly one '.$service.' init script required');$init[$service]=$scripts[0]??null;}
  return ['mode'=>$mode,'base'=>$base,'items'=>$items,'web'=>$web,'capture_change'=>$captureChange,'init'=>$init,'root'=>rtrim(getenv('KT_INSTALL_ROOT')?:'','/')];
 }
+
+function showPlan($p){
+ $groups=['Install'=>[],'Update'=>[],'Permissions'=>[],'Matching'=>[]];
+ foreach($p['items'] as $path=>$item){
+  if(!file_exists($path))$kind='Install';
+  else{$expected=isset($item['source'])?hash_file('sha256',$item['source']):(isset($item['content'])?hash('sha256',$item['content']):null);
+   $kind=$expected===null||!is_readable($path)||@hash_file('sha256',$path)!==$expected?'Update':(((fileperms($path)&0777)!==$item['mode'])?'Permissions':'Matching');}
+  $groups[$kind][]=$path;
+ }
+ ktCliSection('Installation plan');echo 'Mode: '.$p['mode']."\n";
+ ktCliText(sprintf('Targets: %d | Install: %d | Update: %d | Permissions: %d | Matching: %d',count($p['items']),count($groups['Install']),count($groups['Update']),count($groups['Permissions']),count($groups['Matching'])));
+ foreach(['Install','Update','Permissions'] as $kind){if(!$groups[$kind])continue;ktCliSection($kind.' ('.count($groups[$kind]).')');foreach($groups[$kind] as $path)ktCliText($path,'  - ');}
+ if($groups['Matching'])ktCliText('Already matching: '.count($groups['Matching']).' targets (included in the coordinated transaction).');
+ ktCliSection('Configuration');ktCliText('HTTPS: '.($p['web']?'configure listener on 8080':'preserve existing listener'));
+ ktCliText('Existing credentials, databases and upgrade schedules are preserved.');
+}
+function removeRecoveryTree($path){
+ if(is_dir($path)&&!is_link($path)){foreach(new DirectoryIterator($path) as $item)if(!$item->isDot())removeRecoveryTree($item->getPathname());checked(rmdir($path),'Cannot remove temporary recovery directory');}
+ else checked(unlink($path),'Cannot remove temporary recovery file');
+}
+function discardRecovery($backup){
+ checked(is_dir($backup)&&!is_link($backup),'Temporary recovery directory required');$real=realpath($backup);$parent=realpath(rootpath('/opt/var/lib/keentool-release/transactions'));
+ checked($parent!==false&&dirname($real)===$parent&&preg_match('/^[0-9]{8}_[0-9]{6}-[0-9]+-[a-f0-9]{6}$/D',basename($real)),'Refusing to remove an unrelated backup');
+ $m=backupVerify($real);checked(($m['retain_backup']??true)===false,'Retained backups cannot be discarded automatically');removeRecoveryTree($real);
+}
+
 function ensureDir($path,&$dirs){if(is_dir($path))return;ensureDir(dirname($path),$dirs);checked(mkdir($path,0755),'Cannot create '.$path);$dirs[]=$path;}
 function putAtomic($path,$item,&$dirs){
  ensureDir(dirname($path),$dirs);$tmp=tempnam(dirname($path),'.kt-release-');checked($tmp!==false,'Cannot stage file');
@@ -93,6 +126,7 @@ function restore($backup){
 }
 try{
  $action=$argv[1]??'';
+ if($action==='discard'){discardRecovery($argv[2]);exit;}
  if($action==='rollback'){restore($argv[2]);exit;}
  if($action==='verify-backup'){backupVerify($argv[2]);exit;}
  if($action==='commit'){
@@ -102,8 +136,10 @@ try{
   exit;
  }
  $base=realpath($argv[2]??'');checked($base!==false,'Invalid package path');$p=plan($base,$argv[3]??'auto',$argv[4]??'',($argv[5]??'0')==='1',($argv[6]??'0')==='1');
- if($action==='plan'){echo 'Mode: '.$p['mode']."\n";foreach($p['items'] as $path=>$item)echo (file_exists($path)?'Replace: ':'Create: ').$path."\n";echo 'HTTPS configuration: '.($p['web']?'replace listener on 8080; preserve backup':'preserve existing listener')."\n";exit;}
- checked($action==='prepare','Unsupported transaction action');$backup=rootpath('/opt/var/backups/keentool-release/').date('Ymd_His').'-'.getmypid().'-'.bin2hex(random_bytes(3));checked(mkdir($backup.'/files',0700,true),'Cannot create backup');$p['before']=[];$p['created_dirs']=[];
+ if($action==='plan'){showPlan($p);exit;}
+ checked($action==='prepare','Unsupported transaction action');$policy=$argv[7]??'keep';checked(in_array($policy,['keep','discard'],true),'Invalid backup retention policy');
+ $p['retain_backup']=$policy==='keep';$parent=$p['retain_backup']?'/opt/var/backups/keentool-release/':'/opt/var/lib/keentool-release/transactions/';
+ $backup=rootpath($parent).date('Ymd_His').'-'.getmypid().'-'.bin2hex(random_bytes(3));checked(mkdir($backup.'/files',0700,true),'Cannot create recovery copies');$p['before']=[];$p['created_dirs']=[];
  foreach($p['items'] as $path=>$item){
   if(!file_exists($path)){$p['before'][$path]=null;continue;}
   $st=stat($path);$dest=$backup.'/files'.$path;if(!is_dir(dirname($dest)))checked(mkdir(dirname($dest),0700,true),'Cannot create backup directory');checked(copy($path,$dest),'Cannot back up file');$hash=hash_file('sha256',$path);checked(hash_file('sha256',$dest)===$hash,'Backup verification failed');$p['before'][$path]=['sha256'=>$hash,'mode'=>$st['mode']&0777,'uid'=>$st['uid'],'gid'=>$st['gid']];

@@ -1,9 +1,16 @@
 <?php
-// KeenTool release verification/extraction 1.0.3. CLI only; downloaded code is never evaluated here.
+// KeenTool release verification/extraction 1.0.4. CLI only; downloaded code is never evaluated here.
 if(PHP_SAPI!=='cli')exit(1);
 umask(0077);
 function requireValue($ok,$message){if(!$ok)throw new RuntimeException($message);}
 function stableVersion($s){return is_string($s)&&preg_match('/^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$/D',$s);}
+
+function ktCliSection($title){echo "\n".$title."\n".str_repeat('-',min(78,strlen($title)))."\n";}
+function ktCliText($text,$prefix='  '){
+ $width=max(20,78-strlen($prefix));$wrapped=wordwrap((string)$text,$width,"\n",false);
+ echo $prefix.str_replace("\n","\n".str_repeat(' ',strlen($prefix)),$wrapped)."\n";
+}
+
 function currentVersion($file,$legacy){
  $j=is_file($file)?json_decode((string)file_get_contents($file),true):null;
  if(is_array($j)&&stableVersion($j['version']??null))return $j['version'];
@@ -74,32 +81,40 @@ function overviewAudit($j,$scope,$root){
  if(isset($j['targets']))requireValue($checked>0,'No verification targets for selected component');
  return ['verified'=>isset($j['targets']),'checked'=>$checked,'issues'=>$issues];
 }
+
+function ktCliIssues($issues){
+ $groups=['Files to install'=>[],'Files to replace'=>[],'Permissions to correct'=>[],'Paths requiring review'=>[]];
+ foreach($issues as $issue){$reason=$issue['reason'];$group=$reason==='missing'?'Files to install':($reason==='permissions differ'?'Permissions to correct':($reason==='unexpected symbolic link'?'Paths requiring review':'Files to replace'));$groups[$group][]=$issue;}
+ foreach($groups as $title=>$rows){if(!$rows)continue;ktCliSection($title.' ('.count($rows).')');foreach($rows as $issue){ktCliText($issue['path'].': '.$issue['reason'],'  - ');ktCliText('(installed '.$issue['installed'].'; available '.$issue['available'].')','    ');}}
+}
+
 function overviewStatus($j,$installedFile,$legacy,$scope,$selectionOnly=false,$root=''){
  $installed=is_file($installedFile)?json_decode(file_get_contents($installedFile),true):[];$current=currentVersion($installedFile,$legacy);
  $names=['KeenTool','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'];if(isset($j['components']['Dashboard']))$names[]='Dashboard';
  requireValue($scope===''||in_array($scope,$names,true),'Unknown overview scope');$selected=false;$changed=[];$newerComponents=[];$audit=overviewAudit($j,$scope,$root);
+ if(!$selectionOnly){ktCliSection('Update overview');ktCliText('Installed package: '.$current.' | Published package: '.$j['version']);ktCliSection('Component versions');printf("%-20s %-12s %-12s %s\n",'Component','Installed','Available','Status');}
  foreach($names as $name){$local=$installed['components'][$name]??($name==='KeenTool'?$current:'unknown');
   if($name==='Dashboard')$local=fileVersion(rtrim($root,'/').'/opt/var/www/index.html');
   requireValue(is_string($local),'Invalid installed component version');$remote=$j['components'][$name];
   $known=stableVersion($local)||preg_match('/^[0-9]+\.[0-9]+\.[0-9]+a[0-9]+$/D',$local);if($known&&version_compare($local,$remote,'>'))$newerComponents[]=$name;
   $upgrade=!$known||newer($remote,$local);if($upgrade)$changed[]=$name.': '.$local.' -> '.$remote;
   if(($scope===''||$scope===$name)&&$upgrade)$selected=true;
-  if(!$selectionOnly&&($scope===''||$scope===$name))printf("%-20s installed %-12s available %-12s %s\n",$name,$local,$remote,$upgrade?'UPDATE AVAILABLE':($local===$remote?'VERSION CURRENT':'LOCAL VERSION NEWER'));
+  if(!$selectionOnly&&($scope===''||$scope===$name))printf("%-20s %-12s %-12s %s\n",$name,$local,$remote,$upgrade?'UPDATE AVAILABLE':($local===$remote?'VERSION CURRENT':'LOCAL VERSION NEWER'));
  }
  if($audit['issues'])$selected=true;
  if(version_compare($current,$j['version'],'>')||$newerComponents)$selected=false;
  if($selectionOnly){echo $selected?'1':'0';return;}
  if($audit['verified']){
   echo 'Files verified: '.$audit['checked'].'; differences: '.count($audit['issues']).".\n";
-  foreach($audit['issues'] as $issue)echo ' - '.$issue['path'].': '.$issue['reason'].' (installed '.$issue['installed'].'; available '.$issue['available'].")\n";
- }else echo "Installed files have not been verified: this older overview contains versions only.\n";
- if($newerComponents)echo 'Coordinated update blocked: newer installed components ('.implode(', ',$newerComponents)."). Downgrades are not permitted.\n";
+  ktCliIssues($audit['issues']);
+ }else ktCliText('Installed files have not been verified: this older overview contains versions only.');
+ if($newerComponents)ktCliText('Coordinated update blocked: newer installed components ('.implode(', ',$newerComponents).'). Downgrades are not permitted.');
  if(!$selected){echo $audit['verified']?"Selected component versions and files match, or a downgrade is blocked.\n":"No newer component version found; file verification is still required.\n";return;}
- echo "\nChanges in the coordinated installation:\n";foreach($changed as $line)echo ' - '.$line."\n";
- if($audit['issues'])echo ' - Repair '.count($audit['issues'])." missing, modified or incorrectly permissioned files in the selected scope.\n";
- echo 'Shared runtime and installer: coordinated suite '.$current.' -> '.$j['version'].".\n";
- echo "Installation applies the complete verified package, including unchanged components, to keep shared files compatible.\n";
- foreach($j['changes']??[] as $line)echo ' - '.$line."\n";
+ ktCliSection('Changes in the coordinated installation:');foreach($changed as $line)ktCliText($line,'  - ');
+ if($audit['issues'])ktCliText('Repair '.count($audit['issues']).' missing, modified or incorrectly permissioned files in the selected scope.','  - ');
+ ktCliText('Shared runtime and installer: coordinated suite '.$current.' -> '.$j['version'].'.');
+ ktCliText('Installation applies the complete verified package, including unchanged components, to keep shared files compatible.');
+ if($j['changes']??[]){ktCliSection('Release notes');foreach($j['changes'] as $i=>$line)ktCliText($line,sprintf('  %d. ',$i+1));}
 }
 function exactRead($stream,$size){$out='';while(strlen($out)<$size&&!feof($stream)){$v=fread($stream,$size-strlen($out));requireValue($v!==false,'Archive read failed');$out.=$v;}requireValue(strlen($out)===$size,'Truncated archive');return $out;}
 function octalNumber($s){$s=trim($s,"\0 ");requireValue($s===''||preg_match('/^[0-7]{1,12}$/D',$s),'Unsupported archive numeric field');return $s===''?0:octdec($s);}
@@ -150,6 +165,7 @@ function componentStatus($base,$installedFile,$component,$root){
  $candidate=json_decode(file_get_contents($base.'/RELEASE.json'),true,512,JSON_THROW_ON_ERROR);$installed=is_file($installedFile)?json_decode(file_get_contents($installedFile),true):[];
  $allowed=['','KeenTool','Dashboard','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'];requireValue(in_array($component,$allowed,true),'Unknown component');
  $remote=$candidate['components'][$component]??($component===''?$candidate['version']:null);$local=$installed['components'][$component]??'unknown';requireValue(stableVersion($remote),'Component version is missing from the verified release');
+ ktCliSection('Program file verification');
  if($component==='')echo 'Complete package: installed '.currentVersion($installedFile,'').' ; available '.$remote."\n";else echo $component.': installed '.$local.'; available '.$remote.' (coordinated suite '.$candidate['version'].")\n";
  // Independent script versions are not interchangeable with the repository/suite version.
  $files=$component==='keenetic-firewall'?['scripts/firewall_stats.sh','scripts/firewall_monitor','scripts/firewall_manager.sh','scripts/100-firewall.sh']:[];
@@ -161,10 +177,11 @@ function componentStatus($base,$installedFile,$component,$root){
   requireValue(preg_match('~^[A-Za-z0-9_./-]+$~D',$source)&&!in_array('..',explode('/',$source),true)&&str_starts_with($path,'/opt/')&&!in_array('..',explode('/',$path),true),'Unsafe installation path');
   requireValue(preg_match('/^[0-7]{3}$/D',$mode),'Invalid installation mode');$source=$base.'/'.$source;$path=rtrim($root,'/').$path;
   requireValue(is_file($source)&&!is_link($source),'Missing package target');
-  if(is_link($path)||!is_file($path)||!hash_equals(hash_file('sha256',$source),hash_file('sha256',$path))||((fileperms($path)&0777)!==octdec($mode)))$issues[]=$parts[1];
+  $reason=is_link($path)?'unexpected symbolic link':(!is_file($path)?'missing':(!is_readable($path)?'unreadable':(!hash_equals(hash_file('sha256',$source),hash_file('sha256',$path))?'content differs':(((fileperms($path)&0777)!==octdec($mode))?'permissions differ':null))));
+  if($reason!==null)$issues[]=['path'=>$parts[1],'reason'=>$reason,'installed'=>fileVersion($path),'available'=>fileVersion($source)];
  }
  if(!$issues)echo "All installed package files match the verified release.\n";
- else {echo count($issues)." package files are missing, different or have unexpected permissions; a complete verified reinstall will repair them.\n";foreach(array_slice($issues,0,8) as $path)echo ' - '.$path."\n";}
+ else {echo count($issues)." package files are missing, different or have unexpected permissions; a complete verified reinstall will repair them.\n";ktCliIssues($issues);}
 }
 try{
  $action=$argv[1]??'';

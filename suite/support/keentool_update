@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KeenTool remote release updater 1.0.4 — 2026-10-26.
+# KeenTool remote release updater 1.0.5 — 2026-10-27.
 set -Eeuo pipefail
 # Recover a deleted working directory before starting child processes.
 if ! builtin pwd -P >/dev/null 2>&1; then
@@ -7,9 +7,52 @@ if ! builtin pwd -P >/dev/null 2>&1; then
 fi
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 umask 077
-check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false
+check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false;backup_policy=ask
+kt_set_backup_policy() {
+    local requested=$1
+    [ "$backup_policy" = ask ] || [ "$backup_policy" = "$requested" ] || { echo 'Choose either --keep-backup or --no-backup' >&2; return 2; }
+    backup_policy=$requested
+}
+kt_choose_backup_policy() {
+    [ "$backup_policy" = ask ] || return 0
+    local answer backup_input=0 backup_tty_open=false
+    if [ -t 0 ]; then :
+    elif [ -t 2 ] && { exec {backup_input}</dev/tty; } 2>/dev/null; then backup_tty_open=true
+    else
+        backup_policy=keep
+        printf '%s\n' 'No interactive terminal: retaining the recovery backup.' 'Use --no-backup to remove recovery copies after a successful installation.' >&2
+        return 0
+    fi
+    printf '\n%s\n%s\n' 'Recovery backup' 'Temporary rollback protection remains active during installation.' >&2
+    while true; do
+        printf 'Keep a recovery backup after success? [y/N] ' >&2
+        if ! IFS= read -r answer <&"$backup_input"; then
+            [ "$backup_tty_open" != true ] || exec {backup_input}<&-
+            echo 'No backup choice received; installation cancelled.' >&2
+            return 1
+        fi
+        case "$answer" in
+            y|Y|yes|YES) backup_policy=keep;break ;;
+            ''|n|N|no|NO) backup_policy=discard;break ;;
+            *) echo 'Enter y or n.' >&2 ;;
+        esac
+    done
+    [ "$backup_tty_open" != true ] || exec {backup_input}<&-
+}
+
+kt_installer_backup_policy() {
+    local installer=$1
+    if grep -qF 'KT_INSTALL_BACKUP_RETENTION_V1' "$installer";then
+        if [ "$yes" = true ] && [ "$backup_policy" = ask ];then backup_policy=keep;fi
+        kt_choose_backup_policy
+    else
+        [ "$backup_policy" != discard ] || { echo 'This older installer cannot discard recovery copies; choose a newer package or --keep-backup.' >&2;return 1; }
+        backup_policy=keep
+    fi
+}
+
 while [ "$#" -gt 0 ];do
- case "$1" in --check)check=true;; --repair)repair=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--repair|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path]';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
+ case "$1" in --keep-backup)kt_set_backup_policy keep;; --no-backup)kt_set_backup_policy discard;; --check)check=true;; --repair)repair=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--repair|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path] [--keep-backup|--no-backup]';echo 'Backup options control retention after success; temporary rollback copies are always used.';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
 done
 case "$component" in ''|KeenTool|Dashboard|keenetic-firewall|keenetic-pingtool|Traffic_manager|SMB_Backup_tool);;*)echo 'Unknown suite component' >&2;exit 2;;esac
 [ "$check" != true ] || [ "$install_deps" != true ] || { echo '--install-deps cannot be used with --check' >&2;exit 2; }
@@ -19,6 +62,8 @@ if [ -n "$local_package" ];then
  (cd "$local_package" && sha256sum -c CHECKSUMS.sha256) >/dev/null
  [ "$check" != true ] || { "$bash_bin" "$local_package/install.sh" --plan --mode upgrade;exit; }
  local_args=();[ "$install_deps" != true ] || local_args=(--install-deps)
+ kt_installer_backup_policy "$local_package/install.sh"
+ export KT_INSTALL_BACKUP_POLICY=$backup_policy
  exec "$bash_bin" "$local_package/install.sh" --apply --mode upgrade "${local_args[@]}"
 fi
 helper=${KT_UPDATE_HELPER:-/opt/lib/keentool/release_update.php}
@@ -102,12 +147,13 @@ if [ -r "$work/package/support/dependencies.sh" ];then
 fi
 [ "${KT_UPDATE_BOOTSTRAP:-false}" != true ] || echo 'Bootstrap verified. Existing public/alpha installation will use the same migration installer.'
 "$bash_bin" "$work/package/install.sh" --plan --mode upgrade
+kt_installer_backup_policy "$work/package/install.sh"
 child=''
 cancel(){ trap - INT TERM;[ -z "$child" ] || { kill -TERM "$child" 2>/dev/null || :;wait "$child" || :; };exit 143; }
 trap cancel INT TERM
-"$bash_bin" "$work/package/install.sh" --apply --mode upgrade & child=$!
+KT_INSTALL_PLAN_REVIEWED=1 KT_INSTALL_BACKUP_POLICY=$backup_policy "$bash_bin" "$work/package/install.sh" --apply --mode upgrade & child=$!
 wait "$child";child=''
 trap - INT TERM
 rm -f "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}"
 if [ -n "${KT_UPDATE_RECEIPT:-}" ];then "$php_cli" "$helper" flag "$KT_UPDATE_RECEIPT" "$version";fi
-echo 'Verified GitHub release installed. Review the installer backup path and refresh generated pages.'
+echo 'Verified GitHub release installed. Review the recovery-backup result above and refresh generated pages.'
