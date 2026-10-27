@@ -1,6 +1,6 @@
 #!/opt/bin/bash
-# KEENTOOL MANAGER v2.0.8
-# Release: 2026-10-26 | Stable. See CHANGELOG.md for release details.
+# KEENTOOL MANAGER v2.0.9
+# Release: 2026-10-27 | Stable. See CHANGELOG.md for release details.
 
 # Recover a deleted working directory before starting child processes.
 if ! builtin pwd -P >/dev/null 2>&1; then
@@ -35,7 +35,7 @@ kt_runtime_ready() {
  [ -r "${KT_UPDATE_HELPER:-/opt/lib/keentool/release_update.php}" ]
 }
 kt_embedded_bootstrap() {
-# KeenTool stable bootstrap 1.0.4. Downloaded over trusted GitHub HTTPS; verify its source before running.
+# KeenTool stable bootstrap 1.0.5. Downloaded over trusted GitHub HTTPS; verify its source before running.
 set -Eeuo pipefail
 umask 077
 # Recover a deleted working directory before starting child processes.
@@ -175,11 +175,18 @@ kt_dep_ensure() {
 KT_BOOTSTRAP_DEPS
 cat > "$work/release_update.php" <<'KT_BOOTSTRAP_PHP'
 <?php
-// KeenTool release verification/extraction 1.0.3. CLI only; downloaded code is never evaluated here.
+// KeenTool release verification/extraction 1.0.4. CLI only; downloaded code is never evaluated here.
 if(PHP_SAPI!=='cli')exit(1);
 umask(0077);
 function requireValue($ok,$message){if(!$ok)throw new RuntimeException($message);}
 function stableVersion($s){return is_string($s)&&preg_match('/^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$/D',$s);}
+
+function ktCliSection($title){echo "\n".$title."\n".str_repeat('-',min(78,strlen($title)))."\n";}
+function ktCliText($text,$prefix='  '){
+ $width=max(20,78-strlen($prefix));$wrapped=wordwrap((string)$text,$width,"\n",false);
+ echo $prefix.str_replace("\n","\n".str_repeat(' ',strlen($prefix)),$wrapped)."\n";
+}
+
 function currentVersion($file,$legacy){
  $j=is_file($file)?json_decode((string)file_get_contents($file),true):null;
  if(is_array($j)&&stableVersion($j['version']??null))return $j['version'];
@@ -250,32 +257,40 @@ function overviewAudit($j,$scope,$root){
  if(isset($j['targets']))requireValue($checked>0,'No verification targets for selected component');
  return ['verified'=>isset($j['targets']),'checked'=>$checked,'issues'=>$issues];
 }
+
+function ktCliIssues($issues){
+ $groups=['Files to install'=>[],'Files to replace'=>[],'Permissions to correct'=>[],'Paths requiring review'=>[]];
+ foreach($issues as $issue){$reason=$issue['reason'];$group=$reason==='missing'?'Files to install':($reason==='permissions differ'?'Permissions to correct':($reason==='unexpected symbolic link'?'Paths requiring review':'Files to replace'));$groups[$group][]=$issue;}
+ foreach($groups as $title=>$rows){if(!$rows)continue;ktCliSection($title.' ('.count($rows).')');foreach($rows as $issue){ktCliText($issue['path'].': '.$issue['reason'],'  - ');ktCliText('(installed '.$issue['installed'].'; available '.$issue['available'].')','    ');}}
+}
+
 function overviewStatus($j,$installedFile,$legacy,$scope,$selectionOnly=false,$root=''){
  $installed=is_file($installedFile)?json_decode(file_get_contents($installedFile),true):[];$current=currentVersion($installedFile,$legacy);
  $names=['KeenTool','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'];if(isset($j['components']['Dashboard']))$names[]='Dashboard';
  requireValue($scope===''||in_array($scope,$names,true),'Unknown overview scope');$selected=false;$changed=[];$newerComponents=[];$audit=overviewAudit($j,$scope,$root);
+ if(!$selectionOnly){ktCliSection('Update overview');ktCliText('Installed package: '.$current.' | Published package: '.$j['version']);ktCliSection('Component versions');printf("%-20s %-12s %-12s %s\n",'Component','Installed','Available','Status');}
  foreach($names as $name){$local=$installed['components'][$name]??($name==='KeenTool'?$current:'unknown');
   if($name==='Dashboard')$local=fileVersion(rtrim($root,'/').'/opt/var/www/index.html');
   requireValue(is_string($local),'Invalid installed component version');$remote=$j['components'][$name];
   $known=stableVersion($local)||preg_match('/^[0-9]+\.[0-9]+\.[0-9]+a[0-9]+$/D',$local);if($known&&version_compare($local,$remote,'>'))$newerComponents[]=$name;
   $upgrade=!$known||newer($remote,$local);if($upgrade)$changed[]=$name.': '.$local.' -> '.$remote;
   if(($scope===''||$scope===$name)&&$upgrade)$selected=true;
-  if(!$selectionOnly&&($scope===''||$scope===$name))printf("%-20s installed %-12s available %-12s %s\n",$name,$local,$remote,$upgrade?'UPDATE AVAILABLE':($local===$remote?'VERSION CURRENT':'LOCAL VERSION NEWER'));
+  if(!$selectionOnly&&($scope===''||$scope===$name))printf("%-20s %-12s %-12s %s\n",$name,$local,$remote,$upgrade?'UPDATE AVAILABLE':($local===$remote?'VERSION CURRENT':'LOCAL VERSION NEWER'));
  }
  if($audit['issues'])$selected=true;
  if(version_compare($current,$j['version'],'>')||$newerComponents)$selected=false;
  if($selectionOnly){echo $selected?'1':'0';return;}
  if($audit['verified']){
   echo 'Files verified: '.$audit['checked'].'; differences: '.count($audit['issues']).".\n";
-  foreach($audit['issues'] as $issue)echo ' - '.$issue['path'].': '.$issue['reason'].' (installed '.$issue['installed'].'; available '.$issue['available'].")\n";
+  ktCliIssues($audit['issues']);
  }else echo "Installed files have not been verified: this older overview contains versions only.\n";
  if($newerComponents)echo 'Coordinated update blocked: newer installed components ('.implode(', ',$newerComponents)."). Downgrades are not permitted.\n";
  if(!$selected){echo $audit['verified']?"Selected component versions and files match, or a downgrade is blocked.\n":"No newer component version found; file verification is still required.\n";return;}
- echo "\nChanges in the coordinated installation:\n";foreach($changed as $line)echo ' - '.$line."\n";
+ ktCliSection('Changes in the coordinated installation:');foreach($changed as $line)ktCliText($line,'  - ');
  if($audit['issues'])echo ' - Repair '.count($audit['issues'])." missing, modified or incorrectly permissioned files in the selected scope.\n";
  echo 'Shared runtime and installer: coordinated suite '.$current.' -> '.$j['version'].".\n";
  echo "Installation applies the complete verified package, including unchanged components, to keep shared files compatible.\n";
- foreach($j['changes']??[] as $line)echo ' - '.$line."\n";
+ if($j['changes']??[]){ktCliSection('Release notes');foreach($j['changes'] as $i=>$line)ktCliText($line,sprintf('  %d. ',$i+1));}
 }
 function exactRead($stream,$size){$out='';while(strlen($out)<$size&&!feof($stream)){$v=fread($stream,$size-strlen($out));requireValue($v!==false,'Archive read failed');$out.=$v;}requireValue(strlen($out)===$size,'Truncated archive');return $out;}
 function octalNumber($s){$s=trim($s,"\0 ");requireValue($s===''||preg_match('/^[0-7]{1,12}$/D',$s),'Unsupported archive numeric field');return $s===''?0:octdec($s);}
@@ -326,6 +341,7 @@ function componentStatus($base,$installedFile,$component,$root){
  $candidate=json_decode(file_get_contents($base.'/RELEASE.json'),true,512,JSON_THROW_ON_ERROR);$installed=is_file($installedFile)?json_decode(file_get_contents($installedFile),true):[];
  $allowed=['','KeenTool','Dashboard','keenetic-firewall','keenetic-pingtool','Traffic_manager','SMB_Backup_tool'];requireValue(in_array($component,$allowed,true),'Unknown component');
  $remote=$candidate['components'][$component]??($component===''?$candidate['version']:null);$local=$installed['components'][$component]??'unknown';requireValue(stableVersion($remote),'Component version is missing from the verified release');
+ ktCliSection('Program file verification');
  if($component==='')echo 'Complete package: installed '.currentVersion($installedFile,'').' ; available '.$remote."\n";else echo $component.': installed '.$local.'; available '.$remote.' (coordinated suite '.$candidate['version'].")\n";
  // Independent script versions are not interchangeable with the repository/suite version.
  $files=$component==='keenetic-firewall'?['scripts/firewall_stats.sh','scripts/firewall_monitor','scripts/firewall_manager.sh','scripts/100-firewall.sh']:[];
@@ -337,10 +353,11 @@ function componentStatus($base,$installedFile,$component,$root){
   requireValue(preg_match('~^[A-Za-z0-9_./-]+$~D',$source)&&!in_array('..',explode('/',$source),true)&&str_starts_with($path,'/opt/')&&!in_array('..',explode('/',$path),true),'Unsafe installation path');
   requireValue(preg_match('/^[0-7]{3}$/D',$mode),'Invalid installation mode');$source=$base.'/'.$source;$path=rtrim($root,'/').$path;
   requireValue(is_file($source)&&!is_link($source),'Missing package target');
-  if(is_link($path)||!is_file($path)||!hash_equals(hash_file('sha256',$source),hash_file('sha256',$path))||((fileperms($path)&0777)!==octdec($mode)))$issues[]=$parts[1];
+  $reason=is_link($path)?'unexpected symbolic link':(!is_file($path)?'missing':(!is_readable($path)?'unreadable':(!hash_equals(hash_file('sha256',$source),hash_file('sha256',$path))?'content differs':(((fileperms($path)&0777)!==octdec($mode))?'permissions differ':null))));
+  if($reason!==null)$issues[]=['path'=>$parts[1],'reason'=>$reason,'installed'=>fileVersion($path),'available'=>fileVersion($source)];
  }
  if(!$issues)echo "All installed package files match the verified release.\n";
- else {echo count($issues)." package files are missing, different or have unexpected permissions; a complete verified reinstall will repair them.\n";foreach(array_slice($issues,0,8) as $path)echo ' - '.$path."\n";}
+ else {echo count($issues)." package files are missing, different or have unexpected permissions; a complete verified reinstall will repair them.\n";ktCliIssues($issues);}
 }
 try{
  $action=$argv[1]??'';
@@ -371,7 +388,7 @@ try{
 KT_BOOTSTRAP_PHP
 cat > "$work/keentool_update" <<'KT_BOOTSTRAP_SH'
 #!/opt/bin/bash
-# KeenTool remote release updater 1.0.4 — 2026-10-26.
+# KeenTool remote release updater 1.0.5 — 2026-10-27.
 set -Eeuo pipefail
 # Recover a deleted working directory before starting child processes.
 if ! builtin pwd -P >/dev/null 2>&1; then
@@ -379,9 +396,52 @@ if ! builtin pwd -P >/dev/null 2>&1; then
 fi
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 umask 077
-check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false
+check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false;backup_policy=ask
+kt_set_backup_policy() {
+    local requested=$1
+    [ "$backup_policy" = ask ] || [ "$backup_policy" = "$requested" ] || { echo 'Choose either --keep-backup or --no-backup' >&2; return 2; }
+    backup_policy=$requested
+}
+kt_choose_backup_policy() {
+    [ "$backup_policy" = ask ] || return 0
+    local answer backup_input=0 backup_tty_open=false
+    if [ -t 0 ]; then :
+    elif [ -t 2 ] && { exec {backup_input}</dev/tty; } 2>/dev/null; then backup_tty_open=true
+    else
+        backup_policy=keep
+        printf '%s\n' 'No interactive terminal: retaining the recovery backup.' 'Use --no-backup to remove recovery copies after a successful installation.' >&2
+        return 0
+    fi
+    printf '\n%s\n%s\n' 'Recovery backup' 'Temporary rollback protection remains active during installation.' >&2
+    while true; do
+        printf 'Keep a recovery backup after success? [y/N] ' >&2
+        if ! IFS= read -r answer <&"$backup_input"; then
+            [ "$backup_tty_open" != true ] || exec {backup_input}<&-
+            echo 'No backup choice received; installation cancelled.' >&2
+            return 1
+        fi
+        case "$answer" in
+            y|Y|yes|YES) backup_policy=keep;break ;;
+            ''|n|N|no|NO) backup_policy=discard;break ;;
+            *) echo 'Enter y or n.' >&2 ;;
+        esac
+    done
+    [ "$backup_tty_open" != true ] || exec {backup_input}<&-
+}
+
+kt_installer_backup_policy() {
+    local installer=$1
+    if grep -qF 'KT_INSTALL_BACKUP_RETENTION_V1' "$installer";then
+        if [ "$yes" = true ] && [ "$backup_policy" = ask ];then backup_policy=keep;fi
+        kt_choose_backup_policy
+    else
+        [ "$backup_policy" != discard ] || { echo 'This older installer cannot discard recovery copies; choose a newer package or --keep-backup.' >&2;return 1; }
+        backup_policy=keep
+    fi
+}
+
 while [ "$#" -gt 0 ];do
- case "$1" in --check)check=true;; --repair)repair=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--repair|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path]';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
+ case "$1" in --keep-backup)kt_set_backup_policy keep;; --no-backup)kt_set_backup_policy discard;; --check)check=true;; --repair)repair=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--repair|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path] [--keep-backup|--no-backup]';echo 'Backup options control retention after success; temporary rollback copies are always used.';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
 done
 case "$component" in ''|KeenTool|Dashboard|keenetic-firewall|keenetic-pingtool|Traffic_manager|SMB_Backup_tool);;*)echo 'Unknown suite component' >&2;exit 2;;esac
 [ "$check" != true ] || [ "$install_deps" != true ] || { echo '--install-deps cannot be used with --check' >&2;exit 2; }
@@ -391,6 +451,8 @@ if [ -n "$local_package" ];then
  (cd "$local_package" && sha256sum -c CHECKSUMS.sha256) >/dev/null
  [ "$check" != true ] || { "$bash_bin" "$local_package/install.sh" --plan --mode upgrade;exit; }
  local_args=();[ "$install_deps" != true ] || local_args=(--install-deps)
+ kt_installer_backup_policy "$local_package/install.sh"
+ export KT_INSTALL_BACKUP_POLICY=$backup_policy
  exec "$bash_bin" "$local_package/install.sh" --apply --mode upgrade "${local_args[@]}"
 fi
 helper=${KT_UPDATE_HELPER:-/opt/lib/keentool/release_update.php}
@@ -474,15 +536,16 @@ if [ -r "$work/package/support/dependencies.sh" ];then
 fi
 [ "${KT_UPDATE_BOOTSTRAP:-false}" != true ] || echo 'Bootstrap verified. Existing public/alpha installation will use the same migration installer.'
 "$bash_bin" "$work/package/install.sh" --plan --mode upgrade
+kt_installer_backup_policy "$work/package/install.sh"
 child=''
 cancel(){ trap - INT TERM;[ -z "$child" ] || { kill -TERM "$child" 2>/dev/null || :;wait "$child" || :; };exit 143; }
 trap cancel INT TERM
-"$bash_bin" "$work/package/install.sh" --apply --mode upgrade & child=$!
+KT_INSTALL_PLAN_REVIEWED=1 KT_INSTALL_BACKUP_POLICY=$backup_policy "$bash_bin" "$work/package/install.sh" --apply --mode upgrade & child=$!
 wait "$child";child=''
 trap - INT TERM
 rm -f "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}"
 if [ -n "${KT_UPDATE_RECEIPT:-}" ];then "$php_cli" "$helper" flag "$KT_UPDATE_RECEIPT" "$version";fi
-echo 'Verified GitHub release installed. Review the installer backup path and refresh generated pages.'
+echo 'Verified GitHub release installed. Review the recovery-backup result above and refresh generated pages.'
 
 KT_BOOTSTRAP_SH
 KT_UPDATE_BOOTSTRAP=true KT_DEPENDENCIES="$work/dependencies.sh" KT_UPDATE_HELPER="$work/release_update.php" "${KT_UPDATE_BASH:-/opt/bin/bash}" "$work/keentool_update" --reinstall "$@" <&0 & child=$!
@@ -520,7 +583,7 @@ if ! kt_runtime_ready;then
  exit 0
 fi
 # END GENERATED LEGACY MIGRATION
-# KeenTool 2.0.8
+# KeenTool 2.0.9
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 # Shared runtime and components are updated together through verified release packages.
 KT_MANAGED_PACKAGE=true
@@ -602,7 +665,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.8  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.9  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -1129,7 +1192,7 @@ EOF
 }
 
 doctor() {
-    echo 'KeenTool v2.0.8'
+    echo 'KeenTool v2.0.9'
     for cmd in bash curl sqlite3 ipset iptables smbclient vnstat tar timeout sha256sum; do
         command -v "$cmd" >/dev/null && printf 'OK %s\n' "$cmd" || printf 'MISSING %s\n' "$cmd"
     done

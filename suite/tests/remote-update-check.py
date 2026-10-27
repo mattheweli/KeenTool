@@ -151,8 +151,18 @@ sys.exit(0 if code=='200' else 22)
  assert r.returncode==0 and 'differences: 3' in r.stdout and 'permissions differ' in r.stdout and 'shared.js' in r.stdout and 'traffic.sh' not in r.stdout and len(urls())==2,r.stdout+r.stderr
  # Dashboard uses its real HTML version, separate from both manager and stale record.
  dashboard=router/'opt/var/www/index.html';dashboard.write_text('<!-- KeenTool Dashboard v2.0.2 -->\n');reset_calls();r=run('--component','Dashboard','--check')
- assert r.returncode==0 and 'Dashboard' in r.stdout and 'installed 2.0.2' in r.stdout and 'available 2.0.3' in r.stdout and 'firewall_monitor' not in r.stdout and 'KeenTool: 2.0.0' not in r.stdout and len(urls())==2,r.stdout+r.stderr
+ assert r.returncode==0 and 'Dashboard' in r.stdout and re.search(r'Dashboard\s+2\.0\.2\s+2\.0\.3\s+UPDATE AVAILABLE',r.stdout) and 'firewall_monitor' not in r.stdout and 'KeenTool: 2.0.0' not in r.stdout and len(urls())==2,r.stdout+r.stderr
  # An inconsistent overview target hash cannot be used for an installation.
  j=json.loads(overview.read_text());j['targets'][0]['sha256']='0'*64;overview.write_text(json.dumps(j));publish_overview();r=run('--component','keenetic-firewall','--yes')
  assert r.returncode!=0 and 'Overview installation target mismatch' in r.stderr and not capture.exists(),r.stdout+r.stderr
+ # New-capability installers receive explicit retention without changing legacy argv.
+ overview.write_text(json.dumps({**candidate,'targets':targets,'changes':['Verified retention policy.']}));publish_overview()
+ r=run('--component','keenetic-firewall','--yes','--no-backup');assert r.returncode!=0 and 'older installer cannot discard' in r.stderr and not capture.exists(),r.stdout+r.stderr
+ policy=b/'backup-policy';env['KT_TEST_POLICY']=str(policy)
+ (payload/'install.sh').write_text('#!/bin/bash\n# KT_INSTALL_BACKUP_RETENTION_V1\nprintf "%s\\n" "$*" >> "$KT_TEST_INSTALL"\nif [ "$1" = --apply ];then printf "%s" "$KT_INSTALL_BACKUP_POLICY" > "$KT_TEST_POLICY";fi\n')
+ checksums();pack();publish_overview()
+ for option,expected in [('--keep-backup','keep'),('--no-backup','discard')]:
+  r=run('--component','keenetic-firewall','--yes',option);assert r.returncode==0 and policy.read_text()==expected,r.stdout+r.stderr
+  assert capture.read_text().splitlines()==['--plan --mode upgrade','--apply --mode upgrade'];capture.unlink();policy.unlink()
+ r=run('--component','keenetic-firewall','--check','--no-backup');assert r.returncode==0 and not capture.exists() and not policy.exists(),r.stdout+r.stderr
 print('PASS: real remote updater, stable-only GitHub metadata/URLs/digests, check versus apply, no downgrade, alpha/public version detection, HTTPS-only curl, 404/403 handling, tar/PAX streaming verification, traversal/symlink/internal checksum rejection, atomic flag and staging cleanup; independent component/all-version overviews, no archive before consent, interactive decline, explicit repair separation, overview digests and archive consistency; GitHub/installer mocked, scoped target/mode verification, stale same-version scripts, shared and unrelated files, independent Dashboard HTML version and target manifest consistency; no network or router writes.')

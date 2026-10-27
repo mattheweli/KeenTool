@@ -105,6 +105,34 @@ with tempfile.TemporaryDirectory() as td:
  r=call(env,'--apply');assert r.returncode!=0,r.stdout+r.stderr
  assert (alpha/'opt/bin/keentool').read_text()=='# previous manager\n' and (alpha/'opt/etc/pingtool.conf').read_text()=='WAN_LABEL="ppp0"\nMAX_DISPLAY_POINTS=7000\n'
  assert not (alpha/'opt/etc/keentool/maintenance').exists() and not (alpha/'opt/lib/keentool/render_cache.sh').exists()
+ # Retention is independent of transaction safety; old archives are never removed.
+ temporary,env=fixture('temporary',True)
+ old=temporary/'opt/var/backups/keentool-release/previous';old.mkdir(parents=True);(old/'keep.txt').write_text('existing archive')
+ before_db=(temporary/'opt/etc/firewall_stats.db').read_bytes();before_cron=(temporary/'opt/etc/crontab').read_bytes()
+ r=call(env,'--plan','--no-backup');assert r.returncode==0 and 'Installation plan' in r.stdout and 'Install (' in r.stdout and 'Update (' in r.stdout and 'Recovery backup' not in r.stdout,r.stdout+r.stderr
+ assert not (temporary/'opt/var/lib/keentool-release/transactions').exists()
+ r=call(env,'--apply','--no-backup');assert r.returncode==0 and 'No new permanent backup retained' in r.stdout,r.stdout+r.stderr
+ transactions=temporary/'opt/var/lib/keentool-release/transactions';assert list(transactions.iterdir())==[]
+ assert list(old.parent.iterdir())==[old] and (old/'keep.txt').read_text()=='existing archive'
+ assert (temporary/'opt/etc/firewall_stats.db').read_bytes()==before_db and (temporary/'opt/etc/crontab').read_bytes()==before_cron
+ r=call(env,'--plan');assert r.returncode==0 and 'Already matching:' in r.stdout,r.stdout+r.stderr
+ engine=pkg/'support/release_install.php'
+ def engine_call(env,*args):return subprocess.run([str(php),'-n',str(engine),*map(str,args)],env=env,capture_output=True,text=True)
+ r=engine_call(env,'discard',old);assert r.returncode!=0 and old.exists()
+ pending,penv=fixture('pending',True)
+ r=engine_call(penv,'prepare',pkg,'upgrade','','0','0','discard');assert r.returncode==0,r.stderr
+ recovery=Path(r.stdout);outside=b/'outside-directory';outside.mkdir();(outside/'keep.txt').write_text('external')
+ (recovery/'external-link').symlink_to(outside,target_is_directory=True)
+ r=engine_call(penv,'discard',recovery);assert r.returncode==0 and not recovery.exists() and (outside/'keep.txt').read_text()=='external',r.stderr
+ failed,env=fixture('temporary-failed',True);env['KT_TEST_FAIL']='keentool_security_service start'
+ r=call(env,'--apply','--no-backup');assert r.returncode!=0 and (failed/'opt/bin/keentool').read_text()=='# previous manager\n',r.stdout+r.stderr
+ assert list((failed/'opt/var/lib/keentool-release/transactions').iterdir())==[]
+ # If rollback cannot finish, recovery copies survive regardless of retention choice.
+ blocked,env=fixture('rollback-blocked',True)
+ runner=Path(env['KT_INSTALL_TEST_SERVICE']);runner.write_text('#!/bin/bash\nif [[ "$1 $2" = *"keentool_security_service start"* ]];then touch "$KT_TEST_EVENTS.failed";exit 1;fi\nif [ -f "$KT_TEST_EVENTS.failed" ] && [ "$2" = stop ];then exit 1;fi\n[ "$2" != status ]\n')
+ r=call(env,'--apply','--no-backup');assert r.returncode!=0 and 'recovery copies retained' in r.stderr,r.stdout+r.stderr
+ retained=list((blocked/'opt/var/lib/keentool-release/transactions').iterdir());assert len(retained)==1 and (retained[0]/'transaction.json').exists()
+ print('PASS: grouped plan, explicit retention, successful transaction/rollback cleanup, old archives/data preserved, failed restore retained, constrained symlink-safe cleanup.')
  # Symlink refusal and corrupt-backup verification happen before replacement.
  symlink,env=fixture('symlink',True);(symlink/'opt/bin/keentool').unlink();(symlink/'opt/bin/keentool').symlink_to(symlink/'outside')
  r=call(env,'--plan');assert r.returncode!=0 and 'Symlink' in r.stderr
