@@ -1,14 +1,13 @@
-# KeenTool coordinated package 2.0.9
+# KeenTool coordinated package 2.0.10
 
-## KeenTool manager 2.0.8 / coordinated package 2.0.9 — 2026-10-26
+## Coordinated package 2.0.10 — 2026-10-27
 
-- Remove the redundant main-menu `s. Update Keentool (Self)` entry, its interactive single-manager replacement path and its self-only flag display. Use `u. Check / install updates (KeenTool and tools)` to review all components and shared file differences, then confirm the coordinated installation. Keep explicit repair (`r`), component submenus, existing headless notification/check commands and scheduled jobs compatible.
-- Recover from a deleted current working directory using Bash builtins before manager startup, menu redraws/update handoff and updater/bootstrap child processes. Preserve a valid current directory. An already-started parent shell/interpreter may emit its initial warning before script code runs; `cd /` before invoking the command repairs that existing shell immediately.
-- Shared web-isolation helper 1.0.1: do not invoke awk on a missing legacy `permissions.tsv` file. Keep the warning that original permission rollback is unavailable; do not invent old metadata, create a fake ledger or replace active web configuration.
-- Add isolated regressions for deleted directories, update restart/decline/error handling, a unified menu, generated bootstrap parity and missing permission ledgers with rollback refused safely.
+- Install the existing `support/render_cache.sh` library as `/opt/lib/keentool/render_cache.sh` with mode 0644. It was present in the source archive but omitted from INSTALL.tsv, so a clean installation could fail firewall statistics generation with a missing-library/undefined-function error.
+- Include that target in FILE_SCOPES.json as a firewall-owned dependency. The verified release overview now tracks its hash and permissions, so global and firewall-scoped checks detect a missing or modified library even when component versions are current. A coordinated update or explicit repair reinstalls it.
+- Extend isolated installation regressions: fresh installation loads the installed library through the actual firewall cache-generation block, generates the real SQLite cache files and preserves the input database. Check missing-library detection, same-version repair, migration/upgrade installation and rollback removal of the newly introduced target.
 
-The manager advances to **2.0.8** because its behavior changes; the verified package advances to **2.0.9**. The updater/bootstrap advance to 1.0.4. All other component versions and configuration, credentials, schedules, databases and firewall rules are preserved. An update transcript ending in `stable installed` and `Verified GitHub release installed` represents a completed installation even when these historical environment/backup warnings were printed.
+This is a packaging correction. Manager **2.0.8**, Firewall suite **4.0.2**, Stats **4.0.1**, Pingtool **2.0.2**, Traffic/SMB **2.0.1**, Dashboard **2.0.4** and installer **1.0.2** keep their versions and runtime source bytes. Settings, credentials, cron schedules, database contents and firewall rules are unchanged. The separate cron-daemon health question is not inferred from the presence of scheduled jobs.
 
-## Update
+## Update and verify
 
-From an existing shell, first run `cd /`, then `/opt/bin/bash /opt/bin/keentool --update`. In the updated menu, use **u** to review and confirm updates. Existing settings, credentials, cron and databases remain preserved. Missing historical web-isolation permission records cannot be reconstructed by this patch; the warning remains accurate and permission rollback stays unavailable for that old backup. Automated validation uses isolated fixtures, not a live router.
+Run `cd /`, then `/opt/bin/bash /opt/bin/keentool --update`. The update may show all component versions as current while reporting the missing render_cache.sh dependency; confirm that coordinated repair. Then run `/opt/bin/bash /opt/bin/firewall_stats.sh force` to regenerate the dashboard. The manager still identifies itself as 2.0.8. Existing settings, credentials, jobs and databases are preserved. Automated validation uses isolated fixtures and mocked router/service commands, not a live router.

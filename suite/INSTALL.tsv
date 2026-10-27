@@ -20,6 +20,7 @@ support/set_password.php	/opt/lib/keentool-admin/set_password.php	644
 support/firewall_admin_password	/opt/bin/firewall_admin_password	755
 support/entware_manager	/opt/bin/entware_manager	755
 support/common.sh	/opt/lib/keentool/common.sh	644
+support/render_cache.sh	/opt/lib/keentool/render_cache.sh	644
 support/firewall_state.sh	/opt/lib/keentool/firewall_state.sh	644
 assets/keentool-ui.css	/opt/var/www/assets/keentool-ui.css	644
 assets/keentool-ui.js	/opt/var/www/assets/keentool-ui.js	644

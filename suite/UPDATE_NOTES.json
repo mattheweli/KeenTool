@@ -1,7 +1,7 @@
 {
   "changes": [
-    "KeenTool manager 2.0.8 removes the redundant s menu entry; u reviews and confirms all coordinated updates.",
-    "Manager/updater/bootstrap recover deleted working directories before launching child commands.",
-    "Missing legacy web permission ledgers retain an accurate warning without an extra awk error; no old permissions are guessed."
+    "Install the existing firewall render_cache.sh dependency that was omitted from previous installation manifests.",
+    "Global/firewall file verification now detects a missing, modified or incorrectly permissioned render-cache library and offers coordinated repair.",
+    "Packaging-only correction: manager and tool versions, settings, schedules and databases remain unchanged."
   ]
 }
