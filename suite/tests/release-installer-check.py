@@ -1,6 +1,6 @@
 """Exercise production release installation transactions in an isolated Entware root."""
 from pathlib import Path
-import tempfile,subprocess,os,shutil,hashlib,json,stat
+import tempfile,subprocess,os,shutil,hashlib,json,stat,sqlite3,time
 src=Path(__file__).resolve().parents[1]
 php=Path('/tmp/keentool-security-runtime/root/usr/bin/php8.3')
 with tempfile.TemporaryDirectory() as td:
@@ -43,25 +43,68 @@ with tempfile.TemporaryDirectory() as td:
  assert (fresh/'opt/etc/crontab').read_text().count('/opt/bin/pingtool.sh')==1
  assert '--add -i ppp0' in (fresh/'vnstat-commands').read_text()
  assert (fresh/'opt/lib/keentool/common.sh').exists() and not (fresh/'opt/lib/keentool-test').exists()
- r=subprocess.run(['bash',str(backup(fresh)/'rollback.sh'),str(backup(fresh))],env=env,capture_output=True,text=True);assert r.returncode==0,r.stdout+r.stderr
- assert not (fresh/'opt/bin/keentool').exists() and not (fresh/'opt/etc/crontab').exists()
+ fresh_backup=backup(fresh)
+ # Reproduce the reported missing dependency using installed paths, never source overrides.
+ render=fresh/'opt/lib/keentool/render_cache.sh'
+ assert render.is_file() and render.read_bytes()==(pkg/'support/render_cache.sh').read_bytes()
+ assert render.stat().st_mode&0o777==0o644
+ scopes=json.loads((pkg/'FILE_SCOPES.json').read_text());assert scopes['support/render_cache.sh']=='keenetic-firewall'
+ stats=(fresh/'opt/bin/firewall_stats.sh').read_text();load=stats[stats.index('. "${KT_RENDER_LIB:'):stats.index('# Port Tables')]
+ assert '/opt/lib/keentool/render_cache.sh' in load
+ database=b/'render-fixture.db';c=sqlite3.connect(database)
+ c.executescript('CREATE TABLE ip_drops(timestamp INTEGER,ip TEXT,count INTEGER,list_type TEXT);CREATE TABLE ip_info(ip TEXT PRIMARY KEY,country TEXT,risk TEXT,domain TEXT,target_port INTEGER,port_history TEXT);CREATE TABLE drops(timestamp INTEGER,list_name TEXT,count INTEGER);')
+ now=int(time.time());rows=[(now-60,'203.0.113.7',7,'main'),(now-60,'198.51.100.9',3,'trap'),(now-60,'2001:db8::9',4,'geo')]
+ c.executemany('INSERT INTO ip_drops VALUES(?,?,?,?)',rows)
+ c.executemany('INSERT INTO ip_info VALUES(?,?,?,?,?,?)',[('203.0.113.7','ZZ','low','main.example.test',443,'443/tcp'),('198.51.100.9','ZZ','low','trap.example.test',22,'22/tcp'),('2001:db8::9','ZZ','low','v6.example.test',53,'53/udp')])
+ c.executemany('INSERT INTO drops VALUES(?,?,?)',[(now-60,'FirewallBlock',7),(now-60,'AutoBan',3),(now-60,'GeoBlock6',4)]);c.commit();c.close()
+ before=hashlib.sha256(database.read_bytes()).hexdigest();work=b/'render-work';work.mkdir()
+ e=dict(os.environ,PATH=str(fresh/'opt/bin')+':'+os.environ['PATH'],KT_RENDER_LIB=str(render),DB_FILE=str(database),KT_WORKDIR=str(work),NOW=str(now),TCP_SERVICES='22 443',UDP_SERVICES='53')
+ r=subprocess.run(['bash','-c','. "$1"\n'+load,'fixture',str(fresh/'opt/lib/keentool/common.sh')],env=e,capture_output=True,text=True)
+ assert r.returncode==0,r.stdout+r.stderr
+ outputs={f.name for f in (work/'render').glob('*.rows')}
+ expected={'ip_'+name+'_'+period+'.rows' for name in ['ipv6','trap','other','nets','geo'] for period in ['24h','30d','1y','all']}
+ expected|={'port_'+name+'.rows' for name in ['p24','p30','p1y','pall','b24','b30','b1y','ball']}
+ expected|={'time_'+name+'.rows' for name in ['hourly','daily','monthly','yearly']}
+ assert outputs==expected,(outputs,expected)
+ assert '443/tcp|203.0.113.7|7' in (work/'render/port_pall.rows').read_text()
+ assert '22/tcp|198.51.100.9|3' in (work/'render/port_ball.rows').read_text()
+ assert '2001:db8::9|4|' in (work/'render/ip_ipv6_all.rows').read_text()
+ assert before==hashlib.sha256(database.read_bytes()).hexdigest()
+ # Verify current-version file audits and coordinated reinstall restore the library.
+ assets=b/'assets';r=subprocess.run(['python3',str(pkg/'tools/package-suite.py'),str(assets)],capture_output=True,text=True);assert r.returncode==0,r.stdout+r.stderr
+ release=json.loads((pkg/'RELEASE.json').read_text());overview=assets/('keentool-'+release['version']+'-manifest.json');digest='sha256:'+hashlib.sha256(overview.read_bytes()).hexdigest()
+ def inspect(action):return subprocess.run([str(php),'-n',str(pkg/'support/release_update.php'),action,str(overview),release['version'],digest,str(fresh/'opt/etc/keentool/installed-release.json'),str(fresh/'opt/bin/keentool'),'keenetic-firewall',str(fresh)],capture_output=True,text=True)
+ r=inspect('selection');assert r.returncode==0 and r.stdout=='0',r.stdout+r.stderr
+ cron_before=(fresh/'opt/etc/crontab').read_bytes();firewall_before=(fresh/'opt/etc/firewall.conf').read_bytes()
+ render.unlink();r=inspect('overview');assert r.returncode==0 and '/opt/lib/keentool/render_cache.sh: missing' in r.stdout and 'differences: 1' in r.stdout,r.stdout+r.stderr
+ r=inspect('selection');assert r.returncode==0 and r.stdout=='1',r.stdout+r.stderr
+ r=call(env,'--apply','--mode','upgrade');assert r.returncode==0,r.stdout+r.stderr
+ assert render.read_bytes()==(pkg/'support/render_cache.sh').read_bytes() and render.stat().st_mode&0o777==0o644
+ r=inspect('selection');assert r.returncode==0 and r.stdout=='0',r.stdout+r.stderr
+ assert (fresh/'opt/etc/crontab').read_bytes()==cron_before and (fresh/'opt/etc/firewall.conf').read_bytes()==firewall_before
+ assert before==hashlib.sha256(database.read_bytes()).hexdigest()
+ print('PASS: clean installed firewall cache library executes all 32 SQLite outputs; source DB unchanged; current-version missing-file audit selects repair and coordinated reinstall restores mode/hash.')
+ r=subprocess.run(['bash',str(fresh_backup/'rollback.sh'),str(fresh_backup)],env=env,capture_output=True,text=True);assert r.returncode==0,r.stdout+r.stderr
+ assert not (fresh/'opt/bin/keentool').exists() and not (fresh/'opt/etc/crontab').exists() and not render.exists()
  assert 'S80lighttpd stop' in (fresh/'events').read_text()
  # Upstream migration: literal inline Ping settings, existing cron/database/password unchanged.
  upstream,env=fixture('upstream',True);history=upstream/'opt/etc/keentool/firewall-history.conf';history.write_text('HISTORY_ENABLED="false"\nHISTORY_RAW_DAYS="14"\nHISTORY_HOURLY_DAYS="60"\n');history_before=history.read_bytes();cron=(upstream/'opt/etc/crontab').read_bytes();db=(upstream/'opt/etc/firewall_stats.db').read_bytes();conf=(upstream/'opt/etc/firewall.conf').read_bytes()
  r=call(env,'--apply','--mode','upgrade');assert r.returncode==0,r.stdout+r.stderr
+ assert (upstream/'opt/lib/keentool/render_cache.sh').read_bytes()==(pkg/'support/render_cache.sh').read_bytes()
  assert history.read_bytes()==history_before
  p=(upstream/'opt/etc/pingtool.conf').read_text();assert 'PING_TARGET="1.1.1.1"' in p and 'RETENTION_DAYS="90"' in p and 'ENABLE_IPV6="false"' in p
  assert (upstream/'opt/etc/crontab').read_bytes()==cron and (upstream/'opt/etc/firewall_stats.db').read_bytes()==db and (upstream/'opt/etc/firewall.conf').read_bytes()==conf
  assert '# preserve custom line' in (upstream/'opt/etc/ulogd.conf').read_text() and '/opt/var/log/keentool-firewall/' in (upstream/'opt/etc/ulogd.conf').read_text()
  r=subprocess.run(['bash',str(backup(upstream)/'rollback.sh'),str(backup(upstream))],env=env,capture_output=True,text=True);assert r.returncode==0,r.stdout+r.stderr
  assert (upstream/'opt/bin/keentool').read_text()=='# previous manager\n' and (upstream/'opt/bin/keentool').stat().st_mode&0o777==0o750
+ assert not (upstream/'opt/lib/keentool/render_cache.sh').exists()
  assert not (upstream/'opt/etc/pingtool.conf').exists() and '/tmp/fw_syn_ring.pcap' in (upstream/'opt/etc/ulogd.conf').read_text()
  # Alpha migration preserves external settings verbatim; injected service-start failure rolls files back.
  alpha,env=fixture('alpha',True);(alpha/'opt/etc/pingtool.conf').write_text('WAN_LABEL="ppp0"\nMAX_DISPLAY_POINTS=7000\n')
  env['KT_TEST_FAIL']='keentool_security_service start'
  r=call(env,'--apply');assert r.returncode!=0,r.stdout+r.stderr
  assert (alpha/'opt/bin/keentool').read_text()=='# previous manager\n' and (alpha/'opt/etc/pingtool.conf').read_text()=='WAN_LABEL="ppp0"\nMAX_DISPLAY_POINTS=7000\n'
- assert not (alpha/'opt/etc/keentool/maintenance').exists()
+ assert not (alpha/'opt/etc/keentool/maintenance').exists() and not (alpha/'opt/lib/keentool/render_cache.sh').exists()
  # Symlink refusal and corrupt-backup verification happen before replacement.
  symlink,env=fixture('symlink',True);(symlink/'opt/bin/keentool').unlink();(symlink/'opt/bin/keentool').symlink_to(symlink/'outside')
  r=call(env,'--plan');assert r.returncode!=0 and 'Symlink' in r.stderr

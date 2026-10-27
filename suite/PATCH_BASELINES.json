@@ -1,9 +1,9 @@
 {
   "KeenTool": {
-    "version": "2.0.9",
+    "version": "2.0.10",
     "manager_version": "2.0.8",
-    "previous_tag": "v2.0.8",
-    "main": "a6294803b673447ca8264297ea1d728102f0437b"
+    "previous_tag": "v2.0.9",
+    "main": "0d9816e12db589b8f576e0f6e44034445825dfa6"
   },
   "keenetic-firewall": {
     "version": "4.0.2",

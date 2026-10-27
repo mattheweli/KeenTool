@@ -21,6 +21,7 @@
   "support/firewall_admin_password": "keenetic-firewall",
   "support/entware_manager": "KeenTool",
   "support/common.sh": "shared",
+  "support/render_cache.sh": "keenetic-firewall",
   "support/firewall_state.sh": "keenetic-firewall",
   "assets/keentool-ui.css": "shared",
   "assets/keentool-ui.js": "shared",

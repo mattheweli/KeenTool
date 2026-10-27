@@ -1,6 +1,6 @@
 # Stable component versions — 2026-10-23
 
-Suite/package release: **2.0.9** (manager **2.0.8**). Installer: **1.0.2**. Package manifest: **54 targets**.
+Suite/package release: **2.0.10** (manager **2.0.8**). Installer: **1.0.2**. Package manifest: **55 targets**.
 
 | Source | Stable version | Installed path |
 |---|---|---|
@@ -26,6 +26,7 @@ Suite/package release: **2.0.9** (manager **2.0.8**). Installer: **1.0.2**. Pack
 | `support/firewall_admin_password` | 1.0.0 | `/opt/bin/firewall_admin_password` |
 | `support/entware_manager` | 1.0.0 | `/opt/bin/entware_manager` |
 | `support/common.sh` | 1.0.0 | `/opt/lib/keentool/common.sh` |
+| `support/render_cache.sh` | 1.0.0 | `/opt/lib/keentool/render_cache.sh` |
 | `support/firewall_state.sh` | 1.0.0 | `/opt/lib/keentool/firewall_state.sh` |
 | `assets/keentool-ui.css` | 1.0.0 | `/opt/var/www/assets/keentool-ui.css` |
 | `assets/keentool-ui.js` | 1.0.1 | `/opt/var/www/assets/keentool-ui.js` |
@@ -61,6 +62,6 @@ Suite/package release: **2.0.9** (manager **2.0.8**). Installer: **1.0.2**. Pack
 
 | `support/dependencies.sh` | 1.0.0 | `/opt/lib/keentool/dependencies.sh` |
 
-Standalone bootstrap: 1.0.4. Installer entry: 1.0.2. Repository tags: KeenTool package v2.0.9 (manager 2.0.8); keenetic-firewall v4.0.2. Pingtool v2.0.2; Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
+Standalone bootstrap: 1.0.4. Installer entry: 1.0.2. Repository tags: KeenTool package v2.0.10 (manager 2.0.8); keenetic-firewall v4.0.2. Pingtool v2.0.2; Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
 
 Dashboard component: 2.0.4, independently tracked in RELEASE.json while staying in mattheweli/KeenTool. FILE_SCOPES.json assigns every install target to one component or the shared runtime. Selected component checks include shared dependencies; global checks cover all targets.
