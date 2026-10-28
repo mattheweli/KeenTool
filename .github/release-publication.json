@@ -1,0 +1,38 @@
+{
+  "repository": "mattheweli/KeenTool",
+  "release_id": 426707844,
+  "tag": "v2.0.14",
+  "target": "3e1a443a3b5b265f81bbce76085ef24bc2138988",
+  "validated_run": 40696773406,
+  "pr": 15,
+  "operation_ref": "refs/heads/operations/publish-firewall-migration-20261028",
+  "merge": true,
+  "base_commit": "5ccc9fee96db2f5a106410468a0bd244ac4c1556",
+  "source_tree": "307ce3162882788ab65083887bf267363e8c1935",
+  "assets": {
+    "keentool-2.0.14-manifest.json": {
+      "size": 16213,
+      "digest": "sha256:6aa43ea569b44efe27e2d8a25c95aa041757c8f0d2e5b59a33390be2242103e8"
+    },
+    "keentool-2.0.14-manifest.json.sha256": {
+      "size": 96,
+      "digest": "sha256:a2337f6c30e520489c14b25c0dc8aa878b2b70069e54cac7e33e1696213c6683"
+    },
+    "KeenTool-2.0.14-sources.tar.gz": {
+      "size": 1163964,
+      "digest": "sha256:9a8a17e5a70ec12a44c7d3f33f2a9a6ed14da5f613d27f4f54d30fcc0ce1dc31"
+    },
+    "KeenTool-2.0.14-sources.tar.gz.sha256": {
+      "size": 97,
+      "digest": "sha256:43dc3b57e9ae2daad7ad9b917020fc0250e04d7465985dcf487a46b2f9a84e4a"
+    },
+    "keentool-2.0.14.tar.gz": {
+      "size": 811710,
+      "digest": "sha256:536453db5cd82f39a2f1970bd95decd0e1664fdc12c6847aff60a94ee016d9d6"
+    },
+    "keentool-2.0.14.tar.gz.sha256": {
+      "size": 89,
+      "digest": "sha256:873d5912bc329e2d0c59b9b2e9e374af7d98416e826481751b710040a8442730"
+    }
+  }
+}
