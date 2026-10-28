@@ -1,0 +1,46 @@
+{
+  "repository": "mattheweli/KeenTool",
+  "release_id": 426895215,
+  "tag": "v2.0.17",
+  "target": "6bb556e749c6c3067ef7d08f4da0530d10eb3a18",
+  "validated_run": 40722655118,
+  "pr": 18,
+  "operation_ref": "refs/heads/operations/publish-database-backup-20261028",
+  "merge": true,
+  "base_commit": "c02e4d43eead6d1bf612e7dc2689db50fc693517",
+  "source_tree": "2e4c9e1318ea6b8a919310e06bef5ba7f3b01769",
+  "assets": {
+    "keentool-2.0.17-manifest.json": {
+      "size": 17061,
+      "digest": "sha256:10c35e79326d37965c3c8c207faa2cf9b832321f7228df9d83e5ebab1bc39b50"
+    },
+    "keentool-2.0.17-manifest.json.sha256": {
+      "size": 96,
+      "digest": "sha256:a0025dc50ce3279e0b134aa7ecb92697b89a930eae67a6e2001af0be2d77a9d5"
+    },
+    "KeenTool-2.0.17-sources.tar.gz": {
+      "size": 1187039,
+      "digest": "sha256:dd53d74d7fdcb4a33d1e6911cb48cfa0c60c26e198ba5f2bfb54ae9d72f99a3c"
+    },
+    "KeenTool-2.0.17-sources.tar.gz.sha256": {
+      "size": 97,
+      "digest": "sha256:e2eabfc747b4e1f85007e2b0cf5cc7d06e9d5edf62d9c4e9a917d99e6ea1682c"
+    },
+    "keentool-2.0.17.tar.gz": {
+      "size": 832746,
+      "digest": "sha256:af6183e417ca2c0f835eeb6bf7b11ddacf9a6e98c2b4bf45f5209fdb03d9b6ad"
+    },
+    "keentool-2.0.17.tar.gz.sha256": {
+      "size": 89,
+      "digest": "sha256:5fbffe7902826dd4a4b24c28eab0a17b1358315bf49a7284ce6adfb55c5c184d"
+    },
+    "recover-firewall-upgrade.sh": {
+      "size": 6873,
+      "digest": "sha256:f786bf1397dd37faf6f20575bc34ccd52469f3e1e498e9768ab8f09593704388"
+    },
+    "recover-firewall-upgrade.sh.sha256": {
+      "size": 94,
+      "digest": "sha256:f35153f77cb08dec9cd2134fd6628ef5da1372125f3c1001b8e71dce1d521457"
+    }
+  }
+}
