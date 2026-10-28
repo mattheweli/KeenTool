@@ -1,7 +1,7 @@
 {
   "changes": [
-    "CLI updates now group component versions, file actions and wrapped release notes; matching files are summarized.",
-    "Choose whether to retain an installation recovery backup. Temporary rollback copies are still created and verified, then removed after success when declined.",
-    "Use --keep-backup or --no-backup explicitly in scripts. Existing backups, other tool versions, data and schedules remain unchanged."
+    "First Legacy migrations and fresh installs prompt for a dedicated web admin password after successful installation when none exists.",
+    "Hidden password input supports legacy background updater terminals, confirmation retries and preserved existing credentials.",
+    "Noninteractive or interrupted setup has no default password; use KeenTool option A to finish. Manager and other tool versions are unchanged."
   ]
 }

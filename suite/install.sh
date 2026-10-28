@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KeenTool stable installer 1.0.3 — 2026-10-27.
+# KeenTool stable installer 1.0.4 — 2026-10-28.
 set -Eeuo pipefail
 export PATH="${KT_INSTALL_ROOT:-}/opt/bin:${KT_INSTALL_ROOT:-}/opt/sbin:/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
 base=$(cd "$(dirname "$0")" && pwd)
@@ -138,9 +138,16 @@ else
  else echo "Installation succeeded; temporary recovery cleanup needs attention: $backup" >&2;fi
 fi
 echo 'Existing credentials, databases, saved lists and upgrade schedules are preserved.'
-echo 'Fresh installations start with firewall filtering disabled. Set an admin password: firewall_admin_password'
+echo 'Fresh installations start with firewall filtering disabled.'
 echo 'Review /opt/etc/firewall.conf and run the hook separately when ready: table=filter /opt/bin/bash /opt/etc/ndm/netfilter.d/100-firewall.sh'
 echo 'Refresh generated pages at the next cron run, or run pingtool.sh force, traffic_manager.sh INTERFACE force and firewall_stats.sh force.'
 echo 'Review web privilege separation: firewall_security harden-web --check (then --apply).'
 [ "$web" != 1 ] || echo 'HTTPS listens on 8080 using a private self-signed certificate; verify/trust it or install your own certificate.'
 [ "$start" = true ] || echo 'Services were not started. Start the affected web/ulogd and KeenTool services before using the dashboards.'
+
+# This post-install step creates a missing password only; it never resets an existing one.
+# Legacy updater children may have stdin=/dev/null; the helper uses the controlling TTY.
+if ! bash "$runroot/bin/firewall_admin_password" --setup-if-missing;then
+ echo 'Package installation completed; administrator password setup needs attention.' >&2
+ echo 'Use KeenTool option A or /opt/bin/bash /opt/bin/firewall_admin_password.' >&2
+fi
