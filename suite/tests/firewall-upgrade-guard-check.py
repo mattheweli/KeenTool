@@ -12,7 +12,7 @@ with tempfile.TemporaryDirectory() as td:
   for name in ['lsmod','logger']:(bin/name).write_text('#!/bin/bash\nexit 0\n');(bin/name).chmod(0o755)
   (bin/'php-cli').write_text('#!/bin/bash\nexec '+php+' -n "$@"\n');(bin/'php-cli').chmod(0o755)
   (bin/'keentool').write_text('# previous manager\n');hook=etc/'ndm/netfilter.d/100-firewall.sh';hook.write_text('#!/bin/bash\necho legacy-called >> "$KT_TEST_LEGACY"\n');hook.chmod(0o750)
-  conf=etc/'firewall.conf';conf.write_text('ENABLE_FIREWALL="true"\nENABLE_IPV6="true"\nENABLE_MANUAL="true"\nENABLE_AUTOBAN="false"\nENABLE_BRUTEFORCE="true"\nENABLE_CONNLIMIT="true"\nENABLE_FWD_PROTECTION="false"\nTCP_SERVICES="22"\nUDP_SERVICES=""\n')
+  conf=etc/'firewall.conf';conf.write_text('ENABLE_FIREWALL="true"\nENABLE_IPV6="true"\nENABLE_MANUAL="true"\nENABLE_AUTOBAN="false"\nENABLE_BRUTEFORCE="true"\nENABLE_CONNLIMIT="true"\nENABLE_FWD_PROTECTION="false"\nCONNLIMIT_MAX=15\nCONNLIMIT_CUSTOM=150\nBAN_TIMEOUT=604800\nBF_SECONDS=60\nBF_HITCOUNT=5\nTCP_SERVICES="22"\nUDP_SERVICES=""\nTCP_PASSIVE_RANGE=""\n')
   for name in ['S80lighttpd','S11ulogd']:(init/name).write_text('#!/bin/bash\nexit 0\n');(init/name).chmod(0o755)
   runner=root/'service-runner';runner.write_text('#!/bin/bash\n[ "$2" != status ]\n');runner.chmod(0o755)
   kernel={f:{'INPUT':[['-j','ROUTER']], 'FORWARD':[], 'OUTPUT':[], 'ROUTER':[['-j','ACCEPT']]} for f in ['4','6']};kernel['sets']={'AutoBan':['198.51.100.99']};(root/'kernel.json').write_text(json.dumps(kernel))
@@ -29,11 +29,14 @@ with tempfile.TemporaryDirectory() as td:
  def drive(root,env,backup,token,answer):
   pid,fd=pty.fork()
   if pid==0:os.environ.update(env);os.execvp('bash',['bash',str(backup/'firewall_upgrade'),'run',str(backup),token])
-  output=b'';sent=False;deadline=time.monotonic()+45
+  output=b'';sent=False;deadline=time.monotonic()+45;reaped=None
   try:
    while time.monotonic()<deadline:
     ready,_,_=select.select([fd],[],[],.1)
-    if not ready:continue
+    if not ready:
+     done,status=os.waitpid(pid,os.WNOHANG)
+     if done:reaped=status;break
+     continue
     try:chunk=os.read(fd,8192)
     except OSError:break
     if not chunk:break
@@ -48,7 +51,9 @@ with tempfile.TemporaryDirectory() as td:
      sent=True
    else:os.kill(pid,signal.SIGKILL);raise AssertionError('Guardian prompt timeout: '+output.decode())
   finally:os.close(fd)
-  _,status=os.waitpid(pid,0);return os.waitstatus_to_exitcode(status),output.decode(),sent
+  if reaped is None:_,status=os.waitpid(pid,0)
+  else:status=reaped
+  return os.waitstatus_to_exitcode(status),output.decode(),sent
  def restored(root,backup,kernel,foreign=False):
   state=json.loads((root/'kernel.json').read_text())
   for family in ['4','6']:
