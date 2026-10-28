@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# FIREWALL HISTORY CLI v1.0.0 — progressive history policy and offline maintenance.
+# FIREWALL HISTORY CLI v1.0.1 — progressive history policy and offline maintenance.
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 PHP_BIN=${KT_HISTORY_PHP:-}
 if [ -z "$PHP_BIN" ];then
@@ -15,6 +15,9 @@ if [ -z "${TZ:-}" ];then
 fi
 ENGINE=${KT_HISTORY_ENGINE:-/opt/lib/keentool/history_engine.php}
 case "${1:-status}" in
+ optimize|compact|expand)
+  action=${1};[ "$action" != optimize ] || action=balanced
+  exec /opt/bin/bash "${KT_DATABASE_CLI:-/opt/bin/keentool_db}" firewall "$action";;
  menu)
   "$PHP_BIN" "$ENGINE" status || :
   echo 'Aggregation keeps all IP/list hit totals, global counters, port history and reporting state.'
@@ -29,5 +32,5 @@ case "${1:-status}" in
   kt_init firewall-db || exit $?
   "$PHP_BIN" "$ENGINE" "$@";;
  status)exec "$PHP_BIN" "$ENGINE" status;;
- *)echo 'Usage: firewall_history [status|menu|run [--due]]' >&2;exit 1;;
+ *)echo 'Usage: firewall_history [status|menu|run [--due]|optimize|compact|expand]' >&2;exit 1;;
 esac

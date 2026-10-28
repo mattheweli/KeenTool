@@ -1,7 +1,7 @@
 {
   "changes": [
-    "Fix guarded upgrade startup on BusyBox builds without fractional sleep; use integer-only waits.",
-    "Rollback no longer stops untouched running vnStat and continues file/restart recovery after service errors, reporting any incomplete recovery.",
-    "For an interrupted 2.0.14 transaction, use the verified standalone recovery asset before retrying. Package 2.0.15 / Firewall 4.0.4; manager stays 2.0.11."
+    "Firewall 4.0.5 / Stats 4.0.2: optional compact IP dictionary and balanced 2/7/365-day history; exact hit totals, reduced older time precision.",
+    "Add explicit backup-first database maintenance for Firewall, Ping and vnStat; installation does not convert databases or change retention.",
+    "Use keentool_db firewall balanced after reviewing DATABASE_STORAGE.md. Ping/Traffic compaction is lossless; manager stays 2.0.11."
   ]
 }

@@ -2,7 +2,7 @@
 
 **Dual-stack firewall filtering, blocklist maintenance and a web dashboard for Keenetic / Entware.** Uses kernel `ipset` sets and owned iptables chains; performance depends on the router, list sizes and traffic workload.
 
-Current firewall component: **4.0.4**. Independent scripts remain Monitor **4.0.0**, Stats **4.0.1**, Manager **3.0.0** and netfilter hook **3.0.1**. The suite version is not inferred from the Monitor script.
+Current firewall component: **4.0.5**. Independent scripts remain Monitor **4.0.0**, Stats **4.0.1**, Manager **3.0.0** and netfilter hook **3.0.1**. The suite version is not inferred from the Monitor script.
 
 ![Firewall dashboard with IPv4/IPv6 lists and filtering status](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/firewall.png)
 
@@ -113,3 +113,5 @@ Cryptocurrency donations (copy the address):
 
 - **Ethereum (ETH):** `0x8487b6205fd76d7516f07b1117a66966dcf2f0e4`
 - **Bitcoin (BTC):** `bc1qvp5dnsnw60e963dfcgk3jfsfrwys86ufccygsw`
+
+Firewall 4.0.5 / Stats 4.0.2 adds opt-in compact IP storage and a balanced 2/7/365-day policy through coordinated package 2.0.16. See [database maintenance](https://github.com/mattheweli/KeenTool/blob/main/suite/docs/DATABASE_STORAGE.md) for backups, precision and downgrade requirements. Existing databases/settings are preserved until maintenance is explicitly requested.
