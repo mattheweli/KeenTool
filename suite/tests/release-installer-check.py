@@ -150,7 +150,7 @@ with tempfile.TemporaryDirectory() as td:
  assert (tls/'opt/etc/lighttpd/conf.d/30-fastcgi.conf').read_text()=='# existing custom PHP backend\n'
  assert (tls/'opt/etc/firewall_stats.db').read_bytes()==db and (tls/'opt/etc/crontab').read_bytes()==cron and (tls/'opt/etc/keentool/admin/credentials.json').read_bytes()==credentials
  cert=tls/'opt/etc/keentool/tls/server.pem';assert cert.stat().st_mode&0o777==0o600;cert_before=cert.read_bytes();main_before=main.read_bytes()
- assert 'https://127.0.0.1:81/' in (tls/'tls-probes').read_text() and '--noproxy *' in (tls/'tls-probes').read_text()
+ assert (tls/'tls-probes').read_text().startswith('-q ') and 'https://127.0.0.1:81/' in (tls/'tls-probes').read_text() and '--noproxy *' in (tls/'tls-probes').read_text()
  r=call(env,'--apply','--enable-https','--no-backup');assert r.returncode==0 and main.read_bytes()==main_before and cert.read_bytes()==cert_before,r.stdout+r.stderr
  for name,flag in [('tls-preflight','KT_TEST_TLS_PREFLIGHT_FAIL'),('tls-probe','KT_TEST_TLS_PROBE_FAIL')]:
   root,env=tls_fixture(name);main=root/'opt/etc/lighttpd/lighttpd.conf';before=main.read_bytes();mode=main.stat().st_mode&0o777;env[flag]='1'

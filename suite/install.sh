@@ -162,7 +162,7 @@ fi
 if [ "$web" = 2 ];then
  tls_probe=$(field tls.probe);tls_ok=false
  for tls_attempt in 1 2 3;do
-  if curl --noproxy '*' --http1.1 -k -sS -I --connect-timeout 2 --max-time 5 "$tls_probe" >"$backup/tls-probe.log" 2>&1;then tls_ok=true;break;fi
+  if curl -q --noproxy '*' --http1.1 -k -sS -I --connect-timeout 2 --max-time 5 "$tls_probe" >"$backup/tls-probe.log" 2>&1;then tls_ok=true;break;fi
   [ "$tls_attempt" = 3 ] || sleep 1
  done
  if [ "$tls_ok" != true ];then echo 'HTTPS handshake check failed; restoring the previous listener and package.' >&2;rollback_error 1;fi
