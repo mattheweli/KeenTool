@@ -166,4 +166,10 @@ sys.exit(0 if code=='200' else 22)
   r=run('--component','keenetic-firewall','--yes',option);assert r.returncode==0 and policy.read_text()==expected,r.stdout+r.stderr
   assert capture.read_text().splitlines()==['--plan --mode upgrade','--apply --mode upgrade'];capture.unlink();policy.unlink()
  r=run('--component','keenetic-firewall','--check','--no-backup');assert r.returncode==0 and not capture.exists() and not policy.exists(),r.stdout+r.stderr
+ # Explicit HTTPS consent is forwarded only to capable verified installers.
+ r=run('--component','keenetic-firewall','--yes','--enable-https');assert r.returncode!=0 and 'cannot safely migrate HTTPS' in r.stderr and not capture.exists(),r.stdout+r.stderr
+ (payload/'install.sh').write_text((payload/'install.sh').read_text().replace('# KT_INSTALL_BACKUP_RETENTION_V1','# KT_INSTALL_BACKUP_RETENTION_V1\n# KT_INSTALL_HTTPS_MIGRATION_V1'))
+ checksums();pack();publish_overview()
+ r=run('--component','keenetic-firewall','--yes','--enable-https');assert r.returncode==0,r.stdout+r.stderr
+ assert capture.read_text().splitlines()==['--plan --mode upgrade --enable-https','--apply --mode upgrade --enable-https'],capture.read_text();capture.unlink()
 print('PASS: real remote updater, stable-only GitHub metadata/URLs/digests, check versus apply, no downgrade, alpha/public version detection, HTTPS-only curl, 404/403 handling, tar/PAX streaming verification, traversal/symlink/internal checksum rejection, atomic flag and staging cleanup; independent component/all-version overviews, no archive before consent, interactive decline, explicit repair separation, overview digests and archive consistency; GitHub/installer mocked, scoped target/mode verification, stale same-version scripts, shared and unrelated files, independent Dashboard HTML version and target manifest consistency; no network or router writes.')
