@@ -6,7 +6,7 @@ module=ast.parse((suite/'tests/firewall-transaction-check.py').read_text());engi
 with tempfile.TemporaryDirectory() as td:
  base=Path(td)
  def fixture(name,seconds=20):
-  root=base/name;bin=root/'opt/bin';bin.mkdir(parents=True);etc=root/'opt/etc';init=etc/'init.d';init.mkdir();run=root/'run';run.mkdir();(etc/'ndm/netfilter.d').mkdir(parents=True);(etc/'keentool').mkdir()
+  root=base/name;bin=root/'opt/bin';bin.mkdir(parents=True);etc=root/'opt/etc';init=etc/'init.d';init.mkdir(parents=True);run=root/'run';run.mkdir();(etc/'ndm/netfilter.d').mkdir(parents=True);(etc/'keentool').mkdir()
   (bin/'bash').symlink_to(shutil.which('bash'));(bin/'engine').write_text(engine);(bin/'engine').chmod(0o755)
   for name in ['iptables','ip6tables','iptables-save','ip6tables-save','iptables-restore','ip6tables-restore','ipset']:(bin/name).symlink_to(bin/'engine')
   for name in ['lsmod','logger']:(bin/name).write_text('#!/bin/bash\nexit 0\n');(bin/name).chmod(0o755)
