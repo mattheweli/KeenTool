@@ -1,5 +1,5 @@
 <?php
-// KeenTool release file transaction 1.0.3. CLI only; no database or firewall rewrites.
+// KeenTool release file transaction 1.0.4. CLI only; no database or firewall rewrites.
 if (PHP_SAPI !== 'cli') exit(1);
 umask(0077);
 
@@ -65,12 +65,13 @@ function literalSettings($file,$defaults){
 function shellConfig($values){$text="# KeenTool stable configuration; preserved by package updates.\n";foreach($values as $k=>$v)$text.=$k.'="'.str_replace(['\\','"','$','`'],['\\\\','\\"','\\$','\\`'],(string)$v).'"'."\n";return $text;}
 function plan($base,$mode,$iface,$web,$logging){
  checked(in_array($web,[0,1,2],true),'Invalid web migration mode');
- checked(is_file($base.'/INSTALL.tsv'),'Missing package manifest');checked(!is_file(rootpath('/opt/etc/keentool/security/pending.json')),'Confirm or roll back the pending firewall change before installing.');checked(!$web||!is_file(rootpath('/opt/etc/keentool/security/web-hardened')),'Preserve the existing isolated listener; omit --configure-web.');$items=[];
+ checked(!is_file(rootpath('/opt/etc/keentool/firewall-upgrade.pending')),'A guarded firewall migration is pending; recover or confirm it first.');checked(is_file($base.'/INSTALL.tsv'),'Missing package manifest');checked(!is_file(rootpath('/opt/etc/keentool/security/pending.json')),'Confirm or roll back the pending firewall change before installing.');checked(!$web||!is_file(rootpath('/opt/etc/keentool/security/web-hardened')),'Preserve the existing isolated listener; omit --configure-web.');$items=[];
  foreach(file($base.'/INSTALL.tsv',FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES) as $line){
   $a=explode("\t",$line);checked(count($a)===3,'Malformed install manifest');[$src,$dest,$perm]=$a;
   checked(preg_match('~^[A-Za-z0-9_./-]+$~D',$src)&&!in_array('..',explode('/',$src),true),'Invalid source');
   checked(str_starts_with($dest,'/opt/')&&!in_array('..',explode('/',$dest),true)&&preg_match('/^0?[0-7]{3}$/D',$perm),'Invalid destination or permissions');
   checked(is_file($base.'/'.$src)&&!is_link($base.'/'.$src),'Missing source: '.$src);$target=rootpath($dest);regular($target);checked(!isset($items[$target]),'Duplicate destination');
+  if($dest==='/opt/etc/ndm/netfilter.d/100-firewall.sh'&&getenv('KT_INSTALL_DEFER_FIREWALL')==='1')continue;
   $items[$target]=['source'=>$base.'/'.$src,'mode'=>octdec($perm)];
  }
  $existing=is_file(rootpath('/opt/bin/keentool'))||is_file(rootpath('/opt/bin/pingtool.sh'))||is_file(rootpath('/opt/bin/firewall_monitor'));
@@ -129,6 +130,7 @@ function showPlan($p){
  foreach(['Install','Update','Permissions'] as $kind){if(!$groups[$kind])continue;ktCliSection($kind.' ('.count($groups[$kind]).')');foreach($groups[$kind] as $path)ktCliText($path,'  - ');}
  if($groups['Matching'])ktCliText('Already matching: '.count($groups['Matching']).' targets (included in the coordinated transaction).');
  ktCliSection('Configuration');ktCliText('HTTPS: '.($p['web']===2?'enable TLS on existing port '.$p['tls']['port']:($p['web']?'configure listener on 8080':'preserve existing listener')));
+ if(getenv('KT_INSTALL_DEFER_FIREWALL')==='1')ktCliText('Firewall rules migration deferred: retain the previous hook until guarded apply is confirmed.');
  ktCliText('Existing credentials, databases and upgrade schedules are preserved.');
 }
 function removeRecoveryTree($path){
@@ -169,6 +171,13 @@ function restore($backup){
 }
 try{
  $action=$argv[1]??'';
+ if($action==='firewall-state'){
+  $conf=rootpath('/opt/etc/firewall.conf');$hook=rootpath('/opt/etc/ndm/netfilter.d/100-firewall.sh');
+  $settings=literalSettings($conf,['ENABLE_FIREWALL'=>'false']);$enabled=$settings['ENABLE_FIREWALL'];checked(in_array($enabled,['true','false'],true),'Invalid firewall enable setting');
+  $changed=is_file($hook)&&hash_file('sha256',$hook)!==hash_file('sha256',$argv[2].'/projects/keenetic-firewall/scripts/100-firewall.sh');$healthy=false;
+  if(is_file(rootpath('/opt/bin/firewall_health'))){[$status]=commandRun(['timeout','20','bash',rootpath('/opt/bin/firewall_health'),'--quiet']);$healthy=$status===0;}
+  echo json_encode(['enabled'=>$enabled==='true','hook_exists'=>is_file($hook)&&!is_link($hook),'needed'=>$enabled==='true'&&($changed||!$healthy)],JSON_THROW_ON_ERROR);exit;
+ }
  if($action==='https-state'){echo json_encode(httpsState(),JSON_THROW_ON_ERROR);exit;}
  if($action==='discard'){discardRecovery($argv[2]);exit;}
  if($action==='rollback'){restore($argv[2]);exit;}

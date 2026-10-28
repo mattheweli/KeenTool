@@ -1,7 +1,7 @@
 {
   "changes": [
-    "Offer HTTPS conversion for a simple Legacy HTTP listener on its existing port; preserve PHP/includes and existing TLS/passwords.",
-    "Stage/test TLS before replacement and verify a local HTTPS handshake after restart; failed conversion uses automatic transaction rollback.",
-    "Manager 2.0.10 and updater/bootstrap 1.0.6 add --enable-https; custom listeners require review and noninteractive installs require explicit consent."
+    "Enabled firewall upgrades offer guarded hook application and a fresh SSH confirmation after IPv4/IPv6 checks; disabled firewalls remain disabled.",
+    "Independent timeout recovery restores previous owned rules, metadata and source after failed apply or SSH loss; foreign rules and existing bans are preserved.",
+    "Deferral keeps the previous boot hook and reports migration pending. Manager 2.0.11 / Firewall 4.0.3; use --apply-firewall interactively after upgrading."
   ]
 }
