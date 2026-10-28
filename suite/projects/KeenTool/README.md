@@ -2,7 +2,7 @@
 
 **A package manager and monitoring dashboard for Keenetic routers running Entware.** Manage the firewall, WAN/PPP connectivity, traffic history, SMB backups, notifications and Entware maintenance from a consistent CLI and web interface.
 
-Current coordinated package: **2.0.14**; KeenTool manager: **2.0.11**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
+Current coordinated package: **2.0.15**; KeenTool manager: **2.0.11**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
 
 ![System Dashboard: firewall, traffic, connection and security summaries](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/dashboard.png)
 
@@ -98,3 +98,5 @@ After a successful first migration or fresh install, the installer prompts for a
 Legacy HTTP-only lighttpd listeners can now be converted to HTTPS with consent on their existing port, preserving PHP/includes. Use u to update, or the new updater with `--update --reinstall --enable-https` for explicit configuration. Existing TLS/custom listeners are preserved; review the reported HTTPS URL and certificate.
 
 Enabled-firewall upgrades can now apply the new hook with an independent rollback guardian and a fresh SSH confirmation challenge. Deferring keeps the old boot hook and prints the guarded retry command. Disabled firewalls stay disabled. See suite/docs/FIREWALL_UPGRADE.md.
+
+Package 2.0.15 fixes minimal-BusyBox guardian startup and rollback service handling. Interrupted 2.0.14 transactions have a separate checksum-verified recovery asset; preserve the recovery directory and inspect its status before retrying. Manager remains 2.0.11.

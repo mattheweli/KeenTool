@@ -1,5 +1,15 @@
 # Stable changelog — 2026-10-28
 
+## Coordinated package 2.0.15 / Firewall 4.0.4 — 2026-10-28
+
+- Fix a compatibility bug introduced by guarded migration in package 2.0.14: minimal BusyBox sleep rejects .1. The independent guardian startup now polls with whole seconds only. Guard regression fixtures force an integer-only sleep implementation rather than relying on GNU sleep or a feature-rich BusyBox build.
+- Fix source rollback stopping every daemon marked previously running, including vnStat when an upgrade had not touched it. Stop only affected web/logging/traffic services, record stop intentions in new transactions and support old transaction metadata. Leave an untouched running vnStat daemon alone; retry previously running services that an earlier rollback left stopped.
+- Continue verified file restoration and other restart attempts after a service command fails. Report incomplete service recovery and retain the recovery material/marker instead of aborting before restoring source files. Kernel/source/service recovery is not reported successful while a required service action still fails.
+- Publish a standalone recover-firewall-upgrade.sh asset and SHA-256 sidecar for an interrupted 2.0.14 transaction. It verifies the matching pending transaction and old recovery-copy hashes, refuses a live installer/maintenance owner, atomically replaces only the private recovery rollback entry with the current implementation, and invokes the original pinned guardian's recover action. It preserves the original rollback entry, all recovery copies, databases, credentials and saved lists. A completed transaction without a pending marker is left untouched.
+- Reproduce the reported old rollback/vnStat failure in isolated fixtures, then recover with the release recovery entry. Exercise the exact previous guard/rollback sources, verify old files/rule metadata, confirm web/logging restart attempts, and assert no stop/start of an untouched running vnStat. Recovery entry generation is checked against the current rollback source.
+
+Installer advances to 1.0.7, rollback and firewall guardian to 1.0.1, Firewall component to 4.0.4 and package to 2.0.15. Manager 2.0.11, updater/bootstrap 1.0.7, hook 3.0.1 and the other tool versions do not change. The historical missing web-permission ledger warning is independent and its original permissions are not guessed. Tests use an isolated filesystem and mocked service/kernel commands; no physical router recovery is claimed.
+
 ## KeenTool manager 2.0.11 / Firewall 4.0.3 / coordinated package 2.0.14 — 2026-10-28
 
 - Offer guarded application of an updated enabled firewall hook during Legacy/regular upgrades. First review the apply choice; after IPv4/IPv6 verification, type the fresh SSH challenge to confirm continued reachability. A disabled firewall remains disabled. Headless installs cannot apply rules through this path; explicit `--apply-firewall` still requires an interactive terminal.

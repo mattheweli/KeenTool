@@ -2,6 +2,8 @@
 
 ## Automated evidence
 
+Package 2.0.15 forces integer-only sleep in guardian fixtures and reproduces recovery from the exact old 2.0.14 guard/rollback with an untouched-vnStat stop failure. The standalone recovery asset is tested against real file recovery, mocked kernel/service state and preserved metadata, while asserting restarted web/logging services and untouched running vnStat. Generation parity verifies the embedded rollback source. These are isolated fixtures, not evidence of physical-router recovery.
+
 Package 2.0.14 adds real guardian/hook/file transactions with a mocked kernel: SSH challenge confirmation/rejection, independent timeout restore after parent SIGKILL, foreign rules/bans preserved, pending upgrade exclusion and reboot source recovery. Installer regressions cover deferred old-hook preservation without retained backups and disabled/noninteractive refusal. No physical router connectivity or reboot is inferred.
 
 Package 2.0.13 adds a native lighttpd/OpenSSL loopback TLS fixture, candidate syntax validation, actual HTTPS response and file rollback. Transaction fixtures cover port/PHP/credential/data preservation, enabled TLS, consent from a background legacy terminal, preflight failure, handshake-failure rollback, custom sockets and no implicit headless conversion. CI requires lighttpd and lighttpd-mod-openssl in addition to the earlier dependencies. Native service lifecycle for the full suite remains mocked; the TLS fixture itself runs a real local server.

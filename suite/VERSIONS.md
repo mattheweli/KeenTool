@@ -1,6 +1,6 @@
 # Stable component versions — 2026-10-23
 
-Suite/package release: **2.0.14** (manager **2.0.11**). Installer: **1.0.6**. Package manifest: **56 targets**.
+Suite/package release: **2.0.15** (manager **2.0.11**). Installer: **1.0.7**. Package manifest: **56 targets**.
 
 | Source | Stable version | Installed path |
 |---|---|---|
@@ -54,7 +54,7 @@ Suite/package release: **2.0.14** (manager **2.0.11**). Installer: **1.0.6**. Pa
 | `assets/keentool-format.js` | 1.0.0 | `/opt/var/www/assets/keentool-format.js` |
 | `support/keentool_update` | 1.0.7 | `/opt/bin/keentool_update` |
 | `support/release_install.php` | 1.0.4 | `/opt/lib/keentool/release_install.php` |
-| `rollback.sh` | 1.0.0 | `/opt/lib/keentool/rollback.sh` |
+| `rollback.sh` | 1.0.1 | `/opt/lib/keentool/rollback.sh` |
 | `support/release_update.php` | 1.0.4 | `/opt/lib/keentool/release_update.php` |
 
 | `support/history_engine.php` | 1.0.0 | `/opt/lib/keentool/history_engine.php` |
@@ -62,8 +62,8 @@ Suite/package release: **2.0.14** (manager **2.0.11**). Installer: **1.0.6**. Pa
 
 | `support/dependencies.sh` | 1.0.0 | `/opt/lib/keentool/dependencies.sh` |
 
-Standalone bootstrap: 1.0.7. Installer entry: 1.0.6. Repository tags: KeenTool package v2.0.14 (manager 2.0.11); keenetic-firewall v4.0.3. Pingtool v2.0.2; Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
+Standalone bootstrap: 1.0.7. Installer entry: 1.0.7. Repository tags: KeenTool package v2.0.15 (manager 2.0.11); keenetic-firewall v4.0.4. Pingtool v2.0.2; Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
 
 Dashboard component: 2.0.4, independently tracked in RELEASE.json while staying in mattheweli/KeenTool. FILE_SCOPES.json assigns every install target to one component or the shared runtime. Selected component checks include shared dependencies; global checks cover all targets.
 
-| `support/firewall_upgrade` | 1.0.0 | `/opt/lib/keentool/firewall_upgrade` |
+| `support/firewall_upgrade` | 1.0.1 | `/opt/lib/keentool/firewall_upgrade` |

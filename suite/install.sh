@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KeenTool stable installer 1.0.6 — 2026-10-28.
+# KeenTool stable installer 1.0.7 — 2026-10-28.
 set -Eeuo pipefail
 export PATH="${KT_INSTALL_ROOT:-}/opt/bin:${KT_INSTALL_ROOT:-}/opt/sbin:/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
 base=$(cd "$(dirname "$0")" && pwd)
@@ -172,8 +172,8 @@ for name in keentool_security_service wan_syslog_service;do
  fi
 done
 ulog_init=$(field init.ulogd);web_init=$(field init.lighttpd)
-if [ "$(field capture_change)" = 1 ] && [ -f "$backup/ulogd-was-running" ];then service_run "$ulog_init" stop;fi
-if [ "$web" != 0 ] && [ -f "$backup/lighttpd-was-running" ];then service_run "$web_init" stop;fi
+if [ "$(field capture_change)" = 1 ] && [ -f "$backup/ulogd-was-running" ];then touch "$backup/ulogd-stopped";service_run "$ulog_init" stop;fi
+if [ "$web" != 0 ] && [ -f "$backup/lighttpd-was-running" ];then touch "$backup/lighttpd-stopped";service_run "$web_init" stop;fi
 if [ "$apply_firewall" = true ];then
  cp "$base/support/firewall_upgrade" "$backup/firewall_upgrade"
  fw_token=$("$php_cli" -r 'echo bin2hex(random_bytes(24));')
