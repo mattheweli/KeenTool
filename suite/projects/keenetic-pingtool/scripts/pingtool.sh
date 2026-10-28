@@ -7,18 +7,6 @@ export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin}
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 
 
-# ==============================================================================
-# KEENETIC PINGTOOL v1.7.3 (KEENETIC UI REFACTOR)
-# Features:
-# - UI: Fully redesigned HTML template to match native KeeneticOS dashboard.
-# - NEW: Added email notification when MTR is triggered 
-# - CLI: Added '-ipv4' flag to force IPv4-only mode at runtime.
-# - CLI: Arguments handling allows mixing flags (e.g., "-ipv4 force").
-# - CORE: Optimized DB writes & UI hiding logic.
-# - CORE (v1.7.2): Fixed regex parsing bug causing invalid packet loss values.
-# - CORE (v1.7.3): Added async MTR execution and anti-spam cooldown for emails.
-# - CORE (v1.7.3): Replaced 'date -r' with 'find' for better BusyBox compatibility.
-# ==============================================================================
 
 # ==============================================================================
 # USER CONFIGURATION

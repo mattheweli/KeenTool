@@ -7,23 +7,7 @@ if ! builtin pwd -P >/dev/null 2>&1; then
     builtin cd / 2>/dev/null || { echo "Cannot recover the working directory" >&2; exit 1; }
 fi
 
-# ==============================================================================
-# KEENTOOL MANAGER v1.3.4 (Stable)
 # Author: MatthewEli
-# Changelog v1.3.4:
-#   - FIX: Improved cron job matching (get_clean_cmd_str) to preserve quotes.
-#   - FIX: Fixed Traffic Manager cron job generation and tracking for multiple interfaces.
-# Changelog v1.3.3:
-#   - FIX: PHP installation and integration
-#   - FEAT: Added full PHP Environment support (php8-cgi, lighttpd-mod-fastcgi).
-#   - FEAT: Firewall API (firewall_api.php) dynamic installation and update.
-#   - FIX: Lighttpd auto-patching for FastCGI & PHP execution.
-# Changelog v1.2.5:
-#   - FEAT: Added Enable/Disable toggle for Email and Telegram modules.
-#   - FEAT: Added complete Uninstall option for notification modules.
-#   - FIX: Fixed executable permissions for .mod extensions (apply_perms).
-#   - UX: Main menu now reflects "Disabled" state for notifications.
-# ==============================================================================
 
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 # BEGIN GENERATED LEGACY MIGRATION

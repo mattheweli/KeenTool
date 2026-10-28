@@ -1,8 +1,7 @@
 #!/opt/bin/bash
 # WAN SYSLOG MONITOR v1.0.0 — 2026-10-22, stable
-# Changelog: a2: independent scan/delivery locks, config loading and service modes.
-# Previous changelog: PPP session events from syslog; persistent cursor, PID/interface mapping,
-# duplicate suppression, rotation recovery and retryable notification queue.
+# Tracks PPP session events with a persistent cursor, PID/interface mapping,
+# duplicate suppression, rotation recovery and a retryable notification queue.
 # Called by Pingtool; never modifies syslog configuration or PPP routing.
 set -u
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}

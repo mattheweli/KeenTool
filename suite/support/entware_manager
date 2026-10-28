@@ -1,6 +1,5 @@
 #!/opt/bin/bash
 # KEENTOOL ENTWARE MANAGER v1.0.0 — 2026-10-22
-# Changelog: a1: check packages, deduplicate email, explicit upgrade, detached worker, service stop/start, backup and recovery.
 # Check/notify, explicit upgrade, detached worker, service stop/start, logs and recovery.
 # No unattended upgrade; configurations and databases backed up, packages not rolled back.
 set -u

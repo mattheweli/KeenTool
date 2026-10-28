@@ -2,13 +2,7 @@
 # SMB BACKUP TOOL v2.0.1
 # Release: 2026-10-23 | Stable. See CHANGELOG.md for release details.
 
-# ==============================================================================
-# SMB BACKUP TOOL v1.0.2 (CRON FIX)
 # Description: Backup local folders to remote SMB share
-# Changelog:
-#   - v1.0.2: Fixed cron job creation and retrofix    
-#   - v1.0.1: Fixed 'tar' compatibility for BusyBox (switched --exclude-from to -X)
-# ==============================================================================
 
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 # smb_backup_tool 2.0.1

@@ -2,11 +2,8 @@
 # KEENTOOL TELEGRAM MODULE v2.0.0
 # Release: 2026-10-22 | Stable. See CHANGELOG.md for release details.
 
-# ==============================================================================
-# KEENTOOL TELEGRAM MODULE v1.0.0
 # Description: Shared utility to send Telegram notifications via curl.
 # Usage: telegram_sender.mod "Subject" "Message Body"
-# ==============================================================================
 
 SUBJECT="$1"
 BODY="$2"

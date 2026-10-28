@@ -2,16 +2,6 @@
 # TRAFFIC MANAGER v2.0.1
 # Release: 2026-10-22 | Stable. See CHANGELOG.md for release details.
 
-# ==============================================================================
-# TRAFFIC MANAGER v1.1.4 - Keenetic UI Refactor
-# Features:
-# - FEAT: Added support for custom interface aliases (e.g., WAN, LAN) via Keentool.
-# - FIX: Removed literal '\n' text artifacts from HTML generation (tabs and scripts).
-# - OPTIMIZATION: HTML generated ONLY on first run or forced. Cache busting via JS.
-# - FIX: Forces system Timezone to prevent 1-hour offset in hourly stats.
-# - UI: Dashboard redesigned to match native KeeneticOS styles.
-# - NEW: Multi-Interface support via single dashboard with tabs.
-# ==============================================================================
 
 PATH=${KT_PATH:-/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin}
 # Traffic Manager 2.0.1

@@ -1,7 +1,5 @@
 #!/opt/bin/bash
 # FIREWALL STATE v1.0.0 — 2026-10-22
-# Changelog: a4: complete saved imports into partially populated sets; mark only successful restore.
-# Previous changelog: a3: skip create records for existing sets; a2: restore all saved mappings with unchanged timeouts; a1: atomic checkpoints and capture archives.
 # Existing sets: restore add records only, preserving current capacity and rule references.
 # Checkpoint dynamic sets; restore once per boot even if another hook created empty sets.
 # Restore saved timeout values unchanged, matching upstream. Never reconstruct bans from history DB.

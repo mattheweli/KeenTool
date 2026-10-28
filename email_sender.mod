@@ -2,11 +2,8 @@
 # KEENTOOL EMAIL MODULE v2.0.0
 # Release: 2026-10-22 | Stable. See CHANGELOG.md for release details.
 
-# ==============================================================================
-# KEENTOOL EMAIL MODULE v1.0.1
 # Description: Shared utility to send email notifications via curl.
 # Usage: email_sender.mod "Subject" "Message Body" ["HTML Alternative"]
-# ==============================================================================
 
 SUBJECT="$1"
 BODY="$2"
