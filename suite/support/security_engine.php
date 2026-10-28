@@ -1,5 +1,5 @@
 <?php
-// KEENTOOL SECURITY ENGINE v1.0.2 — 2026-10-23, stable.
+// KEENTOOL SECURITY ENGINE v1.0.3 — 2026-10-23, stable.
 // Root-only local command broker, audit, guarded policy changes and monitoring.
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit(1); }
 umask(0077);
@@ -167,7 +167,7 @@ function krollback($id,$reason) {
 function kpending() {$p=kread(kp('/opt/etc/keentool/security/pending.json'));return $p?['pending_id'=>$p['id'],'confirm_before'=>$p['expires']]:null;}
 function khistorynote() {
     $rows=ksql("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='kt_history_meta';");
-    return !empty($rows[0]['n'])?' Older IP history uses hourly/daily buckets; hit totals per IP/list are exact, but first/last timestamps and period boundaries crossing a bucket are approximate.':'';
+    return !empty($rows[0]['n'])?' Older IP history uses hourly/daily and optionally monthly buckets; hit totals per IP/list are exact, but first/last timestamps and period boundaries crossing a bucket are approximate.':'';
 }
 function klookup($input) {
     $ip=knetwork($input['ip']??'')['text'];$members=kmembers($ip);$q="'".str_replace("'","''",$ip)."'";$base=explode('/',$ip)[0];

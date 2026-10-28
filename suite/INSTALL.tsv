@@ -54,3 +54,6 @@ support/history_engine.php	/opt/lib/keentool/history_engine.php	644
 support/firewall_history	/opt/bin/firewall_history	755
 support/dependencies.sh	/opt/lib/keentool/dependencies.sh	644
 support/firewall_upgrade	/opt/lib/keentool/firewall_upgrade	755
+support/db_storage.php	/opt/lib/keentool/db_storage.php	644
+support/database_engine.php	/opt/lib/keentool/database_engine.php	644
+support/keentool_db	/opt/bin/keentool_db	755

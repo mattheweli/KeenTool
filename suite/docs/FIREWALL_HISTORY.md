@@ -1,4 +1,4 @@
-# Firewall IP history aggregation — 2.0.1 / 4.0.1
+# Firewall IP history aggregation — 2.0.16 / 4.0.5
 
 The default policy keeps original IP samples for at least 7 elapsed days, hourly buckets through 30 days, and local-calendar-day buckets thereafter. The key is time bucket + IP/subnet + list type. Counts are summed as SQLite integers. No IPs or list classifications are discarded. `drops` global history, `ip_info` enrichment/full port history, AbuseIPDB/reporting state and kernel counters are not changed.
 
@@ -39,3 +39,7 @@ Each rollup is a single `BEGIN IMMEDIATE` transaction. SQL guards compare every 
 A private supplied database was tested on copies, leaving the original unchanged. At its latest sample timestamp, the 7/30-day policy reduced 46,895,104 bytes to 43,778,048 bytes (6.6%). All 30,626,489 hits remained, with unchanged per-IP/list and calendar-day totals, global counters, metadata/port history and reporting tables. The modest immediate reduction reflects already summarized older data and many one-off IPs. Pure VACUUM alone previously reduced it to 44,130,304 bytes.
 
 A separate simulation aged those same records by 31 days, without new incoming events: 30,748,672 bytes. This illustrates daily aggregation, not a prediction of a live database's future size. New addresses/events and port history still grow. These measurements are not physical-router execution or throughput claims. The user's database or its contents are never part of the public package/tests.
+
+## Compact storage and balanced profile
+
+See [DATABASE_STORAGE.md](DATABASE_STORAGE.md) for explicit IP dictionary conversion, the 2/7/365 balanced profile, optional monthly history and lossless Ping/vnStat compaction. Existing history configuration is preserved during installation. `keentool_db firewall balanced` explicitly selects the new policy; reduced older time precision is permanent.
