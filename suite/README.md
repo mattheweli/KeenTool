@@ -25,3 +25,15 @@ The installer offers HTTPS conversion for a simple existing HTTP listener, retai
 [Guarded firewall upgrade](docs/FIREWALL_UPGRADE.md): enabled installations can confirm application from SSH, with independent timeout recovery of both previous rules and source files. Deferral preserves the previous boot hook.
 
 Minimal-BusyBox guardian startup and rollback service handling are corrected. See FIREWALL_UPGRADE.md for interrupted 2.0.14 recovery before reinstalling.
+
+## Support the project
+
+If you find these tools useful, you can support their development with a voluntary donation. Thank you!
+
+[![Donate with PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/MatteoRosettani)
+[![Donate with Revolut](https://img.shields.io/badge/Revolut-black?style=for-the-badge&logo=revolut&logoColor=white)](https://revolut.me/matthew_eli)
+
+Cryptocurrency donations (copy the address):
+
+- **Ethereum (ETH):** `0x8487b6205fd76d7516f07b1117a66966dcf2f0e4`
+- **Bitcoin (BTC):** `bc1qvp5dnsnw60e963dfcgk3jfsfrwys86ufccygsw`

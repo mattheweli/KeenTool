@@ -91,7 +91,7 @@ Include the installed suite/component versions, router/Entware architecture, exa
 
 Screenshots are generated from the current application templates with **synthetic documentation data**. They are examples, not live router output or evidence of a real attack/backup. [Reproduce the screenshots](https://github.com/mattheweli/KeenTool/blob/main/suite/docs/demo/README.md).
 
-Created and maintained by **mattheweli**. The repository's existing LICENSE applies. Optional project support: [PayPal](https://paypal.me/MatteoRosettani) · [Revolut](https://revolut.me/matthew_eli).
+Created and maintained by **mattheweli**. The repository's existing LICENSE applies.
 
 After a successful first migration or fresh install, the installer prompts for a dedicated web admin password if none exists. Existing credentials are preserved. For noninteractive/interrupted setup, complete it later with KeenTool option A or `firewall_admin_password`; no default password is created.
 
@@ -100,3 +100,15 @@ Legacy HTTP-only lighttpd listeners can now be converted to HTTPS with consent o
 Enabled-firewall upgrades can now apply the new hook with an independent rollback guardian and a fresh SSH confirmation challenge. Deferring keeps the old boot hook and prints the guarded retry command. Disabled firewalls stay disabled. See suite/docs/FIREWALL_UPGRADE.md.
 
 Package 2.0.15 fixes minimal-BusyBox guardian startup and rollback service handling. Interrupted 2.0.14 transactions have a separate checksum-verified recovery asset; preserve the recovery directory and inspect its status before retrying. Manager remains 2.0.11.
+
+## Support the project
+
+If you find these tools useful, you can support their development with a voluntary donation. Thank you!
+
+[![Donate with PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/MatteoRosettani)
+[![Donate with Revolut](https://img.shields.io/badge/Revolut-black?style=for-the-badge&logo=revolut&logoColor=white)](https://revolut.me/matthew_eli)
+
+Cryptocurrency donations (copy the address):
+
+- **Ethereum (ETH):** `0x8487b6205fd76d7516f07b1117a66966dcf2f0e4`
+- **Bitcoin (BTC):** `bc1qvp5dnsnw60e963dfcgk3jfsfrwys86ufccygsw`
