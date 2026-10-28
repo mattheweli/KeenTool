@@ -1,6 +1,6 @@
 """Exercise production release installation transactions in an isolated Entware root."""
 from pathlib import Path
-import tempfile,subprocess,os,shutil,hashlib,json,stat,sqlite3,time
+import tempfile,subprocess,os,shutil,hashlib,json,stat,sqlite3,time,pty,select
 src=Path(__file__).resolve().parents[1]
 php=Path('/tmp/keentool-security-runtime/root/usr/bin/php8.3')
 with tempfile.TemporaryDirectory() as td:
@@ -135,6 +135,53 @@ with tempfile.TemporaryDirectory() as td:
  r=call(env,'--apply','--no-backup');assert r.returncode!=0 and 'recovery copies retained' in r.stderr,r.stdout+r.stderr
  retained=list((blocked/'opt/var/lib/keentool-release/transactions').iterdir());assert len(retained)==1 and (retained[0]/'transaction.json').exists()
  print('PASS: grouped plan, explicit retention, successful transaction/rollback cleanup, old archives/data preserved, failed restore retained, constrained symlink-safe cleanup.')
+ # Legacy TLS migration: preserve port/includes/credentials and use transaction rollback.
+ def tls_fixture(name):
+  root,env=fixture(name,True);main=root/'opt/etc/lighttpd/lighttpd.conf'
+  main.write_text('server.port = 81\nserver.document-root = "/opt/var/www"\n# custom PHP configuration stays intact\ninclude "/opt/etc/lighttpd/conf.d/*.conf"\n')
+  fast=root/'opt/etc/lighttpd/conf.d';fast.mkdir();(fast/'30-fastcgi.conf').write_text('# existing custom PHP backend\n')
+  light=root/'opt/bin/lighttpd';light.write_text('#!/usr/bin/python3\nimport os,sys\nfrom pathlib import Path\np=Path(sys.argv[sys.argv.index("-f")+1])\nif "-p" in sys.argv:print(p.read_text())\nif "-tt" in sys.argv and os.environ.get("KT_TEST_TLS_PREFLIGHT_FAIL") and p.name=="lighttpd.conf" and ".kt-tls-" in str(p):sys.exit(1)\n');light.chmod(0o755)
+  curl=root/'opt/bin/curl';curl.write_text('#!/bin/bash\nprintf "%s\\n" "$*" >> "$KT_TEST_TLS_PROBES"\n[ "${KT_TEST_TLS_PROBE_FAIL:-0}" != 1 ]\n');curl.chmod(0o755)
+  env['KT_TEST_TLS_PROBES']=str(root/'tls-probes');return root,env
+ tls,env=tls_fixture('legacy-tls');main=tls/'opt/etc/lighttpd/lighttpd.conf';original=main.read_bytes();db=(tls/'opt/etc/firewall_stats.db').read_bytes();cron=(tls/'opt/etc/crontab').read_bytes();credentials=(tls/'opt/etc/keentool/admin/credentials.json').read_bytes()
+ r=call(env,'--plan','--enable-https');assert r.returncode==0 and 'enable TLS on existing port 81' in r.stdout and main.read_bytes()==original and not (tls/'events').exists(),r.stdout+r.stderr
+ r=call(env,'--apply','--enable-https','--no-backup');assert r.returncode==0 and 'HTTPS verified on existing port 81' in r.stdout,r.stdout+r.stderr
+ assert main.read_bytes().startswith(original) and 'server.port = 8080' not in main.read_text() and 'ssl.engine = "enable"' in main.read_text()
+ assert (tls/'opt/etc/lighttpd/conf.d/30-fastcgi.conf').read_text()=='# existing custom PHP backend\n'
+ assert (tls/'opt/etc/firewall_stats.db').read_bytes()==db and (tls/'opt/etc/crontab').read_bytes()==cron and (tls/'opt/etc/keentool/admin/credentials.json').read_bytes()==credentials
+ cert=tls/'opt/etc/keentool/tls/server.pem';assert cert.stat().st_mode&0o777==0o600;cert_before=cert.read_bytes();main_before=main.read_bytes()
+ assert (tls/'tls-probes').read_text().startswith('-q ') and 'https://127.0.0.1:81/' in (tls/'tls-probes').read_text() and '--noproxy *' in (tls/'tls-probes').read_text()
+ r=call(env,'--apply','--enable-https','--no-backup');assert r.returncode==0 and main.read_bytes()==main_before and cert.read_bytes()==cert_before,r.stdout+r.stderr
+ for name,flag in [('tls-preflight','KT_TEST_TLS_PREFLIGHT_FAIL'),('tls-probe','KT_TEST_TLS_PROBE_FAIL')]:
+  root,env=tls_fixture(name);main=root/'opt/etc/lighttpd/lighttpd.conf';before=main.read_bytes();mode=main.stat().st_mode&0o777;env[flag]='1'
+  r=call(env,'--apply','--enable-https','--no-backup');assert r.returncode!=0,r.stdout+r.stderr
+  assert main.read_bytes()==before and main.stat().st_mode&0o777==mode and not (root/'opt/etc/keentool/tls/server.pem').exists()
+  assert (root/'opt/bin/keentool').read_text()=='# previous manager\n'
+  if flag=='KT_TEST_TLS_PREFLIGHT_FAIL':assert not (root/'events').exists() and not (root/'opt/var/lib/keentool-release/transactions').exists()
+  else:assert list((root/'opt/var/lib/keentool-release/transactions').iterdir())==[] and 'HTTPS handshake check failed' in r.stderr
+ custom,env=tls_fixture('tls-custom');main=custom/'opt/etc/lighttpd/lighttpd.conf';main.write_text(main.read_text()+'$SERVER["socket"] == ":8443" { }\n');before=main.read_bytes()
+ r=call(env,'--apply','--enable-https');assert r.returncode!=0 and 'manual review' in r.stdout+r.stderr and main.read_bytes()==before and not (custom/'events').exists(),r.stdout+r.stderr
+ declined,env=tls_fixture('tls-declined');main=declined/'opt/etc/lighttpd/lighttpd.conf';before=main.read_bytes()
+ r=call(env,'--apply','--no-backup');assert r.returncode==0 and 'HTTPS not changed without consent' in r.stderr and main.read_bytes()==before,r.stdout+r.stderr
+ # Real installer launched like the old updater: stdin closed, controlling TTY retained.
+ prompted,env=tls_fixture('tls-interactive');pid,fd=pty.fork()
+ if pid==0:
+  os.environ.update(env);os.execvp('bash',['bash','-c','bash "$1" --apply --no-backup </dev/null & child=$!;wait "$child"','legacy',str(pkg/'install.sh')])
+ text=b'';sent=False;deadline=time.monotonic()+30
+ try:
+  while time.monotonic()<deadline:
+   ready,_,_=select.select([fd],[],[],.1)
+   if not ready:continue
+   try:chunk=os.read(fd,8192)
+   except OSError:break
+   if not chunk:break
+   text+=chunk
+   if b'Enable HTTPS on port 81 now?' in text and not sent:os.write(fd,b'y\n');sent=True
+  else:os.kill(pid,9);raise AssertionError('TLS consent timed out: '+text.decode())
+ finally:os.close(fd)
+ _,status=os.waitpid(pid,0);assert status==0 and sent and b'HTTPS verified on existing port 81' in text,text.decode()
+ assert 'ssl.engine = "enable"' in (prompted/'opt/etc/lighttpd/lighttpd.conf').read_text()
+ print('PASS: existing-port TLS plan/apply, unchanged PHP/credentials/data/cron, current TLS/certificate preservation, preflight refusal, TLS-probe rollback, custom socket refusal and noninteractive consent.')
  # Symlink refusal and corrupt-backup verification happen before replacement.
  symlink,env=fixture('symlink',True);(symlink/'opt/bin/keentool').unlink();(symlink/'opt/bin/keentool').symlink_to(symlink/'outside')
  r=call(env,'--plan');assert r.returncode!=0 and 'Symlink' in r.stderr

@@ -2,7 +2,7 @@
 
 **A package manager and monitoring dashboard for Keenetic routers running Entware.** Manage the firewall, WAN/PPP connectivity, traffic history, SMB backups, notifications and Entware maintenance from a consistent CLI and web interface.
 
-Current coordinated package: **2.0.12**; KeenTool manager: **2.0.9**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
+Current coordinated package: **2.0.13**; KeenTool manager: **2.0.10**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
 
 ![System Dashboard: firewall, traffic, connection and security summaries](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/dashboard.png)
 
@@ -94,3 +94,5 @@ Screenshots are generated from the current application templates with **syntheti
 Created and maintained by **mattheweli**. The repository's existing LICENSE applies. Optional project support: [PayPal](https://paypal.me/MatteoRosettani) · [Revolut](https://revolut.me/matthew_eli).
 
 After a successful first migration or fresh install, the installer prompts for a dedicated web admin password if none exists. Existing credentials are preserved. For noninteractive/interrupted setup, complete it later with KeenTool option A or `firewall_admin_password`; no default password is created.
+
+Legacy HTTP-only lighttpd listeners can now be converted to HTTPS with consent on their existing port, preserving PHP/includes. Use u to update, or the new updater with `--update --reinstall --enable-https` for explicit configuration. Existing TLS/custom listeners are preserved; review the reported HTTPS URL and certificate.

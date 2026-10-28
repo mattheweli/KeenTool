@@ -2,6 +2,8 @@
 
 ## Automated evidence
 
+Package 2.0.13 adds a native lighttpd/OpenSSL loopback TLS fixture, candidate syntax validation, actual HTTPS response and file rollback. Transaction fixtures cover port/PHP/credential/data preservation, enabled TLS, consent from a background legacy terminal, preflight failure, handshake-failure rollback, custom sockets and no implicit headless conversion. CI requires lighttpd and lighttpd-mod-openssl in addition to the earlier dependencies. Native service lifecycle for the full suite remains mocked; the TLS fixture itself runs a real local server.
+
 Package 2.0.12 adds real CLI/bcrypt fixtures for missing-password setup, hidden legacy-background terminal input, confirmation/length retries, credential hash/mode/revision, existing/concurrent credential preservation, explicit reset, invalid credentials and EOF. Installer fixtures verify no prompt on failure/plan and pending setup in noninteractive fresh installs. Current workflow artifacts record the exact release results.
 
 Package 2.0.11 adds checks for complete grouped/wrapped CLI output, machine-selection compatibility, interactive and legacy-background retention prompts, explicit policy forwarding, success/rollback cleanup, old archive/data preservation, failed-restore retention and constrained symlink-safe cleanup. The current workflow artifact records the results for the exact release commit; the counts below describe earlier baseline evidence.

@@ -1,5 +1,5 @@
 <?php
-// KeenTool release file transaction 1.0.2. CLI only; no database or firewall rewrites.
+// KeenTool release file transaction 1.0.3. CLI only; no database or firewall rewrites.
 if (PHP_SAPI !== 'cli') exit(1);
 umask(0077);
 
@@ -13,6 +13,43 @@ function rootpath($p){return rtrim(getenv('KT_INSTALL_ROOT')?:'','/').$p;}
 function checked($v,$message){if(!$v)throw new RuntimeException($message);return $v;}
 function regular($p){for($a=$p;$a!==dirname($a);$a=dirname($a))if(is_link($a))throw new RuntimeException('Symlink path rejected: '.$a);if(file_exists($p)&&!is_file($p))throw new RuntimeException('Regular file required: '.$p);}
 function commandRun($args){$p=proc_open($args,[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$io);checked(is_resource($p),'Cannot launch command');fclose($io[0]);$s=stream_get_contents($io[1]);$e=stream_get_contents($io[2]);fclose($io[1]);fclose($io[2]);$rc=proc_close($p);return [$rc,$s,$e];}
+// Inspect expanded lighttpd settings; only simple dedicated listeners can migrate.
+function httpsState(){
+ $main=rootpath('/opt/etc/lighttpd/lighttpd.conf');regular($main);
+ if(!is_file($main))return ['state'=>'manual','detail'=>'No existing lighttpd configuration.'];
+ [$rc,$expanded,$error]=commandRun(['lighttpd','-p','-f',$main]);
+ if($rc!==0)return ['state'=>'manual','detail'=>'Cannot inspect expanded lighttpd configuration.'];
+ // Preserve quoted strings while removing line comments from the expanded config.
+ $clean='';$quoted=false;$escaped=false;
+ for($i=0,$n=strlen($expanded);$i<$n;$i++){$c=$expanded[$i];
+  if(!$quoted&&$c==='#'){while($i<$n&&$expanded[$i]!=="\n")$i++;$clean.="\n";continue;}
+  $clean.=$c;if($c==='"'&&!$escaped)$quoted=!$quoted;
+  $escaped=$quoted&&$c==='\\'&&!$escaped;
+ }
+ if(preg_match('/\bssl\.engine\s*=\s*"enable"/',$clean))return ['state'=>'configured','detail'=>'Existing TLS configuration detected; listener preserved.'];
+ if(is_file(rootpath('/opt/etc/keentool/security/web-hardened')))return ['state'=>'manual','detail'=>'Existing isolated web listener requires reviewed TLS configuration.'];
+ if(preg_match('/\$[A-Za-z_]+\s*\[|\bssl\.[A-Za-z_-]+\s*=/',$clean))return ['state'=>'manual','detail'=>'Custom socket, virtual-host or TLS settings require manual review.'];
+ preg_match_all('/^\s*server\.port\s*=\s*([0-9]+)\s*$/m',$clean,$ports);
+ preg_match_all('/^\s*server\.document-root\s*=\s*"([^"\r\n]+)"\s*$/m',$clean,$roots);
+ if(count($ports[1])!==1||count($roots[1])!==1||!in_array(rtrim($roots[1][0],'/'),['/opt/var/www',rootpath('/opt/var/www')],true))return ['state'=>'manual','detail'=>'Cannot identify one dedicated KeenTool listener and document root.'];
+ $port=(int)$ports[1][0];if($port<1||$port>65535)return ['state'=>'manual','detail'=>'Invalid listener port.'];
+ preg_match_all('/^\s*server\.bind\s*=\s*"([^"\r\n]+)"\s*$/m',$clean,$binds);
+ if(count($binds[1])>1)return ['state'=>'manual','detail'=>'Multiple bind addresses require manual review.'];
+ $bind=$binds[1][0]??'0.0.0.0';$address=$bind==='0.0.0.0'?'127.0.0.1':($bind==='::'?'::1':$bind);
+ if(@inet_pton($address)===false)return ['state'=>'manual','detail'=>'A nonnumeric bind address requires manual review.'];
+ $host=str_contains($address,':')?'['.$address.']':$address;
+ return ['state'=>'plain','port'=>$port,'probe'=>'https://'.$host.':'.$port.'/','openssl'=>preg_match('/"mod_openssl"/',$clean)===1,'detail'=>'HTTP-only listener on port '.$port.'; administrator login requires HTTPS.'];
+}
+function preflightHttps($p){
+ $dir=rtrim(sys_get_temp_dir(),'/').'/.kt-tls-'.bin2hex(random_bytes(8));checked(mkdir($dir,0700),'Cannot create private TLS staging directory');$dirs=[];
+ try{
+  $cert=rootpath('/opt/etc/keentool/tls/server.pem');$testCert=$cert;
+  if(!file_exists($cert)){$testCert=$dir.'/server.pem';putAtomic($testCert,['certificate'=>true,'mode'=>0600],$dirs);}
+  $main=rootpath('/opt/etc/lighttpd/lighttpd.conf');$candidate=str_replace('/opt/etc/keentool/tls/server.pem',$testCert,$p['items'][$main]['content']);
+  checked(file_put_contents($dir.'/lighttpd.conf',$candidate)!==false,'Cannot stage TLS configuration');
+  [$rc,$out,$error]=commandRun(['lighttpd','-tt','-f',$dir.'/lighttpd.conf']);checked($rc===0,'TLS preflight failed; live configuration unchanged: '.$error);
+ }finally{foreach(glob($dir.'/*') as $file)if(is_file($file))unlink($file);rmdir($dir);}
+}
 function literalSettings($file,$defaults){
  if(!is_file($file))return $defaults;
  $s=file_get_contents($file);$out=$defaults;
@@ -27,6 +64,7 @@ function literalSettings($file,$defaults){
 }
 function shellConfig($values){$text="# KeenTool stable configuration; preserved by package updates.\n";foreach($values as $k=>$v)$text.=$k.'="'.str_replace(['\\','"','$','`'],['\\\\','\\"','\\$','\\`'],(string)$v).'"'."\n";return $text;}
 function plan($base,$mode,$iface,$web,$logging){
+ checked(in_array($web,[0,1,2],true),'Invalid web migration mode');
  checked(is_file($base.'/INSTALL.tsv'),'Missing package manifest');checked(!is_file(rootpath('/opt/etc/keentool/security/pending.json')),'Confirm or roll back the pending firewall change before installing.');checked(!$web||!is_file(rootpath('/opt/etc/keentool/security/web-hardened')),'Preserve the existing isolated listener; omit --configure-web.');$items=[];
  foreach(file($base.'/INSTALL.tsv',FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES) as $line){
   $a=explode("\t",$line);checked(count($a)===3,'Malformed install manifest');[$src,$dest,$perm]=$a;
@@ -62,15 +100,20 @@ function plan($base,$mode,$iface,$web,$logging){
  }else{
   $config[$ulog]="[global]\nlogfile=\"/opt/var/log/ulogd.log\"\nloglevel=3\nplugin=\"/opt/lib/ulogd/ulogd_inppkt_NFLOG.so\"\nplugin=\"/opt/lib/ulogd/ulogd_raw2packet_BASE.so\"\nplugin=\"/opt/lib/ulogd/ulogd_output_PCAP.so\"\nstack=log1:NFLOG,base1:BASE,pcap1:PCAP\n[log1]\ngroup=1\n[pcap1]\nfile=\"/opt/var/log/keentool-firewall/fw_syn_ring.pcap\"\nsync=1\n";$captureChange=true;
  }
- $cert=rootpath('/opt/etc/keentool/tls/server.pem');
- if($web){
+ $cert=rootpath('/opt/etc/keentool/tls/server.pem');$tls=null;
+ if($web===2){
+  $tls=httpsState();checked($tls['state']==='plain','HTTPS migration unavailable: '.$tls['detail']);
+  $main=rootpath('/opt/etc/lighttpd/lighttpd.conf');
+  $config[$main]=rtrim(file_get_contents($main),"\n")."\n\n# KeenTool HTTPS migration: existing port, PHP and includes preserved.\n".($tls['openssl']?'':"server.modules += ( \"mod_openssl\" )\n")."ssl.engine = \"enable\"\nssl.pemfile = \"/opt/etc/keentool/tls/server.pem\"\n";
+ }elseif($web===1){
   $config[rootpath('/opt/etc/lighttpd/lighttpd.conf')]="# KeenTool dedicated HTTPS listener; previous configuration is in the release backup.\nserver.modules = ( \"mod_access\", \"mod_alias\", \"mod_fastcgi\", \"mod_openssl\" )\nserver.document-root = \"/opt/var/www\"\nserver.port = 8080\nserver.pid-file = \"/opt/var/run/lighttpd.pid\"\nserver.errorlog = \"/opt/var/log/lighttpd/error.log\"\nserver.upload-dirs = ( \"/opt/tmp\" )\nindex-file.names = ( \"index.php\", \"index.html\" )\nstatic-file.exclude-extensions = ( \".php\", \".pl\", \".cgi\", \".fcgi\" )\nssl.engine = \"enable\"\nssl.pemfile = \"/opt/etc/keentool/tls/server.pem\"\nfastcgi.server = ( \".php\" => (( \"socket\" => \"/opt/var/run/keentool-php.sock\", \"bin-path\" => \"/opt/bin/php-cgi\", \"max-procs\" => 1, \"broken-scriptfilename\" => \"enable\", \"bin-environment\" => (\"PHP_FCGI_CHILDREN\" => \"0\", \"PHP_FCGI_MAX_REQUESTS\" => \"1000\") )))\n".(is_file(rootpath('/opt/etc/lighttpd/mime.conf'))?"include \"/opt/etc/lighttpd/mime.conf\"\n":'');
  }
  foreach($config as $target=>$text){regular($target);$items[$target]=['content'=>$text,'mode'=>0600];}
- if($web&&!file_exists($cert)){regular($cert);$items[$cert]=['certificate'=>true,'mode'=>0600];}
+ if($web)regular($cert);
+ if($web&&!file_exists($cert)){$items[$cert]=['certificate'=>true,'mode'=>0600];}
  $record=rootpath('/opt/etc/keentool/installed-release.json');regular($record);$items[$record]=['content'=>file_get_contents($base.'/RELEASE.json'),'mode'=>0600];
  $init=[];foreach(['lighttpd','ulogd','vnstat'] as $service){$scripts=array_values(array_filter(glob(rootpath('/opt/etc/init.d/S*'.$service.'*')),fn($p)=>is_file($p)&&is_executable($p)&&!is_link($p)));if(($service==='lighttpd'&&$web)||($service==='ulogd'&&$captureChange)||($service==='vnstat'&&$mode==='fresh'))checked(count($scripts)===1,'Exactly one '.$service.' init script required');$init[$service]=$scripts[0]??null;}
- return ['mode'=>$mode,'base'=>$base,'items'=>$items,'web'=>$web,'capture_change'=>$captureChange,'init'=>$init,'root'=>rtrim(getenv('KT_INSTALL_ROOT')?:'','/')];
+ return ['mode'=>$mode,'base'=>$base,'items'=>$items,'web'=>$web,'tls'=>$tls,'capture_change'=>$captureChange,'init'=>$init,'root'=>rtrim(getenv('KT_INSTALL_ROOT')?:'','/')];
 }
 
 function showPlan($p){
@@ -85,7 +128,7 @@ function showPlan($p){
  ktCliText(sprintf('Targets: %d | Install: %d | Update: %d | Permissions: %d | Matching: %d',count($p['items']),count($groups['Install']),count($groups['Update']),count($groups['Permissions']),count($groups['Matching'])));
  foreach(['Install','Update','Permissions'] as $kind){if(!$groups[$kind])continue;ktCliSection($kind.' ('.count($groups[$kind]).')');foreach($groups[$kind] as $path)ktCliText($path,'  - ');}
  if($groups['Matching'])ktCliText('Already matching: '.count($groups['Matching']).' targets (included in the coordinated transaction).');
- ktCliSection('Configuration');ktCliText('HTTPS: '.($p['web']?'configure listener on 8080':'preserve existing listener'));
+ ktCliSection('Configuration');ktCliText('HTTPS: '.($p['web']===2?'enable TLS on existing port '.$p['tls']['port']:($p['web']?'configure listener on 8080':'preserve existing listener')));
  ktCliText('Existing credentials, databases and upgrade schedules are preserved.');
 }
 function removeRecoveryTree($path){
@@ -126,6 +169,7 @@ function restore($backup){
 }
 try{
  $action=$argv[1]??'';
+ if($action==='https-state'){echo json_encode(httpsState(),JSON_THROW_ON_ERROR);exit;}
  if($action==='discard'){discardRecovery($argv[2]);exit;}
  if($action==='rollback'){restore($argv[2]);exit;}
  if($action==='verify-backup'){backupVerify($argv[2]);exit;}
@@ -135,8 +179,9 @@ try{
   finally{$p['created_dirs']=$dirs;checked(file_put_contents($backup.'/transaction.json',json_encode($p,JSON_PRETTY_PRINT))!==false,'Cannot record directories');}
   exit;
  }
- $base=realpath($argv[2]??'');checked($base!==false,'Invalid package path');$p=plan($base,$argv[3]??'auto',$argv[4]??'',($argv[5]??'0')==='1',($argv[6]??'0')==='1');
+ $base=realpath($argv[2]??'');checked($base!==false,'Invalid package path');$p=plan($base,$argv[3]??'auto',$argv[4]??'',(int)($argv[5]??'0'),($argv[6]??'0')==='1');
  if($action==='plan'){showPlan($p);exit;}
+ if($action==='https-preflight'){checked($p['web']===2,'HTTPS migration plan required');preflightHttps($p);exit;}
  checked($action==='prepare','Unsupported transaction action');$policy=$argv[7]??'keep';checked(in_array($policy,['keep','discard'],true),'Invalid backup retention policy');
  $p['retain_backup']=$policy==='keep';$parent=$p['retain_backup']?'/opt/var/backups/keentool-release/':'/opt/var/lib/keentool-release/transactions/';
  $backup=rootpath($parent).date('Ymd_His').'-'.getmypid().'-'.bin2hex(random_bytes(3));checked(mkdir($backup.'/files',0700,true),'Cannot create recovery copies');$p['before']=[];$p['created_dirs']=[];

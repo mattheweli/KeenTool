@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KeenTool stable bootstrap 1.0.5. Downloaded over trusted GitHub HTTPS; verify its source before running.
+# KeenTool stable bootstrap 1.0.6. Downloaded over trusted GitHub HTTPS; verify its source before running.
 set -Eeuo pipefail
 umask 077
 # Recover a deleted working directory before starting child processes.
@@ -352,7 +352,7 @@ try{
 KT_BOOTSTRAP_PHP
 cat > "$work/keentool_update" <<'KT_BOOTSTRAP_SH'
 #!/opt/bin/bash
-# KeenTool remote release updater 1.0.5 — 2026-10-27.
+# KeenTool remote release updater 1.0.6 — 2026-10-28.
 set -Eeuo pipefail
 # Recover a deleted working directory before starting child processes.
 if ! builtin pwd -P >/dev/null 2>&1; then
@@ -404,17 +404,20 @@ kt_installer_backup_policy() {
     fi
 }
 
+enable_https=false
 while [ "$#" -gt 0 ];do
- case "$1" in --keep-backup)kt_set_backup_policy keep;; --no-backup)kt_set_backup_policy discard;; --check)check=true;; --repair)repair=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--repair|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path] [--keep-backup|--no-backup]';echo 'Backup options control retention after success; temporary rollback copies are always used.';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
+ case "$1" in --enable-https)enable_https=true;; --keep-backup)kt_set_backup_policy keep;; --no-backup)kt_set_backup_policy discard;; --check)check=true;; --repair)repair=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--repair|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path] [--keep-backup|--no-backup] [--enable-https]';echo 'Backup options control retention after success; temporary rollback copies are always used.';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
 done
 case "$component" in ''|KeenTool|Dashboard|keenetic-firewall|keenetic-pingtool|Traffic_manager|SMB_Backup_tool);;*)echo 'Unknown suite component' >&2;exit 2;;esac
 [ "$check" != true ] || [ "$install_deps" != true ] || { echo '--install-deps cannot be used with --check' >&2;exit 2; }
+web_args=();[ "$enable_https" != true ] || web_args=(--enable-https)
 bash_bin=${KT_UPDATE_BASH:-/opt/bin/bash}
 if [ -n "$local_package" ];then
  [[ "$local_package" = /* ]] && [ -f "$local_package/RELEASE.json" ] && [ -f "$local_package/install.sh" ] || { echo 'Pass an extracted complete release directory' >&2;exit 1; }
  (cd "$local_package" && sha256sum -c CHECKSUMS.sha256) >/dev/null
- [ "$check" != true ] || { "$bash_bin" "$local_package/install.sh" --plan --mode upgrade;exit; }
- local_args=();[ "$install_deps" != true ] || local_args=(--install-deps)
+ if [ "$enable_https" = true ] && ! grep -qF 'KT_INSTALL_HTTPS_MIGRATION_V1' "$local_package/install.sh";then echo 'This installer cannot safely migrate HTTPS; select a newer package.' >&2;exit 1;fi
+ [ "$check" != true ] || { "$bash_bin" "$local_package/install.sh" --plan --mode upgrade "${web_args[@]}";exit; }
+ local_args=("${web_args[@]}");[ "$install_deps" != true ] || local_args+=(--install-deps)
  kt_installer_backup_policy "$local_package/install.sh"
  export KT_INSTALL_BACKUP_POLICY=$backup_policy
  exec "$bash_bin" "$local_package/install.sh" --apply --mode upgrade "${local_args[@]}"
@@ -499,12 +502,13 @@ if [ -r "$work/package/support/dependencies.sh" ];then
     kt_dep_ensure suite "$dep_policy" || exit 1
 fi
 [ "${KT_UPDATE_BOOTSTRAP:-false}" != true ] || echo 'Bootstrap verified. Existing public/alpha installation will use the same migration installer.'
-"$bash_bin" "$work/package/install.sh" --plan --mode upgrade
+if [ "$enable_https" = true ] && ! grep -qF 'KT_INSTALL_HTTPS_MIGRATION_V1' "$work/package/install.sh";then echo 'This installer cannot safely migrate HTTPS; select a newer package.' >&2;exit 1;fi
+"$bash_bin" "$work/package/install.sh" --plan --mode upgrade "${web_args[@]}"
 kt_installer_backup_policy "$work/package/install.sh"
 child=''
 cancel(){ trap - INT TERM;[ -z "$child" ] || { kill -TERM "$child" 2>/dev/null || :;wait "$child" || :; };exit 143; }
 trap cancel INT TERM
-KT_INSTALL_PLAN_REVIEWED=1 KT_INSTALL_BACKUP_POLICY=$backup_policy "$bash_bin" "$work/package/install.sh" --apply --mode upgrade & child=$!
+KT_INSTALL_PLAN_REVIEWED=1 KT_INSTALL_BACKUP_POLICY=$backup_policy "$bash_bin" "$work/package/install.sh" --apply --mode upgrade "${web_args[@]}" & child=$!
 wait "$child";child=''
 trap - INT TERM
 rm -f "${KT_UPDATE_FLAG:-/tmp/keentool_new_ver}"
