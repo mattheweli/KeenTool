@@ -23,6 +23,7 @@ done
 [ -f "$marker" ] || { echo 'No pending firewall marker. Check installed version, firewall health and service state; recovery copies were left untouched.';exit 0; }
 [ "$(sed -n '1p' "$marker")" = "$backup" ] || { echo 'This directory does not match the pending transaction' >&2;exit 1; }
 token=$(sed -n '2p' "$marker");[[ "$token" =~ ^[a-f0-9]{48}$ ]] || exit 1
+[ "$(sed -n '3p' "$marker")" = "$(cat /proc/sys/kernel/random/boot_id)" ] || { echo 'This transaction belongs to a previous boot; use reviewed boot recovery before retrying.' >&2;exit 1; }
 for file in release_install.php rollback.sh firewall_upgrade transaction.json;do [ -f "$backup/$file" ] && [ ! -L "$backup/$file" ] || { echo "Missing regular recovery file: $file" >&2;exit 1; };done
 "$php_cli" "$backup/release_install.php" verify-backup "$backup"
 maintenance="$root/opt/etc/keentool/maintenance"

@@ -98,6 +98,7 @@ with tempfile.TemporaryDirectory() as td:
  r=subprocess.run(['python3',str(suite/'tools/build-recovery.py'),'--check'],capture_output=True,text=True);assert r.returncode==0,r.stdout+r.stderr
  # Reboot with a prepared/unconfirmed source: restore source before running the old hook.
  root,env,backup,token,kernel=fixture('reboot');marker=root/'opt/etc/keentool/firewall-upgrade.pending';marker.write_text(str(backup)+'\n'+token+'\nprevious-boot\n');(backup/'firewall-upgrade/boot').write_text('previous-boot\n')
+ r=subprocess.run(['bash',str(suite/'support/recover_firewall_upgrade.sh'),str(backup)],env=env,text=True,capture_output=True);assert r.returncode!=0 and 'previous boot' in r.stderr and marker.exists(),r.stdout+r.stderr
  r=subprocess.run(['bash',str(root/'opt/etc/ndm/netfilter.d/100-firewall.sh')],env={**env,'table':'filter'},text=True,capture_output=True);assert r.returncode==0,r.stdout+r.stderr
  restored(root,backup,kernel);assert (root/'legacy.log').read_text().strip()=='legacy-called'
 print('PASS: real source/metadata rollback, real hook with mock kernel, interactive challenge confirmation/rejection, independently timed restore after parent SIGKILL/SSH loss, foreign rules and existing bans retained, pending-install exclusion and reboot recovery.')
