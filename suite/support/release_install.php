@@ -1,5 +1,5 @@
 <?php
-// KeenTool release file transaction 1.0.4. CLI only; no database or firewall rewrites.
+// KeenTool release file transaction 1.0.5. CLI only; no database or firewall rewrites.
 if (PHP_SAPI !== 'cli') exit(1);
 umask(0077);
 
@@ -84,7 +84,7 @@ function plan($base,$mode,$iface,$web,$logging){
   $config[$ping]=shellConfig($values);
  }
  $fw=rootpath('/opt/etc/firewall.conf');if(!file_exists($fw))$config[$fw]=shellConfig(['ENABLE_FIREWALL'=>'false','ENABLE_IPV6'=>'true','ENABLE_MANUAL'=>'true','ENABLE_AUTOBAN'=>'true','ENABLE_CONNLIMIT'=>'true','ENABLE_BRUTEFORCE'=>'true','ENABLE_FWD_PROTECTION'=>'false','TCP_SERVICES'=>'','UDP_SERVICES'=>'','BANNED_COUNTRIES'=>'','BAN_TIMEOUT'=>'604800']);
- $history=rootpath('/opt/etc/keentool/firewall-history.conf');if(!file_exists($history))$config[$history]=shellConfig(['HISTORY_ENABLED'=>'true','HISTORY_RAW_DAYS'=>'7','HISTORY_HOURLY_DAYS'=>'30']);
+ $history=rootpath('/opt/etc/keentool/firewall-history.conf');if(!file_exists($history))$config[$history]=shellConfig($mode==='fresh'?['HISTORY_ENABLED'=>'true','HISTORY_RAW_DAYS'=>'2','HISTORY_HOURLY_DAYS'=>'7','HISTORY_DAILY_DAYS'=>'365','HISTORY_COMPACT'=>'true']:['HISTORY_ENABLED'=>'true','HISTORY_RAW_DAYS'=>'7','HISTORY_HOURLY_DAYS'=>'30','HISTORY_DAILY_DAYS'=>'0','HISTORY_COMPACT'=>'false']);
  $dashboard=rootpath('/opt/etc/keentool/dashboard.conf');if(!file_exists($dashboard))$config[$dashboard]=shellConfig(literalSettings(rootpath('/opt/bin/traffic_manager.sh'),['MONTHLY_QUOTA_GB'=>'0']));
  $cron=rootpath('/opt/etc/crontab');$old=is_file($cron)?file_get_contents($cron):'';
  // New installations get defaults; upgrades retain every existing schedule verbatim.

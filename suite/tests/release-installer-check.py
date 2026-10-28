@@ -37,7 +37,7 @@ with tempfile.TemporaryDirectory() as td:
  r=call(env,'--plan','--mode','fresh','--interface','ppp0','--configure-web','--configure-logging');assert r.returncode==0,r.stdout+r.stderr;assert not (fresh/'events').exists() and not (fresh/'opt/etc/keentool').exists()
  r=call(env,'--apply','--mode','fresh','--interface','ppp0','--configure-web','--configure-logging');assert r.returncode==0,r.stdout+r.stderr
  assert 'Admin password setup requires an interactive SSH terminal.' in r.stderr and not (fresh/'opt/etc/keentool/admin/credentials.json').exists(),r.stdout+r.stderr
- assert 'HISTORY_RAW_DAYS="7"' in (fresh/'opt/etc/keentool/firewall-history.conf').read_text()
+ assert all(v in (fresh/'opt/etc/keentool/firewall-history.conf').read_text() for v in ['HISTORY_RAW_DAYS="2"','HISTORY_HOURLY_DAYS="7"','HISTORY_DAILY_DAYS="365"','HISTORY_COMPACT="true"'])
  assert (fresh/'opt/bin/firewall_history').exists() and (fresh/'opt/lib/keentool/history_engine.php').exists()
  assert 'ENABLE_FIREWALL="false"' in (fresh/'opt/etc/firewall.conf').read_text()
  assert (fresh/'opt/etc/keentool/tls/server.pem').stat().st_mode&0o777==0o600
