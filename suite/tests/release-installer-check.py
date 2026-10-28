@@ -182,6 +182,15 @@ with tempfile.TemporaryDirectory() as td:
  _,status=os.waitpid(pid,0);assert status==0 and sent and b'HTTPS verified on existing port 81' in text,text.decode()
  assert 'ssl.engine = "enable"' in (prompted/'opt/etc/lighttpd/lighttpd.conf').read_text()
  print('PASS: existing-port TLS plan/apply, unchanged PHP/credentials/data/cron, current TLS/certificate preservation, preflight refusal, TLS-probe rollback, custom socket refusal and noninteractive consent.')
+ # Deferral keeps the boot hook itself, even when permanent backups are declined.
+ deferred,env=fixture('firewall-deferred',True);oldhook=deferred/'opt/etc/ndm/netfilter.d/100-firewall.sh';oldhook.parent.mkdir(parents=True);oldhook.write_text('#!/bin/bash\n# previous live hook\n');oldhook.chmod(0o750);original_hook=oldhook.read_bytes()
+ r=call(env,'--plan','--apply-firewall');assert r.returncode==0 and not (deferred/'events').exists(),r.stdout+r.stderr
+ r=call(env,'--apply','--no-backup');assert r.returncode==0 and 'FIREWALL MIGRATION PENDING' in r.stdout and oldhook.read_bytes()==original_hook and oldhook.stat().st_mode&0o777==0o750,r.stdout+r.stderr
+ assert not (deferred/'opt/etc/keentool/firewall-upgrade.pending').exists() and list((deferred/'opt/var/lib/keentool-release/transactions').iterdir())==[]
+ r=call(env,'--apply','--apply-firewall');assert r.returncode!=0 and 'interactive SSH terminal' in r.stderr and oldhook.read_bytes()==original_hook,r.stdout+r.stderr
+ disabled,env=fixture('firewall-disabled',True);conf=disabled/'opt/etc/firewall.conf';conf.write_text(conf.read_text().replace('ENABLE_FIREWALL="true"','ENABLE_FIREWALL="false"'))
+ r=call(env,'--apply','--apply-firewall');assert r.returncode!=0 and 'Firewall remains disabled' in r.stderr and not (disabled/'events').exists(),r.stdout+r.stderr
+ r=call(env,'--apply','--no-backup');assert r.returncode==0 and 'FIREWALL MIGRATION PENDING' not in r.stdout and 'ENABLE_FIREWALL="false"' in conf.read_text(),r.stdout+r.stderr
  # Symlink refusal and corrupt-backup verification happen before replacement.
  symlink,env=fixture('symlink',True);(symlink/'opt/bin/keentool').unlink();(symlink/'opt/bin/keentool').symlink_to(symlink/'outside')
  r=call(env,'--plan');assert r.returncode!=0 and 'Symlink' in r.stderr

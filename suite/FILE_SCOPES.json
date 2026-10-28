@@ -53,5 +53,6 @@
   "support/release_update.php": "KeenTool",
   "support/history_engine.php": "keenetic-firewall",
   "support/firewall_history": "keenetic-firewall",
-  "support/dependencies.sh": "KeenTool"
+  "support/dependencies.sh": "KeenTool",
+  "support/firewall_upgrade": "keenetic-firewall"
 }

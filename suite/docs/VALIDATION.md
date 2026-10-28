@@ -2,6 +2,8 @@
 
 ## Automated evidence
 
+Package 2.0.14 adds real guardian/hook/file transactions with a mocked kernel: SSH challenge confirmation/rejection, independent timeout restore after parent SIGKILL, foreign rules/bans preserved, pending upgrade exclusion and reboot source recovery. Installer regressions cover deferred old-hook preservation without retained backups and disabled/noninteractive refusal. No physical router connectivity or reboot is inferred.
+
 Package 2.0.13 adds a native lighttpd/OpenSSL loopback TLS fixture, candidate syntax validation, actual HTTPS response and file rollback. Transaction fixtures cover port/PHP/credential/data preservation, enabled TLS, consent from a background legacy terminal, preflight failure, handshake-failure rollback, custom sockets and no implicit headless conversion. CI requires lighttpd and lighttpd-mod-openssl in addition to the earlier dependencies. Native service lifecycle for the full suite remains mocked; the TLS fixture itself runs a real local server.
 
 Package 2.0.12 adds real CLI/bcrypt fixtures for missing-password setup, hidden legacy-background terminal input, confirmation/length retries, credential hash/mode/revision, existing/concurrent credential preservation, explicit reset, invalid credentials and EOF. Installer fixtures verify no prompt on failure/plan and pending setup in noninteractive fresh installs. Current workflow artifacts record the exact release results.

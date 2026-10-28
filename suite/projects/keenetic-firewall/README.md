@@ -2,7 +2,7 @@
 
 **Dual-stack firewall filtering, blocklist maintenance and a web dashboard for Keenetic / Entware.** Uses kernel `ipset` sets and owned iptables chains; performance depends on the router, list sizes and traffic workload.
 
-Current firewall component: **4.0.2**. Independent scripts remain Monitor **4.0.0**, Stats **4.0.1**, Manager **3.0.0** and netfilter hook **3.0.0**. The suite version is not inferred from the Monitor script.
+Current firewall component: **4.0.3**. Independent scripts remain Monitor **4.0.0**, Stats **4.0.1**, Manager **3.0.0** and netfilter hook **3.0.1**. The suite version is not inferred from the Monitor script.
 
 ![Firewall dashboard with IPv4/IPv6 lists and filtering status](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/firewall.png)
 
@@ -97,3 +97,5 @@ Include the installed suite/component versions, router/Entware architecture, exa
 Screenshots are generated from the current application templates with **synthetic documentation data**. They are examples, not live router output or evidence of a real attack/backup. [Reproduce the screenshots](https://github.com/mattheweli/KeenTool/blob/main/suite/docs/demo/README.md).
 
 Created and maintained by **mattheweli**. The repository's existing LICENSE applies. Optional project support: [PayPal](https://paypal.me/MatteoRosettani) · [Revolut](https://revolut.me/matthew_eli).
+
+The coordinated 2.0.14 installer supports guarded hook migration with explicit application consent, a fresh SSH challenge and independent timeout/source/rule rollback. Apply through KeenTool u or the new updater with `--update --reinstall --apply-firewall`; deferral preserves the old hook. Shared transaction support ships with the coordinated suite.

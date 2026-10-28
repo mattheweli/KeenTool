@@ -1,13 +1,13 @@
 {
   "KeenTool": {
-    "version": "2.0.13",
-    "manager_version": "2.0.10",
-    "previous_tag": "v2.0.12",
-    "main": "a9617d95b6ab3587849e2a01b743867e005dc48f"
+    "version": "2.0.14",
+    "manager_version": "2.0.11",
+    "previous_tag": "v2.0.13",
+    "main": "5ccc9fee96db2f5a106410468a0bd244ac4c1556"
   },
   "keenetic-firewall": {
-    "version": "4.0.2",
-    "previous_tag": "v4.0.1",
+    "version": "4.0.3",
+    "previous_tag": "v4.0.2",
     "main": "9b5ad665d69285c76a1c02d4f02d62d8fc564661"
   },
   "keenetic-pingtool": {
