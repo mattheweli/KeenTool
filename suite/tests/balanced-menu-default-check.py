@@ -18,6 +18,9 @@ with tempfile.TemporaryDirectory(prefix='kt-balanced-menu-') as td:
  r=engine('status');s=json.loads(r.stdout);assert s['storage']=='legacy' and not s['compact_requested'] and s['daily_days']==0
  # Installer-written fresh profile enables conversion at first due stats maintenance.
  conf.write_text('HISTORY_ENABLED="true"\nHISTORY_RAW_DAYS="2"\nHISTORY_HOURLY_DAYS="7"\nHISTORY_DAILY_DAYS="365"\nHISTORY_COMPACT="true"\n')
+ recent=p/'recent.db';recent_db=sqlite3.connect(recent);recent_db.execute('create table ip_drops(timestamp integer,ip text,count integer,list_type text)');recent_db.execute('insert into ip_drops values(1999999999,"203.0.113.2",7,"main")');recent_db.commit();recent_db.close()
+ recent_run=subprocess.run([php,'-n',str(root/'support/history_engine.php'),'run','--due'],env=dict(env,KT_FW_DB=str(recent)),text=True,capture_output=True,timeout=40);assert recent_run.returncode==0,recent_run.stderr;recent_status=json.loads(recent_run.stdout);assert recent_status['storage']=='compact' and recent_status['skipped']=='no old samples' and not recent_status['aggregated']
+ recent_db=sqlite3.connect(recent);assert recent_db.execute('select timestamp,count,resolution from ip_drops').fetchall()==[(1999999999,7,0)];recent_db.close()
  r=engine('run','--due');assert r.returncode==0,r.stderr;s=json.loads(r.stdout);assert s['storage']=='compact' and s['compact_requested'];c=sqlite3.connect(db);assert c.execute('select sum(count) from ip_drops').fetchone()[0]==55;c.close()
  r=engine('run','--due');assert r.returncode==0 and json.loads(r.stdout)['skipped']=='not due'
  # Explicit expansion disables future automatic reconversion.
