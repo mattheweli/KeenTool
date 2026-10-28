@@ -1,4 +1,13 @@
-# Stable changelog — 2026-10-27
+# Stable changelog — 2026-10-28
+
+## Coordinated package 2.0.12 — 2026-10-28
+
+- After a successful installation/migration, start dedicated web administrator password setup when no credential file exists. This covers first Legacy upgrades and fresh installs without requiring users to discover the password menu afterwards. Password input is hidden, repeated for confirmation and retried after length/confirmation errors. No router username/account password is changed.
+- Read the controlling terminal when a legacy updater launches its installer with stdin redirected to /dev/null. Preserve an already configured password and revision byte-for-byte; report an invalid existing credential file for explicit review rather than silently replacing it.
+- Noninteractive installation remains possible without a generated or default password: print the pending setup command and leave administrator login unavailable until configured. The password step runs after successful source installation; failure/EOF does not undo the installed package, and interrupted setup can be completed with KeenTool option A.
+- Serialize CLI credential writes with a private lock and add a missing-only setter mode so concurrent/manual setup is never overwritten by migration. Passwords travel to the PHP bcrypt setter on stdin, never command arguments or log files. Explicit password reset remains available.
+
+Installer 1.0.4 and the password CLI/setter 1.0.1 carry these changes. Manager 2.0.9, Dashboard 2.0.4, bootstrap/updater 1.0.5 and every other tool keep their versions. Existing credentials, database contents, schedules and firewall policy are preserved. Automated tests use isolated roots and synthetic passwords, not a live router.
 
 ## KeenTool manager 2.0.9 / coordinated package 2.0.11 — 2026-10-27
 

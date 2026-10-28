@@ -36,6 +36,7 @@ with tempfile.TemporaryDirectory() as td:
  fresh,env=fixture('fresh')
  r=call(env,'--plan','--mode','fresh','--interface','ppp0','--configure-web','--configure-logging');assert r.returncode==0,r.stdout+r.stderr;assert not (fresh/'events').exists() and not (fresh/'opt/etc/keentool').exists()
  r=call(env,'--apply','--mode','fresh','--interface','ppp0','--configure-web','--configure-logging');assert r.returncode==0,r.stdout+r.stderr
+ assert 'Admin password setup requires an interactive SSH terminal.' in r.stderr and not (fresh/'opt/etc/keentool/admin/credentials.json').exists(),r.stdout+r.stderr
  assert 'HISTORY_RAW_DAYS="7"' in (fresh/'opt/etc/keentool/firewall-history.conf').read_text()
  assert (fresh/'opt/bin/firewall_history').exists() and (fresh/'opt/lib/keentool/history_engine.php').exists()
  assert 'ENABLE_FIREWALL="false"' in (fresh/'opt/etc/firewall.conf').read_text()
@@ -91,6 +92,7 @@ with tempfile.TemporaryDirectory() as td:
  upstream,env=fixture('upstream',True);history=upstream/'opt/etc/keentool/firewall-history.conf';history.write_text('HISTORY_ENABLED="false"\nHISTORY_RAW_DAYS="14"\nHISTORY_HOURLY_DAYS="60"\n');history_before=history.read_bytes();cron=(upstream/'opt/etc/crontab').read_bytes();db=(upstream/'opt/etc/firewall_stats.db').read_bytes();conf=(upstream/'opt/etc/firewall.conf').read_bytes()
  r=call(env,'--apply','--mode','upgrade');assert r.returncode==0,r.stdout+r.stderr
  assert (upstream/'opt/lib/keentool/render_cache.sh').read_bytes()==(pkg/'support/render_cache.sh').read_bytes()
+ assert 'Existing admin credential file needs review' in r.stderr and (upstream/'opt/etc/keentool/admin/credentials.json').read_text()=='{"hash":"existing"}',r.stdout+r.stderr
  assert history.read_bytes()==history_before
  p=(upstream/'opt/etc/pingtool.conf').read_text();assert 'PING_TARGET="1.1.1.1"' in p and 'RETENTION_DAYS="90"' in p and 'ENABLE_IPV6="false"' in p
  assert (upstream/'opt/etc/crontab').read_bytes()==cron and (upstream/'opt/etc/firewall_stats.db').read_bytes()==db and (upstream/'opt/etc/firewall.conf').read_bytes()==conf
