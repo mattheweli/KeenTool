@@ -1,7 +1,8 @@
 {
   "changes": [
-    "Firewall 4.0.5 / Stats 4.0.2: optional compact IP dictionary and balanced 2/7/365-day history; exact hit totals, reduced older time precision.",
+    "Firewall 4.0.6 / Stats 4.0.2: optional compact IP dictionary and balanced 2/7/365-day history; exact hit totals, reduced older time precision.",
     "Add explicit backup-first database maintenance for Firewall, Ping and vnStat; installation does not convert databases or change retention.",
-    "Use keentool_db firewall balanced after reviewing DATABASE_STORAGE.md. Ping/Traffic compaction is lossless; manager stays 2.0.11."
+    "Use keentool_db firewall balanced after reviewing DATABASE_STORAGE.md. Ping/Traffic compaction is lossless; manager stays 2.0.11.",
+    "Every explicit balanced-profile invocation takes a fresh verified backup, including an already compact database."
   ]
 }
