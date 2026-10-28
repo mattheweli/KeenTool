@@ -1,7 +1,7 @@
 {
   "changes": [
-    "Enabled firewall upgrades offer guarded hook application and a fresh SSH confirmation after IPv4/IPv6 checks; disabled firewalls remain disabled.",
-    "Independent timeout recovery restores previous owned rules, metadata and source after failed apply or SSH loss; foreign rules and existing bans are preserved.",
-    "Deferral keeps the previous boot hook and reports migration pending. Manager 2.0.11 / Firewall 4.0.3; use --apply-firewall interactively after upgrading."
+    "Fix guarded upgrade startup on BusyBox builds without fractional sleep; use integer-only waits.",
+    "Rollback no longer stops untouched running vnStat and continues file/restart recovery after service errors, reporting any incomplete recovery.",
+    "For an interrupted 2.0.14 transaction, use the verified standalone recovery asset before retrying. Package 2.0.15 / Firewall 4.0.4; manager stays 2.0.11."
   ]
 }

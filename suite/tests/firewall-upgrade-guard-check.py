@@ -7,13 +7,14 @@ with tempfile.TemporaryDirectory() as td:
  base=Path(td)
  def fixture(name,seconds=20):
   root=base/name;bin=root/'opt/bin';bin.mkdir(parents=True);etc=root/'opt/etc';init=etc/'init.d';init.mkdir(parents=True);run=root/'run';run.mkdir();(etc/'ndm/netfilter.d').mkdir(parents=True);(etc/'keentool').mkdir()
+  sleep=bin/'sleep';sleep.write_text('#!/bin/bash\n[[ "$#" = 1 && "$1" =~ ^[0-9]+$ ]] || { echo "sleep: invalid number $*" >&2;exit 1; }\nexec '+shutil.which('sleep')+' "$1"\n');sleep.chmod(0o755)
   (bin/'bash').symlink_to(shutil.which('bash'));(bin/'engine').write_text(engine);(bin/'engine').chmod(0o755)
   for name in ['iptables','ip6tables','iptables-save','ip6tables-save','iptables-restore','ip6tables-restore','ipset']:(bin/name).symlink_to(bin/'engine')
   for name in ['lsmod','logger']:(bin/name).write_text('#!/bin/bash\nexit 0\n');(bin/name).chmod(0o755)
   (bin/'php-cli').write_text('#!/bin/bash\nexec '+php+' -n "$@"\n');(bin/'php-cli').chmod(0o755)
   (bin/'keentool').write_text('# previous manager\n');hook=etc/'ndm/netfilter.d/100-firewall.sh';hook.write_text('#!/bin/bash\necho legacy-called >> "$KT_TEST_LEGACY"\n');hook.chmod(0o750)
   conf=etc/'firewall.conf';conf.write_text('ENABLE_FIREWALL="true"\nENABLE_IPV6="true"\nENABLE_MANUAL="true"\nENABLE_AUTOBAN="false"\nENABLE_BRUTEFORCE="true"\nENABLE_CONNLIMIT="true"\nENABLE_FWD_PROTECTION="false"\nCONNLIMIT_MAX=15\nCONNLIMIT_CUSTOM=150\nBAN_TIMEOUT=604800\nBF_SECONDS=60\nBF_HITCOUNT=5\nTCP_SERVICES="22"\nUDP_SERVICES=""\nTCP_PASSIVE_RANGE=""\n')
-  for name in ['S80lighttpd','S11ulogd']:(init/name).write_text('#!/bin/bash\nexit 0\n');(init/name).chmod(0o755)
+  for name in ['S80lighttpd','S11ulogd','S32vnstat2']:(init/name).write_text('#!/bin/bash\nexit 0\n');(init/name).chmod(0o755)
   runner=root/'service-runner';runner.write_text('#!/bin/bash\n[ "$2" != status ]\n');runner.chmod(0o755)
   kernel={f:{'INPUT':[['-j','ROUTER']], 'FORWARD':[], 'OUTPUT':[], 'ROUTER':[['-j','ACCEPT']]} for f in ['4','6']};kernel['sets']={'AutoBan':['198.51.100.99']};(root/'kernel.json').write_text(json.dumps(kernel))
   runtime=etc/'keentool/firewall-runtime';runtime.mkdir();(runtime/'ready').write_text('legacy-ready\n');(runtime/'canonical4').write_text('legacy-canonical\n')
@@ -78,6 +79,23 @@ with tempfile.TemporaryDirectory() as td:
  deadline=time.monotonic()+40
  while time.monotonic()<deadline and (backup/'firewall-upgrade/phase').read_text().strip()!='rolled-back':time.sleep(.1)
  restored(root,backup,kernel,True)
+ # Reproduce 2.0.14: an untouched vnStat stop fails before source recovery.
+ root,env,backup,token,kernel=fixture('legacy-service-recovery')
+ shutil.copy(suite/'tests/fixtures/rollback-1.0.0.sh',backup/'rollback.sh')
+ shutil.copy(suite/'tests/fixtures/firewall-upgrade-1.0.0',backup/'firewall_upgrade')
+ for name in ['lighttpd','ulogd','vnstat']:(backup/(name+'-was-running')).touch()
+ runner=Path(env['KT_INSTALL_TEST_SERVICE']);env['KT_TEST_SERVICE_EVENTS']=str(root/'service-events')
+ runner.write_text('#!/bin/bash\nprintf "%s %s\\n" "$1" "$2" >> "$KT_TEST_SERVICE_EVENTS"\nif [[ "$1 $2" = *"S32vnstat2 stop"* ]];then echo "Point right interface(s) to monitor" >&2;exit 1;fi\n[ "$2" != status ]\n')
+ pidof=root/'opt/bin/pidof';pidof.write_text('#!/bin/bash\n[ "$1" = vnstatd ]\n');pidof.chmod(0o755)
+ r=subprocess.run(['bash',str(backup/'firewall_upgrade'),'recover',str(backup),token],env=env,text=True,capture_output=True)
+ assert r.returncode!=0 and 'Point right interface' in r.stderr and (root/'opt/etc/keentool/firewall-upgrade.pending').exists(),r.stdout+r.stderr
+ assert (root/'opt/bin/keentool').read_text()!='# previous manager\n'
+ (root/'service-events').unlink()
+ r=subprocess.run(['bash',str(suite/'support/recover_firewall_upgrade.sh'),str(backup)],env=env,text=True,capture_output=True)
+ assert r.returncode==0,r.stdout+r.stderr;restored(root,backup,kernel)
+ events=(root/'service-events').read_text();assert 'S32vnstat2 stop' not in events and 'S32vnstat2 start' not in events and 'S80lighttpd start' in events and 'S11ulogd start' in events,events
+ assert (backup/'rollback.sh.before-service-fix').read_bytes()==(suite/'tests/fixtures/rollback-1.0.0.sh').read_bytes()
+ r=subprocess.run(['python3',str(suite/'tools/build-recovery.py'),'--check'],capture_output=True,text=True);assert r.returncode==0,r.stdout+r.stderr
  # Reboot with a prepared/unconfirmed source: restore source before running the old hook.
  root,env,backup,token,kernel=fixture('reboot');marker=root/'opt/etc/keentool/firewall-upgrade.pending';marker.write_text(str(backup)+'\n'+token+'\nprevious-boot\n');(backup/'firewall-upgrade/boot').write_text('previous-boot\n')
  r=subprocess.run(['bash',str(root/'opt/etc/ndm/netfilter.d/100-firewall.sh')],env={**env,'table':'filter'},text=True,capture_output=True);assert r.returncode==0,r.stdout+r.stderr

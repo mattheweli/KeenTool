@@ -1,7 +1,7 @@
 {
   "suite": "KeenTool",
-  "version": "2.0.14",
-  "installer": "1.0.6",
+  "version": "2.0.15",
+  "installer": "1.0.7",
   "date": "2026-10-28",
   "channel": "stable",
   "components": {
@@ -9,7 +9,7 @@
     "keenetic-pingtool": "2.0.2",
     "Traffic_manager": "2.0.1",
     "SMB_Backup_tool": "2.0.1",
-    "keenetic-firewall": "4.0.3",
+    "keenetic-firewall": "4.0.4",
     "Dashboard": "2.0.4"
   },
   "source_alpha": "20261020-r50",
