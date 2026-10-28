@@ -50,6 +50,8 @@ if [ "${1:-}" = --check ];then /opt/bin/bash "${KT_FW_HEALTH:-/opt/bin/firewall_
 fw_upgrade_marker="${KT_INSTALL_ROOT:-}/opt/etc/keentool/firewall-upgrade.pending"
 if [ -f "$fw_upgrade_marker" ];then
  fw_upgrade_backup=$(sed -n '1p' "$fw_upgrade_marker");fw_upgrade_token=$(sed -n '2p' "$fw_upgrade_marker")
+ [[ "$fw_upgrade_token" =~ ^[a-f0-9]{48}$ ]] || { kt_log 'Invalid pending firewall migration record; apply refused';exit 1; }
+ case "$fw_upgrade_backup" in "${KT_INSTALL_ROOT:-}"/opt/var/backups/keentool-release/*|"${KT_INSTALL_ROOT:-}"/opt/var/lib/keentool-release/transactions/*);;*)kt_log 'Invalid firewall recovery path; apply refused';exit 1;;esac
  if [ "${KT_FW_UPGRADE_TOKEN:-}" != "$fw_upgrade_token" ];then
   if [ "$(sed -n '3p' "$fw_upgrade_marker")" != "$(cat /proc/sys/kernel/random/boot_id)" ];then
    kt_cleanup

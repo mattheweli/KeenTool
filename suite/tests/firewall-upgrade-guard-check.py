@@ -42,7 +42,9 @@ with tempfile.TemporaryDirectory() as td:
      if answer=='kill':
       state=json.loads((root/'kernel.json').read_text());state['4']['ROUTER'].append(['-p','udp','-j','ACCEPT']);(root/'kernel.json').write_text(json.dumps(state))
       os.kill(pid,signal.SIGKILL)
-     else:os.write(fd,(match[1] if answer=='confirm' else b'wrong')+b'\n')
+     else:
+      if answer=='fail-restore':(root/'apply6').touch()
+      os.write(fd,(match[1] if answer=='confirm' else b'wrong')+b'\n')
      sent=True
    else:os.kill(pid,signal.SIGKILL);raise AssertionError('Guardian prompt timeout: '+output.decode())
   finally:os.close(fd)
@@ -63,6 +65,10 @@ with tempfile.TemporaryDirectory() as td:
  assert (backup/'firewall-upgrade/phase').read_text().strip()=='confirmed' and not (root/'opt/etc/keentool/firewall-upgrade.pending').exists()
  state=json.loads((root/'kernel.json').read_text());assert state['4']['ROUTER']==kernel['4']['ROUTER'] and 'BLOCKLIST_IN' in state['4']
  root,env,backup,token,kernel=fixture('reject');rc,out,sent=drive(root,env,backup,token,'reject');assert rc!=0 and sent,out;restored(root,backup,kernel)
+ root,env,backup,token,kernel=fixture('apply-failure');(root/'apply6').touch();rc,out,sent=drive(root,env,backup,token,'confirm');assert rc!=0 and not sent,out;restored(root,backup,kernel)
+ root,env,backup,token,kernel=fixture('restore-failure');rc,out,sent=drive(root,env,backup,token,'fail-restore');assert rc!=0 and sent,out
+ assert (root/'opt/etc/keentool/firewall-upgrade.pending').exists() and (backup/'transaction.json').exists() and (backup/'files').is_dir(),out
+ r=subprocess.run(['bash',str(backup/'firewall_upgrade'),'recover',str(backup),token],env=env,text=True,capture_output=True);assert r.returncode==0,r.stdout+r.stderr;restored(root,backup,kernel)
  root,env,backup,token,kernel=fixture('disconnect',12);rc,out,sent=drive(root,env,backup,token,'kill');assert rc!=0 and sent,out
  deadline=time.monotonic()+40
  while time.monotonic()<deadline and (backup/'firewall-upgrade/phase').read_text().strip()!='rolled-back':time.sleep(.1)
