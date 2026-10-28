@@ -63,5 +63,5 @@ function ds_expand($db){
  DROP TRIGGER kt_ip_drops_insert;DROP TRIGGER kt_ip_drops_delete;DROP VIEW ip_drops;
  DROP TABLE kt_ip_hits;DROP TABLE kt_ips;ALTER TABLE kt_expanded RENAME TO ip_drops;
  CREATE INDEX idx_ip ON ip_drops(ip);CREATE INDEX idx_ip_ts ON ip_drops(timestamp);CREATE INDEX idx_list_ts ON ip_drops(list_type,timestamp);COMMIT;");
- hsql($db,'VACUUM; PRAGMA wal_checkpoint(TRUNCATE);');return ['storage'=>'legacy','changed'=>true,'backup'=>$backup,'note'=>'Text storage restored; already reduced historical time precision is unchanged.'];
+ hsql($db,'VACUUM; PRAGMA wal_checkpoint(TRUNCATE);');if(hsql($db,'PRAGMA integrity_check;',true)!=='ok')throw new RuntimeException('Post-expansion integrity failed; retain backup: '.$backup);return ['storage'=>'legacy','changed'=>true,'backup'=>$backup,'note'=>'Text storage restored; already reduced historical time precision is unchanged.'];
 }

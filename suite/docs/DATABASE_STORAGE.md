@@ -49,3 +49,7 @@ SMB Backup has no historical statistics database of its own. Security, settings,
 ## Validation
 
 Regression checks cover real SQLite/PHP-core conversion, duplicate rows, compatibility inserts/deletes, exact IP/list/month totals, recent samples, unchanged ports/global/reporting state, monthly precision, expansion retaining current data, idempotence, custom-index refusal, private backup, ping/traffic lossless VACUUM and shared writer locks. Isolated daemon fixtures exercise vnStat running/stopped/error paths. They do not establish physical router speed or service behavior for custom init scripts.
+
+## Private sample measurements
+
+On a private 58,638,336-byte sample, a local SQL structural simulation used 45,768,704 bytes with the IP dictionary alone and 39,247,872 bytes after the balanced profile (approximately 33% smaller). All 31,145,632 hits remained. This sample contains less than one year of IP history, so monthly buckets do not yet contribute to that saving. These figures are dataset-specific SQL simulations, not a live-router execution of the PHP maintenance helper or a future size cap. Synthetic PHP-core regression fixtures separately validate the actual helper. The private database is not distributed or uploaded as a test fixture.

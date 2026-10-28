@@ -16,6 +16,7 @@ with tempfile.TemporaryDirectory(prefix='kt-compact-') as td:
  env=dict(os.environ,PATH=bins+':'+os.environ['PATH'],KT_HISTORY_ROOT=td,KT_FW_DB=str(db),KT_FW_DB_BACKUPS=str(p/'backups'),KT_HISTORY_NOW=str(now))
  def run(action,kind='firewall',extra=None):
   return subprocess.run([php,'-n',str(root/'support/database_engine.php'),kind,action],env=dict(env,**(extra or {})),text=True,capture_output=True,timeout=100)
+ blocked=p/'blocked';blocked.write_text('not a directory');r=run('compact',extra={'KT_FW_DB_BACKUPS':str(blocked)});assert r.returncode!=0;c=sqlite3.connect(db);assert rows(c)==original;c.close()
  r=run('compact');assert r.returncode==0,r.stderr;result=json.loads(r.stdout);backup=Path(result['backup']);assert backup.stat().st_mode&0o777==0o600
  c=sqlite3.connect(db);assert rows(c)==original and totals(c)==before_totals;assert db.stat().st_size<before_bytes
  assert c.execute('select port_history from ip_info').fetchone()[0]==ports
