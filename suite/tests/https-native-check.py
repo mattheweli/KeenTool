@@ -11,7 +11,7 @@ with tempfile.TemporaryDirectory() as td:
   p=init/name;p.write_text('#!/bin/bash\nexit 0\n');p.chmod(0o755)
  (bin/'keentool').write_text('# legacy fixture\n')
  with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
- main=confdir/'lighttpd.conf';main.write_text('server.modules = ( "mod_indexfile", "mod_staticfile" )\nserver.document-root = "'+str(web)+'"\nserver.port = '+str(port)+'\nserver.bind = "127.0.0.1"\nserver.pid-file = "'+str(root/'lighttpd.pid')+'"\nserver.errorlog = "'+str(root/'error.log')+'"\nindex-file.names = ( "index.html" )\n')
+ main=confdir/'lighttpd.conf';main.write_text('server.modules = ( "mod_indexfile", "mod_staticfile", "mod_openssl" )\nserver.document-root = "'+str(web)+'"\nserver.port = '+str(port)+'\nserver.bind = "127.0.0.1"\nserver.pid-file = "'+str(root/'lighttpd.pid')+'"\nserver.errorlog = "'+str(root/'error.log')+'"\nindex-file.names = ( "index.html" )\n')
  original=main.read_bytes()
  wrapper=bin/'lighttpd';wrapper.write_text('''#!/usr/bin/python3
 import os,sys,re,tempfile
