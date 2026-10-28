@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory(prefix='kt-compact-') as td:
  c.execute('insert into ip_drops(timestamp,ip,count,list_type) values(?,?,?,?)',(now+1,'198.51.100.2',17,'trap'));c.commit();assert c.execute("select resolution from ip_drops where ip='198.51.100.2'").fetchone()[0]==0
  c.execute("delete from ip_drops where ip='198.51.100.2'");c.commit();assert rows(c)==original;c.close()
  r=run('compact');assert r.returncode==0 and not json.loads(r.stdout)['changed'],r.stderr
- r=run('balanced');assert r.returncode==0,r.stderr;c=sqlite3.connect(db);assert totals(c)==before_totals
+ r=run('balanced');assert r.returncode==0,r.stderr;first_balanced=json.loads(r.stdout);assert Path(first_balanced['backup']).is_file();assert first_balanced['backup']!=result['backup'];c=sqlite3.connect(db);assert totals(c)==before_totals
  levels=dict(c.execute('select resolution,count(*) from ip_drops group by resolution'));assert set(levels)=={0,3600,86400,2592000},levels
  # Recent samples unchanged; older monthly totals retain their calendar-month sums.
  cutoff=c.execute("select strftime('%s',date(?-2*86400,'unixepoch','localtime'),'utc')",(now,)).fetchone()[0]
@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='kt-compact-') as td:
  actual={(month,ip,kind):n for month,ip,kind,n in c.execute("select strftime('%Y-%m',timestamp,'unixepoch','localtime'),ip,list_type,sum(count) from ip_drops group by 1,2,3")};assert actual==expected
  assert c.execute('select * from drops').fetchall()==[(now,'AutoBan',99)]
  assert c.execute('select * from abuse_reports').fetchall()==[('203.0.113.1',now)]
- stable=rows(c);c.close();r=run('balanced');assert r.returncode==0,r.stderr;c=sqlite3.connect(db);assert rows(c)==stable;c.close()
+ stable=rows(c);c.close();r=run('balanced');assert r.returncode==0,r.stderr;again=json.loads(r.stdout);assert Path(again['backup']).is_file() and again['backup']!=first_balanced['backup'];backup_db=sqlite3.connect(again['backup']);assert rows(backup_db)==stable;backup_db.close();c=sqlite3.connect(db);assert rows(c)==stable;c.close()
  # Downgrade storage without discarding events collected after conversion.
  r=run('expand');assert r.returncode==0,r.stderr;c=sqlite3.connect(db);assert rows(c)==stable;assert c.execute("select type from sqlite_master where name='ip_drops'").fetchone()[0]=='table';c.close()
  # Custom indexes are preserved by refusing conversion.
