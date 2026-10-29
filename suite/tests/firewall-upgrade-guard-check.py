@@ -70,6 +70,35 @@ with tempfile.TemporaryDirectory() as td:
  root,env,backup,token,kernel=fixture('confirm');rc,out,sent=drive(root,env,backup,token,'confirm');assert rc==0 and sent,out
  assert (backup/'firewall-upgrade/phase').read_text().strip()=='confirmed' and not (root/'opt/etc/keentool/firewall-upgrade.pending').exists()
  state=json.loads((root/'kernel.json').read_text());assert state['4']['ROUTER']==kernel['4']['ROUTER'] and 'BLOCKLIST_IN' in state['4']
+ # A previously confirmed, recognized healthy hook updates without a terminal challenge.
+ for name,fail_health in [('automatic',False),('automatic-health-failure',True)]:
+  root,env,backup,token,kernel=fixture(name)
+  rc,out,sent=drive(root,env,backup,token,'confirm');assert rc==0 and sent,out
+  command=[php,'-n',str(suite/'support/release_install.php')]
+  hook=root/'opt/etc/ndm/netfilter.d/100-firewall.sh';old_hook=hook.read_bytes();old_kernel=json.loads((root/'kernel.json').read_text())
+  candidate=root/'candidate';shutil.copytree(suite,candidate)
+  newhook=candidate/'projects/keenetic-firewall/scripts/100-firewall.sh';newhook.write_text(newhook.read_text()+'\n# Synthetic next-hook revision for guarded upgrade regression.\n')
+  import hashlib
+  (candidate/'CHECKSUMS.sha256').write_text(''.join(hashlib.sha256(f.read_bytes()).hexdigest()+'  '+f.relative_to(candidate).as_posix()+'\n' for f in sorted(candidate.rglob('*')) if f.is_file() and f.name!='CHECKSUMS.sha256'))
+  def fwstate():
+   v=subprocess.run(command+['firewall-state',str(candidate)],env=env,text=True,capture_output=True);assert v.returncode==0,v.stderr;return json.loads(v.stdout)
+  state=fwstate();assert state['needed'] and state['auto_apply'],state
+  hook.write_bytes(old_hook+b'\n# unrecognized local customization\n');assert not fwstate()['auto_apply'];hook.write_bytes(old_hook)
+  config=root/'opt/etc/firewall.conf';old_conf=config.read_bytes();config.write_bytes(old_conf.replace(b'ENABLE_FIREWALL="true"',b'ENABLE_FIREWALL="false"'));assert not fwstate()['auto_apply'];config.write_bytes(old_conf)
+  v=subprocess.run(command+['prepare',str(candidate),'upgrade','','0','0','keep'],env=env,text=True,capture_output=True);assert v.returncode==0,v.stdout+v.stderr;nextbackup=Path(v.stdout);shutil.copy(suite/'support/firewall_upgrade',nextbackup/'firewall_upgrade');nexttoken='b'*48
+  v=subprocess.run(['bash',str(nextbackup/'firewall_upgrade'),'prepare',str(nextbackup),nexttoken,'automatic',str(candidate)],env=env,text=True,capture_output=True);assert v.returncode==0,v.stdout+v.stderr
+  assert (nextbackup/'firewall-upgrade/automatic-approved').exists()
+  v=subprocess.run(command+['commit',str(nextbackup)],env=env,text=True,capture_output=True);assert v.returncode==0,v.stdout+v.stderr
+  runenv=env.copy()
+  if fail_health:
+   failed=root/'fail-health';failed.write_text('#!/bin/bash\nexit 1\n');failed.chmod(0o755);runenv['KT_FW_HEALTH']=str(failed)
+  v=subprocess.run(['bash',str(nextbackup/'firewall_upgrade'),'run',str(nextbackup),nexttoken],env=runenv,stdin=subprocess.DEVNULL,text=True,capture_output=True,timeout=40)
+  assert 'Type ' not in v.stdout+v.stderr and not (root/'opt/etc/keentool/firewall-upgrade.pending').exists(),v.stdout+v.stderr
+  if fail_health:
+   assert v.returncode!=0 and hook.read_bytes()==old_hook,v.stdout+v.stderr
+   assert (nextbackup/'firewall-upgrade/phase').read_text().strip()=='rolled-back'
+   current=json.loads((root/'kernel.json').read_text());assert current['4']==old_kernel['4'] and current['6']==old_kernel['6'] and current['sets']==old_kernel['sets']
+  else:assert v.returncode==0 and (nextbackup/'firewall-upgrade/phase').read_text().strip()=='confirmed',v.stdout+v.stderr
  root,env,backup,token,kernel=fixture('reject');rc,out,sent=drive(root,env,backup,token,'reject');assert rc!=0 and sent,out;restored(root,backup,kernel)
  root,env,backup,token,kernel=fixture('apply-failure');(root/'apply6').touch();rc,out,sent=drive(root,env,backup,token,'confirm');assert rc!=0 and not sent,out;restored(root,backup,kernel)
  root,env,backup,token,kernel=fixture('restore-failure');rc,out,sent=drive(root,env,backup,token,'fail-restore');assert rc!=0 and sent,out

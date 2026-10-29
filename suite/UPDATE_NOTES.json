@@ -1,7 +1,7 @@
 {
   "changes": [
-    "KeenTool Firewall \u2192 6 History aggregation settings \u2192 2 Apply Balanced profile now, with verified backup and confirmation.",
-    "New fresh installs default to Balanced 2/7/365 days and compact IP storage at first due statistics maintenance; existing upgrade settings are preserved.",
-    "Firewall 4.0.7; manager remains 2.0.11, Stats 4.0.2. Storage expansion disables automatic reconversion."
+    "Security & Health: independent Daily summary email switch; disabling it removes queued summaries while keeping immediate warning preferences.",
+    "Already adopted healthy recognized firewall hooks update automatically with independent rollback and IPv4/IPv6 checks. The general update approval remains; first legacy/custom migration still requires SSH confirmation.",
+    "Package 2.0.19 / Firewall 4.0.8. Manager stays 2.0.11, Stats 4.0.2; disabled firewalls stay disabled."
   ]
 }

@@ -1,5 +1,5 @@
 <?php
-// KeenTool release file transaction 1.0.5. CLI only; no database or firewall rewrites.
+// KeenTool release file transaction 1.0.6. CLI only; no database or firewall rewrites.
 if (PHP_SAPI !== 'cli') exit(1);
 umask(0077);
 
@@ -176,7 +176,13 @@ try{
   $settings=literalSettings($conf,['ENABLE_FIREWALL'=>'false']);$enabled=$settings['ENABLE_FIREWALL'];checked(in_array($enabled,['true','false'],true),'Invalid firewall enable setting');
   $changed=is_file($hook)&&hash_file('sha256',$hook)!==hash_file('sha256',$argv[2].'/projects/keenetic-firewall/scripts/100-firewall.sh');$healthy=false;
   if(is_file(rootpath('/opt/bin/firewall_health'))){[$status]=commandRun(['timeout','20','bash',rootpath('/opt/bin/firewall_health'),'--quiet']);$healthy=$status===0;}
-  echo json_encode(['enabled'=>$enabled==='true','hook_exists'=>is_file($hook)&&!is_link($hook),'needed'=>$enabled==='true'&&($changed||!$healthy)],JSON_THROW_ON_ERROR);exit;
+  $recordPath=rootpath('/opt/etc/keentool/installed-release.json');$record=is_file($recordPath)&&!is_link($recordPath)?json_decode((string)file_get_contents($recordPath),true):null;
+  $baselinePath=$argv[2].'/FIREWALL_HOOK_BASELINES.json';$baseline=is_file($baselinePath)?json_decode((string)file_get_contents($baselinePath),true):null;
+  $known=is_file($hook)&&!is_link($hook)&&is_array($baseline)&&($baseline['format']??null)===1&&in_array(hash_file('sha256',$hook),$baseline['sha256']??[],true);
+  $fwVersion=is_array($record)?($record['components']['keenetic-firewall']??null):null;
+  $managed=is_array($record)&&($record['suite']??null)==='KeenTool'&&is_string($fwVersion)&&preg_match('/^[0-9]+\.[0-9]+\.[0-9]+$/D',$fwVersion)&&version_compare($fwVersion,'4.0.3','>=');
+  $incoming=(string)file_get_contents($argv[2].'/projects/keenetic-firewall/scripts/100-firewall.sh');$compatible=str_contains($incoming,'KT_FW_UPGRADE_TOKEN');
+  echo json_encode(['enabled'=>$enabled==='true','hook_exists'=>is_file($hook)&&!is_link($hook),'needed'=>$enabled==='true'&&($changed||!$healthy),'auto_apply'=>$enabled==='true'&&$healthy&&$known&&$managed&&$compatible],JSON_THROW_ON_ERROR);exit;
  }
  if($action==='https-state'){echo json_encode(httpsState(),JSON_THROW_ON_ERROR);exit;}
  if($action==='discard'){discardRecovery($argv[2]);exit;}
