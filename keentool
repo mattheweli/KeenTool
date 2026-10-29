@@ -1,6 +1,6 @@
 #!/opt/bin/bash
-# KEENTOOL MANAGER v2.0.11
-# Release: 2026-10-27 | Stable. See CHANGELOG.md for release details.
+# KEENTOOL MANAGER v2.0.12
+# Release: 2026-10-29 | Stable. See CHANGELOG.md for release details.
 
 # Recover a deleted working directory before starting child processes.
 if ! builtin pwd -P >/dev/null 2>&1; then
@@ -573,7 +573,7 @@ if ! kt_runtime_ready;then
  exit 0
 fi
 # END GENERATED LEGACY MIGRATION
-# KeenTool 2.0.11
+# KeenTool 2.0.12
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 # Shared runtime and components are updated together through verified release packages.
 KT_MANAGED_PACKAGE=true
@@ -655,7 +655,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.11  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.12  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -1182,7 +1182,7 @@ EOF
 }
 
 doctor() {
-    echo 'KeenTool v2.0.11'
+    echo 'KeenTool v2.0.12'
     for cmd in bash curl sqlite3 ipset iptables smbclient vnstat tar timeout sha256sum; do
         command -v "$cmd" >/dev/null && printf 'OK %s\n' "$cmd" || printf 'MISSING %s\n' "$cmd"
     done
@@ -2551,7 +2551,9 @@ EOF
     echo ""; echo -e " ${BOLD}Global:${RESET}"
     # KT_FIREWALL_ADMIN_MENU
     echo " A. Change Firewall admin password"
-    echo " H. Security / system health / management networks"
+    SECURITY_SUMMARY="Unavailable"
+    if [ -f /opt/bin/firewall_security ];then SECURITY_SUMMARY=$(/opt/bin/bash /opt/bin/firewall_security summary 2>/dev/null) || SECURITY_SUMMARY="Unavailable";fi
+    echo " H. Security Monitoring  [$SECURITY_SUMMARY]"
     echo -e " p. Entware updates / upgrade [$(kt_entware_update_count)]"
     echo -e " P. Schedule Entware checks"
     echo -e " u. Check / install updates (KeenTool and tools)"

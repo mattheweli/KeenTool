@@ -57,3 +57,4 @@ support/firewall_upgrade	/opt/lib/keentool/firewall_upgrade	755
 support/db_storage.php	/opt/lib/keentool/db_storage.php	644
 support/database_engine.php	/opt/lib/keentool/database_engine.php	644
 support/keentool_db	/opt/bin/keentool_db	755
+support/security_menu.php	/opt/lib/keentool-security/security_menu.php	644
