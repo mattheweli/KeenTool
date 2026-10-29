@@ -2,7 +2,7 @@
 
 **A package manager and monitoring dashboard for Keenetic routers running Entware.** Manage the firewall, WAN/PPP connectivity, traffic history, SMB backups, notifications and Entware maintenance from a consistent CLI and web interface.
 
-Current coordinated package: **2.0.19**; KeenTool manager: **2.0.11**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
+Current coordinated package: **2.0.20**; KeenTool manager: **2.0.12**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
 
 ![System Dashboard: firewall, traffic, connection and security summaries](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/dashboard.png)
 
@@ -10,9 +10,9 @@ Current coordinated package: **2.0.19**; KeenTool manager: **2.0.11**. The Main 
 
 | Component | Version | Purpose |
 |---|---:|---|
-| KeenTool manager | 2.0.11 | Installation, configuration, verified updates and maintenance |
+| KeenTool manager | 2.0.12 | Installation, configuration, verified updates and maintenance |
 | Main Dashboard | 2.0.4 | Shared overview and readable system/application logs |
-| [Firewall](https://github.com/mattheweli/keenetic-firewall) | 4.0.8 | IPv4/IPv6 filtering, blocklists, diagnostics and history |
+| [Firewall](https://github.com/mattheweli/keenetic-firewall) | 4.0.9 | IPv4/IPv6 filtering, blocklists, diagnostics and history |
 | [Connection Monitor](https://github.com/mattheweli/keenetic-pingtool) | 2.0.2 | Latency, jitter, packet loss and PPP event correlation |
 | [Traffic Manager](https://github.com/mattheweli/Traffic_manager) | 2.0.1 | vnStat history, projections and multi-interface views |
 | [SMB Backup](https://github.com/mattheweli/SMB_Backup_tool) | 2.0.1 | Scheduled archives, read-back verification and retention |
@@ -118,3 +118,5 @@ Optional [compact storage and database maintenance](https://github.com/matthewel
 Balanced optimization is available in KeenTool → Firewall Suite → History aggregation settings → Apply Balanced profile now. New fresh installations default to Balanced and compact IP storage at first due statistics maintenance; upgrades preserve existing saved settings.
 
 Security & Health daily summaries can be disabled independently of immediate warnings. Recognized healthy managed firewall hooks update under the independent rollback guardian without a repeat activation challenge; initial legacy/custom migration still requires SSH confirmation.
+
+KeenTool H now shows a grouped Security Monitoring menu with current/effective email states, service and snapshot health, intervals, access controls and thresholds. W controls immediate warning email; D controls daily summaries. The main H entry shows a lightweight status without running live diagnostics.

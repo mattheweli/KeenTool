@@ -1,7 +1,7 @@
 {
   "changes": [
-    "Security & Health: independent Daily summary email switch; disabling it removes queued summaries while keeping immediate warning preferences.",
-    "Already adopted healthy recognized firewall hooks update automatically with independent rollback and IPv4/IPv6 checks. The general update approval remains; first legacy/custom migration still requires SSH confirmation.",
-    "Package 2.0.19 / Firewall 4.0.8. Manager stays 2.0.11, Stats 4.0.2; disabled firewalls stay disabled."
+    "Security Monitoring: grouped menu with current service, warning/digest email, interval, access and blocklist/logging states. W controls immediate warning email; D controls daily summaries.",
+    "Configured ON is distinguished from PAUSED when mail or monitoring is unavailable. Redraw uses a lightweight snapshot; option 1 performs live diagnostics.",
+    "Package 2.0.20 / Manager 2.0.12 / Firewall 4.0.9. Stats stays 4.0.2; opening the menu does not apply rules or change settings."
   ]
 }
