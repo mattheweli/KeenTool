@@ -1,5 +1,15 @@
 # Stable changelog — 2026-10-28
 
+## Coordinated package 2.0.19 / Firewall 4.0.8 — 2026-10-29
+
+- Add an independent Daily summary email switch in Web Settings → Security & Health and KeenTool Security menu option D. Default true preserves existing installations. Disabling summaries prevents new digests and removes only queued digest messages; immediate health/blocklist warnings remain enabled under the existing master email/immediate-alert controls. Re-enabling generates only the current day's eligible summary, without historical backlog.
+- Remove repeat firewall activation/SSH challenges for healthy, recognized coordinated guarded hooks. Keep the general coordinated-update approval. A source baseline hash, managed installation record and current health identify completed adoption; unknown/custom/legacy or unhealthy hooks retain first-migration review. Disabled firewalls remain disabled.
+- Automatic hook updates still prepare independent rollback before committing source, revalidate eligibility under the hook lock, apply with the transaction token, check active IPv4/IPv6 rules and confirm automatically only before the bounded deadline. Failure, parent death or unfinished boot migration retains the existing owned-rule/source recovery behavior. A failed automatic health check restores the previous source/rules. Explicit first migration keeps its interactive SSH challenge.
+- Add recognized hook source baselines to the verified package and enforce inclusion of the current guarded hook during release checks. Future hook changes must retain eligible prior stable hashes and add the new current hash; unrecognized local source is never silently classified as migrated.
+- Exercise no-terminal automatic success, health-failure rollback, unknown/disabled eligibility refusal, first interactive migration, pending-install exclusion, source/kernel recovery, queued-summary cancellation, independent warning delivery and boolean validation using isolated real file/PHP tests and mocked kernel/services.
+
+Package 2.0.19 / Firewall 4.0.8. Installer 1.0.8, release transaction engine 1.0.6, guardian 1.0.2, Security engine 1.0.4, Settings engine 1.0.4 and Security CLI 1.0.1. Manager remains 2.0.11; Stats remains 4.0.2. No database precision or filtering policy defaults change. Physical router access/notifications are not claimed by isolated validation.
+
 ## Coordinated package 2.0.18 / Firewall 4.0.7 — 2026-10-28
 
 - Expose a confirmed Balanced action through KeenTool: Firewall Suite → History aggregation settings → Apply Balanced profile now. Explain the verified backup, compact IP identifiers, 2/7/365-day policy and irreversible older time precision before consent. Declining performs no maintenance. Retain custom precision settings (including monthly cutoff), status and an explicit saved-policy run action.

@@ -1,6 +1,6 @@
 # Stable component versions — 2026-10-23
 
-Suite/package release: **2.0.18** (manager **2.0.11**). Installer: **1.0.7**. Package manifest: **59 targets**.
+Suite/package release: **2.0.19** (manager **2.0.11**). Installer: **1.0.8**. Package manifest: **59 targets**.
 
 | Source | Stable version | Installed path |
 |---|---|---|
@@ -36,8 +36,8 @@ Suite/package release: **2.0.18** (manager **2.0.11**). Installer: **1.0.7**. Pa
 | `support/firewall_health` | 1.0.0 | `/opt/bin/firewall_health` |
 | `support/wan_syslog_service` | 1.0.0 | `/opt/bin/wan_syslog_service` |
 | `support/S95keentool-wan` | 1.0.0 | `/opt/etc/init.d/S95keentool-wan` |
-| `support/security_engine.php` | 1.0.3 | `/opt/lib/keentool-security/security_engine.php` |
-| `support/firewall_security` | 1.0.0 | `/opt/bin/firewall_security` |
+| `support/security_engine.php` | 1.0.4 | `/opt/lib/keentool-security/security_engine.php` |
+| `support/firewall_security` | 1.0.1 | `/opt/bin/firewall_security` |
 | `support/keentool_security_service` | 1.0.0 | `/opt/bin/keentool_security_service` |
 | `support/firewall_guard` | 1.0.0 | `/opt/lib/keentool/firewall_guard` |
 | `support/S96keentool-security` | 1.0.0 | `/opt/etc/init.d/S96keentool-security` |
@@ -47,13 +47,13 @@ Suite/package release: **2.0.18** (manager **2.0.11**). Installer: **1.0.7**. Pa
 | `support/uninstall.sh` | 1.0.1 | `/opt/bin/keentool_uninstall` |
 | `projects/security/index.html` | 1.0.2 | `/opt/var/www/security/index.html` |
 | `assets/keentool-security-page.js` | 1.0.0 | `/opt/var/www/assets/keentool-security-page.js` |
-| `support/settings_engine.php` | 1.0.3 | `/opt/lib/keentool-security/settings_engine.php` |
+| `support/settings_engine.php` | 1.0.4 | `/opt/lib/keentool-security/settings_engine.php` |
 | `projects/settings/index.html` | 1.0.2 | `/opt/var/www/settings/index.html` |
 | `assets/keentool-settings.js` | 1.0.0 | `/opt/var/www/assets/keentool-settings.js` |
 | `support/mail_layout.php` | 1.0.1 | `/opt/lib/keentool-mail/mail_layout.php` |
 | `assets/keentool-format.js` | 1.0.0 | `/opt/var/www/assets/keentool-format.js` |
 | `support/keentool_update` | 1.0.7 | `/opt/bin/keentool_update` |
-| `support/release_install.php` | 1.0.5 | `/opt/lib/keentool/release_install.php` |
+| `support/release_install.php` | 1.0.6 | `/opt/lib/keentool/release_install.php` |
 | `rollback.sh` | 1.0.1 | `/opt/lib/keentool/rollback.sh` |
 | `support/release_update.php` | 1.0.4 | `/opt/lib/keentool/release_update.php` |
 
@@ -62,11 +62,11 @@ Suite/package release: **2.0.18** (manager **2.0.11**). Installer: **1.0.7**. Pa
 
 | `support/dependencies.sh` | 1.0.0 | `/opt/lib/keentool/dependencies.sh` |
 
-Standalone bootstrap: 1.0.7. Installer entry: 1.0.7. Repository tags: KeenTool package v2.0.18 (manager 2.0.11); keenetic-firewall v4.0.7. Pingtool v2.0.2; Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
+Standalone bootstrap: 1.0.7. Installer entry: 1.0.8. Repository tags: KeenTool package v2.0.19 (manager 2.0.11); keenetic-firewall v4.0.8. Pingtool v2.0.2; Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
 
 Dashboard component: 2.0.4, independently tracked in RELEASE.json while staying in mattheweli/KeenTool. FILE_SCOPES.json assigns every install target to one component or the shared runtime. Selected component checks include shared dependencies; global checks cover all targets.
 
-| `support/firewall_upgrade` | 1.0.1 | `/opt/lib/keentool/firewall_upgrade` |
+| `support/firewall_upgrade` | 1.0.2 | `/opt/lib/keentool/firewall_upgrade` |
 
 | `support/db_storage.php` | 1.0.0 | `/opt/lib/keentool/db_storage.php` |
 | `support/database_engine.php` | 1.0.2 | `/opt/lib/keentool/database_engine.php` |

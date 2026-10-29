@@ -1,12 +1,12 @@
 #!/opt/bin/bash
-# KeenTool stable installer 1.0.7 — 2026-10-28.
+# KeenTool stable installer 1.0.8 — 2026-10-29.
 set -Eeuo pipefail
 export PATH="${KT_INSTALL_ROOT:-}/opt/bin:${KT_INSTALL_ROOT:-}/opt/sbin:/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
 base=$(cd "$(dirname "$0")" && pwd)
 # KT_INSTALL_BACKUP_RETENTION_V1
 # KT_INSTALL_HTTPS_MIGRATION_V1
 # KT_INSTALL_FIREWALL_MIGRATION_V1
-action=plan;mode=auto;iface='';web=0;logging=0;start=true;deps=false;backup_policy=ask;apply_firewall=false;fw_deferred=false;fw_guard_prepared=false
+action=plan;mode=auto;iface='';web=0;logging=0;start=true;deps=false;backup_policy=ask;apply_firewall=false;fw_auto_confirm=false;fw_deferred=false;fw_guard_prepared=false
 kt_set_backup_policy() {
     local requested=$1
     [ "$backup_policy" = ask ] || [ "$backup_policy" = "$requested" ] || { echo 'Choose either --keep-backup or --no-backup' >&2; return 2; }
@@ -96,7 +96,7 @@ if [ "$web" = 2 ];then
  https_changed=true
 fi
 
-# Guarded hook migration needs an interactive session for both confirmations.
+# First migration needs SSH confirmation. Recognized healthy managed hooks update automatically under the guardian.
 unset KT_INSTALL_DEFER_FIREWALL
 fw_state=$("$php_cli" "$engine" firewall-state "$base")
 fw_field(){ printf '%s' "$fw_state" | "$php_cli" -r '$s=json_decode(stream_get_contents(STDIN),true,512,JSON_THROW_ON_ERROR);$v=$s[$argv[1]]??null;echo is_bool($v)?($v?"true":"false"):"";' "$1"; }
@@ -107,7 +107,10 @@ if [ "$(fw_field enabled)" != true ];then
  [ "$apply_firewall" != true ] || { echo 'Firewall remains disabled; this option cannot enable it.' >&2;exit 2; }
 elif [ "$(fw_field needed)" = true ] || [ "$apply_firewall" = true ];then
  fw_deferred=true
- if [ "$(fw_field hook_exists)" = true ] && [ "$start" = true ] && { [ "$fw_tty" = true ] || [ "$action" = plan ]; };then
+ if [ "$(fw_field auto_apply)" = true ] && [ "$start" = true ];then
+  apply_firewall=true;fw_auto_confirm=true;fw_deferred=false
+  echo 'Recognized healthy managed firewall: apply and verify this update automatically, with independent rollback protection.' >&2
+ elif [ "$(fw_field hook_exists)" = true ] && [ "$start" = true ] && { [ "$fw_tty" = true ] || [ "$action" = plan ]; };then
   if [ "$action" = apply ] && [ "$apply_firewall" != true ];then
    echo 'The updated firewall hook needs guarded application. Rollback starts after 120 seconds without SSH confirmation.' >&2
    printf 'Apply and verify the updated firewall after installation? [y/N] ' >&2
@@ -177,7 +180,8 @@ if [ "$web" != 0 ] && [ -f "$backup/lighttpd-was-running" ];then touch "$backup/
 if [ "$apply_firewall" = true ];then
  cp "$base/support/firewall_upgrade" "$backup/firewall_upgrade"
  fw_token=$("$php_cli" -r 'echo bin2hex(random_bytes(24));')
- KT_FW_APPLY="$base/support/firewall_apply.sh" bash "$backup/firewall_upgrade" prepare "$backup" "$fw_token"
+ fw_approval=manual;[ "$fw_auto_confirm" != true ] || fw_approval=automatic
+ KT_FW_APPLY="$base/support/firewall_apply.sh" bash "$backup/firewall_upgrade" prepare "$backup" "$fw_token" "$fw_approval" "$base"
  fw_guard_prepared=true
 fi
 "$php_cli" "$engine" commit "$backup"
@@ -219,7 +223,7 @@ else
 fi
 echo 'Existing credentials, databases, saved lists and upgrade schedules are preserved.'
 echo 'Fresh installations start with firewall filtering disabled.'
-if [ "$fw_deferred" = true ];then echo 'FIREWALL MIGRATION PENDING: previous hook and active rules retained. From SSH run: keentool --update --reinstall --apply-firewall';elif [ "$apply_firewall" = true ];then echo 'Firewall migration confirmed; active rules verified for IPv4/IPv6.';else echo 'Firewall policy preserved. Review /opt/etc/firewall.conf before changing enable settings.';fi
+if [ "$fw_deferred" = true ];then echo 'FIREWALL MIGRATION PENDING: previous hook and active rules retained. From SSH run: keentool --update --reinstall --apply-firewall';elif [ "$fw_auto_confirm" = true ];then echo 'Managed firewall update applied automatically; active IPv4/IPv6 rules verified.';elif [ "$apply_firewall" = true ];then echo 'Firewall migration confirmed; active rules verified for IPv4/IPv6.';else echo 'Firewall policy preserved. Review /opt/etc/firewall.conf before changing enable settings.';fi
 echo 'Refresh generated pages at the next cron run, or run pingtool.sh force, traffic_manager.sh INTERFACE force and firewall_stats.sh force.'
 echo 'Review web privilege separation: firewall_security harden-web --check (then --apply).'
 [ "$web" != 1 ] || echo 'HTTPS listens on 8080 using a private self-signed certificate; verify/trust it or install your own certificate.'

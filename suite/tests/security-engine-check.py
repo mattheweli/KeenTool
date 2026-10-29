@@ -183,5 +183,14 @@ with tempfile.TemporaryDirectory() as td:
  call('settings',payload={'email_enabled':True});call('tick');assert json.loads(queue.read_text())==queued
  assert json.loads(capture.read_text())==[digest['subject'],digest['body'],digest['html']]
  sender.write_text(sender.read_text().replace('sys.exit(1)','sys.exit(0)'));call('tick');assert not json.loads(queue.read_text())
+ # Daily summaries can be disabled independently, including already queued digests.
+ call('settings',payload={'email_enabled':True,'digest_enabled':False,'immediate_alerts':True})
+ warning={'subject':'health warning fixture','body':'keep this immediate warning','created':1}
+ queue.write_text(json.dumps({'digest-old':digest,'health':warning}))
+ state=json.loads(monitor.read_text());state['digest_date']='2000-01-01';monitor.write_text(json.dumps(state))
+ call('tick');assert not json.loads(queue.read_text());assert json.loads(capture.read_text())==[warning['subject'],warning['body']]
+ settings=json.loads((p/'opt/etc/keentool/security/settings.json').read_text());assert settings['immediate_alerts'] and settings['email_enabled'] and not settings['digest_enabled']
+ call('settings',payload={'digest_enabled':True,'email_enabled':False});call('tick');q=json.loads(queue.read_text());assert len(q)==1 and next(iter(q)).startswith('digest-')
+ call('settings',payload={'digest_enabled':'false'},ok=False)
  call('settings',payload={'email_enabled':False})
  print('PASS: real PHP engine + SQLite, protected client/management/whitelist CIDRs, injection rejection, TTL/permanent bans, expiry/unban/persistence, diagnostics, confirmation/rollback/conflict, GeoIP warnings/baselines, complete comparisons, public/private audit and settings validation.')

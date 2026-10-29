@@ -3,6 +3,8 @@
 from pathlib import Path
 import concurrent.futures,subprocess,shutil,os,json,re
 root=Path(__file__).resolve().parents[1]
+import hashlib
+baselines=json.loads((root/'FIREWALL_HOOK_BASELINES.json').read_text());assert baselines['format']==1 and hashlib.sha256((root/'projects/keenetic-firewall/scripts/100-firewall.sh').read_bytes()).hexdigest() in baselines['sha256'],'Add the current guarded hook to recognized release baselines'
 if os.geteuid()!=0:raise SystemExit('Isolated installer/rollback fixtures require root; run sudo env PATH="$PATH" python3 tools/check-release.py')
 runtime=Path('/tmp/keentool-security-runtime/root/usr/bin');runtime.mkdir(parents=True,exist_ok=True)
 for target,choices in {'php8.3':['php8.3','php'],'php-cgi8.3':['php-cgi8.3','php-cgi'],'sqlite3':['sqlite3']}.items():
