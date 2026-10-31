@@ -12,7 +12,7 @@ const {chromium}=require('playwright');
  const stats=fs.readFileSync(path.join(root,'projects/keenetic-firewall/scripts/firewall_stats.sh'),'utf8');
  const marker=stats.indexOf('    cat "$KT_WORKDIR/render/port_$ID_PREFIX.rows" | awk');
  assert(marker>=0,'Port exporter not found');
- const begin=stats.indexOf('\n    {',marker)+1,end=stats.indexOf("\n    '\n}",begin);
+ const begin=stats.indexOf('\n    {',marker)+1,end=stats.indexOf("}'\n}",begin)+1;
  assert(begin>0&&end>begin,'Port exporter boundaries not found');
  const listdir=fs.mkdtempSync(path.join(os.tmpdir(),'kt-port-layout-'));
  let generatedPortRows;
