@@ -30,13 +30,13 @@ const {chromium}=require('playwright');
     const section=document.querySelector('.tab-content.active');
     const grids=[...section.querySelectorAll('.triple-grid')];
     const panels=[...section.querySelectorAll('.table-container')];
-    return {columns:grids.map(g=>getComputedStyle(g).gridTemplateColumns.split(' ').length),pageOverflow:document.documentElement.scrollWidth>innerWidth,panels:panels.map(e=>({height:e.clientHeight,overflow:e.scrollWidth>e.clientWidth+1,scroll:e.scrollHeight>e.clientHeight})),clipped:[...section.querySelectorAll('td')].filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent),sticky:[...section.querySelectorAll('th')].every(e=>getComputedStyle(e).position==='sticky'),wrapping:[...section.querySelectorAll('.meta small')].every(e=>getComputedStyle(e).whiteSpace==='normal')};
+    return {columns:grids.map(g=>getComputedStyle(g).gridTemplateColumns.split(' ').length),pageOverflow:document.documentElement.scrollWidth>innerWidth,panels:panels.map(e=>({height:e.clientHeight,overflow:e.scrollWidth>e.clientWidth+1,scroll:e.scrollHeight>e.clientHeight})),clipped:[...section.querySelectorAll('td')].filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent),portsIntact:[...section.querySelectorAll('.kt-hits-last td:first-child')].every(e=>getComputedStyle(e).whiteSpace==='nowrap'),sticky:[...section.querySelectorAll('th')].every(e=>getComputedStyle(e).position==='sticky'),wrapping:[...section.querySelectorAll('.meta small')].every(e=>getComputedStyle(e).whiteSpace==='normal')};
    });
    const context=JSON.stringify({width,density,period,info});
    assert(info.columns.every(n=>n===(width>=1200?3:width>=800?2:1)),context);
    assert(!info.pageOverflow,context);assert(info.panels.every(p=>p.scroll&&!p.overflow),context);
    assert.equal(new Set(info.panels.map(p=>p.height)).size,1,context);
-   assert.equal(info.clipped.length,0,context);assert(info.sticky&&info.wrapping,context);
+   assert.equal(info.clipped.length,0,context);assert(info.sticky&&info.wrapping&&info.portsIntact,context);
    const scrolled=await page.evaluate(()=>{
     const panel=document.querySelector('.tab-content.active .table-container'),head=panel.querySelector('th');
     const before=head.getBoundingClientRect().top;panel.scrollTop=250;
@@ -45,6 +45,7 @@ const {chromium}=require('playwright');
    assert(scrolled.moved&&scrolled.delta<2,JSON.stringify(scrolled));
    checked++;
    if(output&&period==='24h'&&density==='comfortable'&&[1466,390].includes(width)){
+    await page.evaluate(()=>document.querySelectorAll('.table-container').forEach(e=>e.scrollTop=0));
     await page.locator('.tab-content.active').screenshot({path:path.join(output,`firewall-${width}.png`)});
    }
   }
