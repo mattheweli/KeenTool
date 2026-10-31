@@ -1,7 +1,7 @@
 {
   "changes": [
-    "Security Monitoring: grouped menu with current service, warning/digest email, interval, access and blocklist/logging states. W controls immediate warning email; D controls daily summaries.",
-    "Configured ON is distinguished from PAUSED when mail or monitoring is unavailable. Redraw uses a lightweight snapshot; option 1 performs live diagnostics.",
-    "Package 2.0.20 / Manager 2.0.12 / Firewall 4.0.9. Stats stays 4.0.2; opening the menu does not apply rules or change settings."
+    "Firewall dashboard: three threat tables per row on desktop, two on tablets and one on phones.",
+    "Equal-height independently scrolling tables with sticky column headings; long addresses, ports and metadata wrap without truncation.",
+    "Package 2.0.21 / Firewall 4.0.10 / Firewall dashboard 2.0.3. KeenTool remains 2.0.12. No filtering, database, credential or schedule change."
   ]
 }
