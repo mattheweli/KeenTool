@@ -2,7 +2,7 @@
 
 **A package manager and monitoring dashboard for Keenetic routers running Entware.** Manage the firewall, WAN/PPP connectivity, traffic history, SMB backups, notifications and Entware maintenance from a consistent CLI and web interface.
 
-Current coordinated package: **2.0.21**; KeenTool manager: **2.0.12**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
+Current coordinated package: **2.0.22**; KeenTool manager: **2.0.12**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
 
 ![System Dashboard: firewall, traffic, connection and security summaries](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/dashboard.png)
 
@@ -12,7 +12,7 @@ Current coordinated package: **2.0.21**; KeenTool manager: **2.0.12**. The Main 
 |---|---:|---|
 | KeenTool manager | 2.0.12 | Installation, configuration, verified updates and maintenance |
 | Main Dashboard | 2.0.4 | Shared overview and readable system/application logs |
-| [Firewall](https://github.com/mattheweli/keenetic-firewall) | 4.0.10 | IPv4/IPv6 filtering, blocklists, diagnostics and history |
+| [Firewall](https://github.com/mattheweli/keenetic-firewall) | 4.0.11 | IPv4/IPv6 filtering, blocklists, diagnostics and history |
 | [Connection Monitor](https://github.com/mattheweli/keenetic-pingtool) | 2.0.2 | Latency, jitter, packet loss and PPP event correlation |
 | [Traffic Manager](https://github.com/mattheweli/Traffic_manager) | 2.0.1 | vnStat history, projections and multi-interface views |
 | [SMB Backup](https://github.com/mattheweli/SMB_Backup_tool) | 2.0.1 | Scheduled archives, read-back verification and retention |

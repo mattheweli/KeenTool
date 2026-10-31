@@ -32,6 +32,9 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/kt-browser" --no-audit --no-fund playwright@1.56.1
           "$RUNNER_TEMP/kt-browser/node_modules/.bin/playwright" install --with-deps chromium
+          git fetch --depth=1 origin tag v2.0.21
+          git show v2.0.21:suite/projects/keenetic-firewall/www/index.html > "$RUNNER_TEMP/firewall-before.html"
+          NODE_PATH="$RUNNER_TEMP/kt-browser/node_modules" KT_LAYOUT_HTML="$RUNNER_TEMP/firewall-before.html" KT_LAYOUT_EXPECT_OVERLAP=1 node suite/tests/firewall-layout-browser.cjs
           NODE_PATH="$RUNNER_TEMP/kt-browser/node_modules" KT_BROWSER_SCREENSHOTS="$RUNNER_TEMP/firewall-layout" node suite/tests/firewall-layout-browser.cjs
       - name: Preserve Firewall layout screenshots
         if: always() && github.event.repository.name == 'KeenTool'

@@ -1,7 +1,7 @@
 {
   "changes": [
-    "Firewall dashboard: three threat tables per row on desktop, two on tablets and one on phones.",
-    "Equal-height independently scrolling tables with sticky column headings; long addresses, ports and metadata wrap without truncation.",
-    "Package 2.0.21 / Firewall 4.0.10 / Firewall dashboard 2.0.3. KeenTool remains 2.0.12. No filtering, database, credential or schedule change."
+    "Fix full port/protocol badges overlapping attacker addresses in the Firewall port tables.",
+    "Remove obsolete inline port-column widths and fit the actual exported badges; keep three desktop columns and equal-height scrolling.",
+    "Package 2.0.22 / Firewall 4.0.11 / Firewall dashboard 2.0.4. KeenTool remains 2.0.12. No filtering, database or schedule change."
   ]
 }
