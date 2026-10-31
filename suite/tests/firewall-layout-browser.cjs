@@ -17,7 +17,7 @@ const {chromium}=require('playwright');
  const listdir=fs.mkdtempSync(path.join(os.tmpdir(),'kt-port-layout-'));
  let generatedPortRows;
  try{
-  const records=Array.from({length:24},(_,i)=>`${['65535/udp','55422/tcp','6881/udp','80/tcp'][i%4]}|198.51.100.200,203.0.113.20,2001:db8:1234:5678:abcd:ffff:1234:5678,192.0.2.99|${i===0?'9999999':23773-i}`).join('\n')+'\n';
+  const records=Array.from({length:24},(_,i)=>`${['65535/udp','55422/tcp','6881/udp','80/tcp'][i%4]}|198.51.100.200,203.0.113.20,2001:db8:1234:5678:abcd:ffff:1234:5678,192.0.2.99|${i===0?'999999999':23773-i}`).join('\n')+'\n';
   const result=spawnSync('awk',['-F|','-v','listdir='+listdir,'-v','prefix=fixture','-v',"q='",stats.slice(begin,end)],{input:records,encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);generatedPortRows=result.stdout;
   assert(generatedPortRows.includes(':65535/udp')&&generatedPortRows.includes('(+1 others)'),'Expected real port badge and attacker-list control');
@@ -26,10 +26,10 @@ const {chromium}=require('playwright');
  await page.route('**/*',r=>r.abort()); await page.setContent(html);
  await page.evaluate(generatedPortRows=>{
   document.querySelectorAll('body > *').forEach(e=>{if(!e.contains(document.querySelector('#view_sources')))e.remove()});
-  const countRows=Array.from({length:24},(_,i)=>`<tr><td><span>${i===0?'9.999.999':7922-i}</span></td><td><a href="#">2001:db8:1234:5678:abcd:ffff:1234:5678</a><button class="kt-ip-details">Details</button><br><span class="list-badge">:6881/TCP</span><span class="list-badge">:6881/UDP</span><span class="list-badge">:51515/TCP</span><button class="list-badge port-more">(+6.028)</button></td><td class="meta">Risk: 100% - FR<br><small>very-long-organization-name.example.com</small></td></tr>`).join('');
+  const countRows=Array.from({length:24},(_,i)=>`<tr><td><span class="badge bg-danger">${i===0?'999.999.999':7922-i}</span></td><td><a href="#">2001:db8:1234:5678:abcd:ffff:1234:5678</a><button class="kt-ip-details">Details</button><br><span class="list-badge">:6881/TCP</span><span class="list-badge">:6881/UDP</span><span class="list-badge">:51515/TCP</span><button class="list-badge port-more">(+6.028)</button></td><td class="meta">Risk: 100% - FR<br><small>very-long-organization-name.example.com</small></td></tr>`).join('');
   const portRows=generatedPortRows;
   document.querySelectorAll('.triple-grid .kt-count-first tbody').forEach(e=>e.innerHTML=countRows);
-  document.querySelectorAll('.triple-grid .kt-hits-last tbody').forEach(e=>e.innerHTML=portRows);
+  document.querySelectorAll('.triple-grid .kt-hits-last tbody').forEach(e=>{e.innerHTML=portRows;e.querySelectorAll('td:last-child').forEach(c=>c.textContent=Number(c.textContent).toLocaleString('de-DE'));});
  },generatedPortRows);
  const output=process.env.KT_BROWSER_SCREENSHOTS;
  if(output)fs.mkdirSync(output,{recursive:true});
@@ -46,14 +46,16 @@ const {chromium}=require('playwright');
     const grids=[...section.querySelectorAll('.triple-grid')];
     const panels=[...section.querySelectorAll('.table-container')];
     const overlaps=[...section.querySelectorAll('.kt-hits-last td:first-child .list-badge')].filter(b=>{const r=b.getBoundingClientRect(),c=b.closest('td').getBoundingClientRect();return r.right>c.right+0.5||r.left<c.left-0.5;}).map(b=>b.textContent);
-    return {overlaps,columns:grids.map(g=>getComputedStyle(g).gridTemplateColumns.split(' ').length),pageOverflow:document.documentElement.scrollWidth>innerWidth,panels:panels.map(e=>({height:e.clientHeight,overflow:e.scrollWidth>e.clientWidth+1,scroll:e.scrollHeight>e.clientHeight})),clipped:[...section.querySelectorAll('td')].filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent),portsIntact:[...section.querySelectorAll('.kt-hits-last td:first-child')].every(e=>getComputedStyle(e).whiteSpace==='nowrap'),sticky:[...section.querySelectorAll('th')].every(e=>getComputedStyle(e).position==='sticky'),wrapping:[...section.querySelectorAll('.meta small')].every(e=>getComputedStyle(e).whiteSpace==='normal')};
+    const countAligned=[...section.querySelectorAll('.kt-count-first th:first-child,.kt-count-first td:first-child')].every(e=>getComputedStyle(e).textAlign==='left');
+    const countClipped=[...section.querySelectorAll('.kt-count-first td:first-child')].filter(e=>{const range=document.createRange();range.selectNodeContents(e);const r=range.getBoundingClientRect(),c=e.getBoundingClientRect();return r.left<c.left-0.5||r.right>c.right+0.5;}).map(e=>e.textContent);
+    return {countAligned,countClipped,overlaps,columns:grids.map(g=>getComputedStyle(g).gridTemplateColumns.split(' ').length),pageOverflow:document.documentElement.scrollWidth>innerWidth,panels:panels.map(e=>({height:e.clientHeight,overflow:e.scrollWidth>e.clientWidth+1,scroll:e.scrollHeight>e.clientHeight})),clipped:[...section.querySelectorAll('td')].filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent),portsIntact:[...section.querySelectorAll('.kt-hits-last td:first-child')].every(e=>getComputedStyle(e).whiteSpace==='nowrap'),sticky:[...section.querySelectorAll('th')].every(e=>getComputedStyle(e).position==='sticky'),wrapping:[...section.querySelectorAll('.meta small')].every(e=>getComputedStyle(e).whiteSpace==='normal')};
    });
    const context=JSON.stringify({width,density,period,info});
    if(process.env.KT_LAYOUT_EXPECT_OVERLAP==='1'){
     overlapObserved=overlapObserved||info.overlaps.length>0;
     continue;
    }
-   assert.equal(info.overlaps.length,0,context);
+   assert.equal(info.overlaps.length,0,context);assert(info.countAligned,context);assert.equal(info.countClipped.length,0,context);
    assert(info.columns.every(n=>n===(width>=1200?3:width>=800?2:1)),context);
    assert(!info.pageOverflow,context);assert(info.panels.every(p=>p.scroll&&!p.overflow),context);
    assert.equal(new Set(info.panels.map(p=>p.height)).size,1,context);
@@ -64,6 +66,16 @@ const {chromium}=require('playwright');
     return {moved:panel.scrollTop>0,delta:Math.abs(head.getBoundingClientRect().top-before)};
    });
    assert(scrolled.moved&&scrolled.delta<2,JSON.stringify(scrolled));
+   if(width===1466&&density==='comfortable'&&period==='24h'){
+    const widths=await page.evaluate(()=>{
+     const t=document.querySelector('.tab-content.active .kt-count-first');
+     const cells=[...t.querySelectorAll('tbody td:first-child span')],values=cells.map(e=>e.textContent);
+     const large=t.querySelector('td').getBoundingClientRect().width;
+     cells.forEach(e=>e.textContent='965');const small=t.querySelector('td').getBoundingClientRect().width;
+     cells.forEach((e,i)=>e.textContent=values[i]);return {large,small};
+    });
+    assert(widths.small<widths.large-15,JSON.stringify(widths));
+   }
    checked++;
    if(output&&period==='24h'&&density==='comfortable'&&[1466,390].includes(width)){
     await page.evaluate(()=>document.querySelectorAll('.table-container').forEach(e=>e.scrollTop=0));
@@ -73,5 +85,5 @@ const {chromium}=require('playwright');
  }
  await browser.close();
  if(process.env.KT_LAYOUT_EXPECT_OVERLAP==='1'){assert(overlapObserved,'Baseline did not reproduce the reported badge overlap');console.log('PASS: reproduced published 2.0.21 port/protocol badge overlap with actual exporter output.');return;}
- console.log(`PASS: ${checked} rendered viewport/density/period combinations; equal-height panels, wrapping, unclipped counts, internal scrolling and sticky headers.`);
+ console.log(`PASS: ${checked} rendered viewport/density/period combinations; equal-height panels, wrapping, left-aligned intrinsic CNT columns with 999.999.999 capacity, unclipped counts, internal scrolling and sticky headers.`);
 })().catch(e=>{console.error(e);process.exit(1)});
