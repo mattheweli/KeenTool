@@ -1,6 +1,6 @@
 # Stable component versions — 2026-10-23
 
-Suite/package release: **2.0.22** (manager **2.0.12**). Installer: **1.0.8**. Package manifest: **60 targets**.
+Suite/package release: **2.0.23** (manager **2.0.12**). Installer: **1.0.8**. Package manifest: **60 targets**.
 
 | Source | Stable version | Installed path |
 |---|---|---|
@@ -19,7 +19,7 @@ Suite/package release: **2.0.22** (manager **2.0.12**). Installer: **1.0.8**. Pa
 | `projects/keenetic-firewall/scripts/firewall_stats.sh` | 4.0.2 | `/opt/bin/firewall_stats.sh` |
 | `projects/keenetic-firewall/scripts/100-firewall.sh` | 3.0.1 | `/opt/etc/ndm/netfilter.d/100-firewall.sh` |
 | `projects/keenetic-firewall/scripts/S00ipset-load` | 2.0.0 | `/opt/etc/init.d/S00ipset-load` |
-| `projects/keenetic-firewall/www/index.html` | 2.0.4 | `/opt/var/www/firewall/index.html` |
+| `projects/keenetic-firewall/www/index.html` | 2.0.5 | `/opt/var/www/firewall/index.html` |
 | `projects/keenetic-firewall/www/firewall_api.php` | 2.0.0 | `/opt/var/www/firewall/firewall_api.php` |
 | `projects/keenetic-firewall/www/admin_auth.php` | 1.0.0 | `/opt/lib/keentool-admin/admin_auth.php` |
 | `support/set_password.php` | 1.0.1 | `/opt/lib/keentool-admin/set_password.php` |
@@ -62,7 +62,7 @@ Suite/package release: **2.0.22** (manager **2.0.12**). Installer: **1.0.8**. Pa
 
 | `support/dependencies.sh` | 1.0.0 | `/opt/lib/keentool/dependencies.sh` |
 
-Standalone bootstrap: 1.0.7. Installer entry: 1.0.8. Repository tags: KeenTool package v2.0.22 (manager 2.0.12); keenetic-firewall v4.0.11. Pingtool v2.0.2; Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
+Standalone bootstrap: 1.0.7. Installer entry: 1.0.8. Repository tags: KeenTool package v2.0.23 (manager 2.0.12); keenetic-firewall v4.0.12. Pingtool v2.0.2; Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
 
 Dashboard component: 2.0.4, independently tracked in RELEASE.json while staying in mattheweli/KeenTool. FILE_SCOPES.json assigns every install target to one component or the shared runtime. Selected component checks include shared dependencies; global checks cover all targets.
 
