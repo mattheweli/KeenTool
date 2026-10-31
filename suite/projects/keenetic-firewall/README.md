@@ -2,7 +2,7 @@
 
 **Dual-stack firewall filtering, blocklist maintenance and a web dashboard for Keenetic / Entware.** Uses kernel `ipset` sets and owned iptables chains; performance depends on the router, list sizes and traffic workload.
 
-Current firewall component: **4.0.9**. Independent scripts remain Monitor **4.0.0**, Stats **4.0.2**, Manager **3.0.0** and netfilter hook **3.0.1**. The suite version is not inferred from the Monitor script.
+Current firewall component: **4.0.10**. Independent scripts remain Monitor **4.0.0**, Stats **4.0.2**, Manager **3.0.0** and netfilter hook **3.0.1**. The suite version is not inferred from the Monitor script.
 
 ![Firewall dashboard with IPv4/IPv6 lists and filtering status](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/firewall.png)
 
@@ -123,3 +123,5 @@ Firewall 4.0.7 / package 2.0.18 exposes confirmed Balanced optimization in KeenT
 Firewall 4.0.8 / package 2.0.19 adds an independent Daily summary email switch and automatic verified updates for recognized healthy adopted hooks. The general update approval remains; first legacy/custom migration keeps SSH confirmation. See the coordinated email and upgrade guides.
 
 Firewall 4.0.9 / package 2.0.20 supplies the grouped Security Monitoring CLI with visible warning/digest states, lightweight service/snapshot status and focused health/events/bypass views. Manager advances to 2.0.12 for the main H status entry; Stats stays 4.0.2.
+
+Firewall 4.0.10 / package 2.0.21 uses three equal-height threat tables per row on desktop (1,200px and above), two on tablets and one on phones. Long source and metadata values wrap; each table scrolls independently with sticky headers. Filtering and history storage are unchanged.

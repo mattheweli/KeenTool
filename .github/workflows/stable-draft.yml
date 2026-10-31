@@ -27,6 +27,19 @@ jobs:
           make -C "$RUNNER_TEMP/busybox-1.37.0" defconfig > "$RUNNER_TEMP/busybox-build.log" 2>&1
           sed -i 's/^CONFIG_TC=y/# CONFIG_TC is not set/' "$RUNNER_TEMP/busybox-1.37.0/.config"
           make -C "$RUNNER_TEMP/busybox-1.37.0" -j2 busybox >> "$RUNNER_TEMP/busybox-build.log" 2>&1 || { tail -100 "$RUNNER_TEMP/busybox-build.log"; exit 1; }
+      - name: Verify rendered Firewall table layout
+        if: github.event.repository.name == 'KeenTool'
+        run: |
+          npm install --prefix "$RUNNER_TEMP/kt-browser" --no-audit --no-fund playwright@1.56.1
+          "$RUNNER_TEMP/kt-browser/node_modules/.bin/playwright" install --with-deps chromium
+          NODE_PATH="$RUNNER_TEMP/kt-browser/node_modules" KT_BROWSER_SCREENSHOTS="$RUNNER_TEMP/firewall-layout" node suite/tests/firewall-layout-browser.cjs
+      - name: Preserve Firewall layout screenshots
+        if: always() && github.event.repository.name == 'KeenTool'
+        uses: actions/upload-artifact@v4
+        with:
+          name: firewall-layout-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/firewall-layout
+          if-no-files-found: warn
       - name: Check coordinated suite
         if: github.event.repository.name == 'KeenTool'
         run: |
