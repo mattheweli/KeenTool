@@ -1,7 +1,7 @@
 {
   "changes": [
-    "Firewall CNT headings and values are left-aligned; counter columns shrink to the actual displayed values.",
-    "Keep grouped nine-digit counters through 999.999.999 readable, with flexible metadata on tablets and sufficient HITS width.",
-    "Package 2.0.23 / Firewall 4.0.12 / Firewall dashboard 2.0.5. KeenTool remains 2.0.12. No filtering, database or schedule change."
+    "Security & Health database sizes now use KiB/MiB (base 1024), with dot grouping and comma decimals.",
+    "Hover over a size for its exact byte count; accessible labels also include the byte count. Stored snapshot values are unchanged.",
+    "Package 2.0.24 / Firewall 4.0.13. KeenTool remains 2.0.12. No database conversion, maintenance policy or rule change."
   ]
 }

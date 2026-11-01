@@ -1,17 +1,27 @@
-/* KeenTool Security UI v1.0.2 — 2026-10-22. Public diagnostics, authenticated writes. */
+/* KeenTool Security UI v1.0.3 — 2026-11-01. Public diagnostics, authenticated writes. */
 (() => {
  'use strict';
  let snapshot=null,pending=null,loading=false,lastGuardPoll=0,guardPolling=false;
  const byId=id=>document.getElementById(id);
  const number=value=>window.KTFormat.number(value,0,3);
  const stamp=epoch=>epoch?new Date(epoch*1000).toLocaleString('en-GB'):'Unavailable';
- // Decimal storage units match the security digest (1 GB = 1,000,000,000 bytes).
- function storageSize(bytes){
+ // Disk capacity keeps decimal units; database files use explicitly labelled binary units.
+ function storageSize(bytes,binary=false){
   if(typeof bytes!=='number'||!Number.isFinite(bytes)||bytes<0)return 'Unavailable';
-  const units=['B','KB','MB','GB','TB','PB'];let unit=0,value=bytes;
-  while(value>=1000&&unit<units.length-1){value/=1000;unit++;}
-  if(Math.round(value*10)/10>=1000&&unit<units.length-1){value/=1000;unit++;}
+  const base=binary?1024:1000,units=binary?['B','KiB','MiB','GiB','TiB','PiB']:['B','KB','MB','GB','TB','PB'];let unit=0,value=bytes;
+  while(value>=base&&unit<units.length-1){value/=base;unit++;}
+  if(Math.round(value*10)/10>=base&&unit<units.length-1){value/=base;unit++;}
   return value.toLocaleString('de-DE',{maximumFractionDigits:1})+' '+units[unit];
+ }
+ function renderDatabaseSizes(databases){
+  const entries=Object.entries(databases||{}),valid=size=>Number.isSafeInteger(size)&&size>=0;
+  table('security_databases',entries.map(([name,size])=>[name,valid(size)?storageSize(size,true):'Unavailable']));
+  const body=byId('security_databases');
+  entries.forEach(([,size],index)=>{
+   const cell=body?.children[index]?.children[1];if(!cell||!valid(size))return;
+   const exact=window.KTFormat.integer(size)+' bytes';
+   cell.title=exact;cell.tabIndex=0;cell.setAttribute('aria-label',cell.textContent+' ('+exact+')');
+  });
  }
  function healthResult(id,text,status){const element=byId(id);element.textContent=text;element.dataset.health=status;}
  function table(id,rows){const body=byId(id);if(!body)return;body.replaceChildren();for(const row of rows){const tr=document.createElement('tr');for(const value of row){const td=document.createElement('td');td.textContent=value==null?'Unavailable':String(value);tr.appendChild(td);}body.appendChild(tr);}if(!rows.length){const tr=document.createElement('tr'),td=document.createElement('td');td.textContent='No records available';td.colSpan=body.closest?.('table')?.querySelector('thead tr')?.children.length||1;tr.appendChild(td);body.appendChild(tr);}}
@@ -42,7 +52,7 @@
    byId('security_backup_title').textContent=s.latest_verified_smb_backup?'Latest verified SMB backup':'Latest source backup';
    healthResult('security_backup',stamp(s.latest_verified_smb_backup?.time||s.latest_verified_source_backup||s.latest_source_backup),(s.latest_verified_smb_backup?.time||s.latest_verified_source_backup)?'ok':'unknown');
    byId('security_backup_note').textContent=s.latest_verified_smb_backup?'Read-back verified at upload: '+s.latest_verified_smb_backup.folder+'. Remote presence is not rechecked by this snapshot.':s.backup_note||'';
-   table('security_databases',Object.entries(s.databases||{}).map(([name,size])=>[name,storageSize(size)]));
+   renderDatabaseSizes(s.databases);
    table('security_services',Object.entries(s.services||{}).map(([name,up])=>[name,up?'Running':'Not detected']));
    table('security_lists',Object.entries(s.lists||{}).map(([name,row])=>[name,row.installed==null?'Count unavailable':number(row.installed),row.result==='rejected'?'Not applied':window.KTFormat.number(row.delta_percent,0,1)+'%',(row.result==='installed'&&row.baseline?'New baseline':row.result)+(row.warning?' · warning':''),[row.detail,row.source_warning].filter(Boolean).join(' ')||(row.result==='rejected'?'Failure reason was not recorded by the previous updater.':'No additional details recorded.'),stamp(row.time)]));
    table('security_manual',Object.entries(s.manual_bans||{}).map(([ip,row])=>[ip,row.expires?stamp(row.expires):'Permanent',stamp(row.created)]));

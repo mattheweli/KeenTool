@@ -15,7 +15,20 @@ vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/../assets/keen
  const failure=els.security_lists.children[1].children;assert.equal(failure[2].textContent,'Not applied');assert.equal(failure[3].textContent,'rejected');assert.equal(failure[4].textContent,'ipdeny.com (cn): HTTP 404 <literal>');assert.equal(els.security_events.children[1].children[5].textContent,'HTTP 404 <literal>');
 
  assert.equal(ctx.window.KT_SECURITY_DATA.updated,snapshot.system.time);assert.equal(ctx.window.KT_SECURITY_DATA.status,'ready');assert.equal(ctx.window.KT_SECURITY_DATA.monitorInterval,900);
- snapshot.system.disk={free:116938457088,total:200000000000};snapshot.system.databases={'firewall_stats.db':29800000};await ctx.window.loadSecurityOverview();assert.equal(els.security_disk.textContent,'116,9 GB free');assert.equal(els.security_databases.children[0].children[1].textContent,'29,8 MB');
+ snapshot.system.disk={free:116938457088,total:200000000000};snapshot.system.databases={'firewall_stats.db':29800000};await ctx.window.loadSecurityOverview();assert.equal(els.security_disk.textContent,'116,9 GB free');assert.equal(els.security_databases.children[0].children[1].textContent,'28,4 MiB');
+ // Binary file sizes retain exact byte counts, including the reported Windows examples.
+ const sizes={'firewall_stats.db':46231552,'pingtool.db':286720,'empty.db':0,'small.db':1023,'boundary.db':1024,'large.db':1073741824,'unknown.db':null,'negative.db':-1,'string.db':'1024','invalid.db':NaN,'fractional.db':1.5};
+ snapshot.system.databases=sizes;await ctx.window.loadSecurityOverview();
+ const expected=['44,1 MiB','280 KiB','0 B','1.023 B','1 KiB','1 GiB','Unavailable','Unavailable','Unavailable','Unavailable','Unavailable'];
+ els.security_databases.children.forEach((row,i)=>{
+  const cell=row.children[1],size=Object.values(sizes)[i];assert.equal(cell.textContent,expected[i]);
+  if(Number.isSafeInteger(size)&&size>=0){assert.equal(cell.title,size.toLocaleString('de-DE')+' bytes');assert.equal(cell.tabIndex,0);assert(cell['aria-label'].includes(cell.title));}
+  else assert.equal(cell.title,undefined);
+ });
+ assert.equal(snapshot.system.databases['firewall_stats.db'],46231552,'Rendering must not change stored byte counts');
+ snapshot.system.databases={'unsafe-name<script>':2048};await ctx.window.loadSecurityOverview();assert.equal(els.security_databases.children[0].children[0].textContent,'unsafe-name<script>');assert.equal(els.security_databases.children[0].children[1].textContent,'2 KiB');
+ snapshot.system.databases={'firewall_stats.db':null};await ctx.window.loadSecurityOverview();assert.equal(els.security_databases.children[0].children[1].title,undefined,'Unknown sizes must not retain an old tooltip');
+ snapshot.system.databases={};await ctx.window.loadSecurityOverview();assert.equal(els.security_databases.children[0].children[0].textContent,'No records available');
  snapshot.system.disk={free:5,total:100};snapshot.system.latest_verified_source_backup=100;
  await ctx.window.loadSecurityOverview();
  for(const id of ['security_fw','security_disk','security_web','security_backup'])assert.equal(els[id].dataset.health,'ok',id);
