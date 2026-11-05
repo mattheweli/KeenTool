@@ -2,7 +2,7 @@
 
 **Dual-stack firewall filtering, blocklist maintenance and a web dashboard for Keenetic / Entware.** Uses kernel `ipset` sets and owned iptables chains; performance depends on the router, list sizes and traffic workload.
 
-Current firewall component: **4.0.13**. Independent scripts remain Monitor **4.0.0**, Stats **4.0.2**, Manager **3.0.0** and netfilter hook **3.0.1**. The suite version is not inferred from the Monitor script.
+Current firewall component: **4.0.14**. Independent scripts remain Monitor **4.0.0**, Stats **4.0.2**, Manager **3.0.0** and netfilter hook **3.0.1**. The suite version is not inferred from the Monitor script.
 
 ![Firewall dashboard with IPv4/IPv6 lists and filtering status](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/firewall.png)
 
@@ -14,6 +14,10 @@ Current firewall component: **4.0.13**. Independent scripts remain Monitor **4.0
 - Read-only IP/subnet diagnostics: set membership, rule references, historical counters, metadata and bypass context.
 - Port expansion, country ranking/map, period comparisons and readable NFLOG/ulogd-derived records.
 - Shared HTTPS administrator authentication, CSRF checks and optional web privilege separation through the root command broker.
+
+## Public IP checks and Unban
+
+Use the IP / subnet check field without administrator login. Ban and Unban remain administrator-only. Unban removes manual/dynamic entries; it does not whitelist an address. Static and GeoIP memberships may still block it, and future detection may ban it again. Use Check to inspect remaining memberships.
 
 ## How filtering and statistics differ
 
@@ -130,4 +134,4 @@ Firewall 4.0.11 fixes overlap between full port/protocol badges and attacker add
 
 Firewall 4.0.12 aligns CNT to the left and uses only the width needed by the displayed counters, including values through 999.999.999. Use coordinated package 2.0.23 and reload the page.
 
-Security & Health database file sizes use binary units (KiB/MiB) and show exact bytes in size-cell tooltips. Disk capacity keeps decimal units. Use coordinated package 2.0.24; no database rewrite is performed.
+Security & Health database file sizes use binary units (KiB/MiB) and show exact bytes in size-cell tooltips. Disk capacity keeps decimal units. Use coordinated package 2.0.25; no database rewrite is performed.

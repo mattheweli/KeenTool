@@ -33,6 +33,10 @@ with tempfile.TemporaryDirectory() as td:
   head,text=r.stdout.replace('\r\n','\n').split('\n\n',1);return head,json.loads(text)
  h,d=call('lookup',https=False);assert d['status']=='error' and '403' in h
  h,d=call('lookup',origin='https://evil.test');assert d['status']=='error' and '403' in h
+ h,d=call('lookup&ip=203.0.113.9');assert d['status']=='success' and d['ip']=='203.0.113.9' and 'Set-Cookie:' not in h
+ h,d=call('lookup&ip=2001%3Adb8%3A%3A9');assert d['status']=='success' and d['ip']=='2001:db8::9'
+ h,d=call('unban',{'ip':'203.0.113.9'});assert d['status']=='error' and '401' in h
+ h,d=call('unban');assert '405' in h
  h,d=call('ban',{'ip':'203.0.113.9','duration':900});assert d['status']=='error' and '401' in h
  h,d=call('audit');assert d['status']=='error' and '401' in h
  h,d=call('settings_get');assert '401' in h
