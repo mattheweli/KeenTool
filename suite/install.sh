@@ -1,7 +1,7 @@
 #!/opt/bin/bash
-# KeenTool stable installer 1.0.8 — 2026-10-29.
+# KeenTool stable installer 1.0.9 — 2026-11-12.
 set -Eeuo pipefail
-export PATH="${KT_INSTALL_ROOT:-}/opt/bin:${KT_INSTALL_ROOT:-}/opt/sbin:/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
+export PATH="${KT_INSTALL_ROOT:-}/opt/bin:${KT_INSTALL_ROOT:-}/opt/sbin:${KT_INSTALL_ROOT:-}/opt/usr/bin:${KT_INSTALL_ROOT:-}/opt/usr/sbin:/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
 base=$(cd "$(dirname "$0")" && pwd)
 # KT_INSTALL_BACKUP_RETENTION_V1
 # KT_INSTALL_HTTPS_MIGRATION_V1

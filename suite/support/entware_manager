@@ -3,7 +3,7 @@
 # Check/notify, explicit upgrade, detached worker, service stop/start, logs and recovery.
 # No unattended upgrade; configurations and databases backed up, packages not rolled back.
 set -u
-export PATH=${KT_ENTWARE_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+export PATH=${KT_ENTWARE_PATH:-/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 STATE=${KT_ENTWARE_STATE:-/opt/etc/keentool/entware}
 RUNS=${KT_ENTWARE_RUNS:-/opt/var/backups/keentool-entware}
 LOCK=${KT_ENTWARE_LOCK:-/tmp/keentool-entware.lockdir}
@@ -12,7 +12,15 @@ INIT=${KT_ENTWARE_INIT:-/opt/etc/init.d}
 OPKG=${KT_ENTWARE_OPKG:-/opt/bin/opkg}
 [ -x "$OPKG" ] || OPKG=$(command -v opkg || true)
 EMAIL=${KT_ENTWARE_EMAIL:-/opt/bin/email_sender.mod}
-SELF=$(readlink -f "$0")
+require_commands() {
+ local cmd missing=0
+ for cmd in "$@";do
+  command -v "$cmd" >/dev/null 2>&1 || { printf 'Missing required command: %s (PATH=%s)\n' "$cmd" "$PATH" >&2;missing=1; }
+ done
+ [ "$missing" = 0 ]
+}
+require_commands readlink mkdir chmod || exit 1
+SELF=$(readlink -f "$0") || exit 1
 mkdir -p "$STATE" "$RUNS" || exit 1
 chmod 700 "$STATE" "$RUNS"
 umask 077
@@ -63,6 +71,7 @@ notify_updates() {
  else log 'Email failed; next check will retry';return 1;fi
 }
 check_updates() {
+ require_commands tee cat awk sort sha256sum mktemp rm mv date wc || return 1
  [ ! -e "$MAINT" ] || { log 'Maintenance active: check deferred';return 75; }
  acquire || return $?
  trap release EXIT
@@ -118,6 +127,68 @@ snapshot() {
   [ "$(sqlite3 "$target" 'PRAGMA quick_check;')" = ok ] || return 1
  done < <(find /opt/etc /opt/var/lib -type f -name '*.db' 2>/dev/null)
 }
+prepare_runtime() {
+ local run=$1 bb=${KT_ENTWARE_BUSYBOX:-/opt/bin/busybox} prefix=${KT_ENTWARE_PREFIX:-/opt} app
+ if [ "${KT_ENTWARE_TEST:-false}" = true ] && [ -z "${KT_ENTWARE_BUSYBOX:-}" ];then return 0;fi
+ [ -x "$bb" ] && "$bb" sh -c ':' || { log 'A working BusyBox shell is required before stopping services';return 1; }
+ [ -r "$prefix/share/busybox_applets.lst.dist" ] || { log 'BusyBox applet manifest is missing';return 1; }
+ mkdir -p "$run/rescue/bin" || return 1
+ cp "$bb" "$run/rescue/busybox" && chmod 700 "$run/rescue/busybox" || return 1
+ cp "$prefix/share/busybox_applets.lst.dist" "$run/rescue/applets.list" || return 1
+ "$run/rescue/busybox" --list > "$run/rescue/commands.list" || return 1
+ while IFS= read -r app;do
+  case "$app" in ''|*/*|.|..) continue;;esac
+  "$run/rescue/busybox" ln -s "$run/rescue/busybox" "$run/rescue/bin/$app" || return 1
+ done < "$run/rescue/commands.list"
+ "$run/rescue/busybox" sh -c ':' || return 1
+ log "Independent BusyBox recovery runtime ready: $run/rescue"
+}
+repair_runtime() {
+ local run=$1 prefix=${KT_ENTWARE_PREFIX:-/opt} rescue="$1/rescue/busybox" target rel dest bad=0
+ [ -x "$rescue" ] || { hash -r;require_commands mkdir rm readlink wc sleep pidof dirname cat date;return $?; }
+ hash -r
+ target="$prefix/bin/busybox"
+ if [ ! -e "$target" ] && [ ! -L "$target" ];then
+  "$rescue" cp "$rescue" "$target" || return 1
+ fi
+ "$target" sh -c ':' || { printf 'Installed BusyBox cannot execute; recovery copy: %s\n' "$rescue" >&2;return 1; }
+ while IFS= read -r rel;do
+  case "$rel" in *..*|/*) bad=1;continue;;bin/*|sbin/*|usr/bin/*|usr/sbin/*) ;;*) continue;;esac
+  dest="$prefix/$rel"
+  if [ ! -e "$dest" ];then
+   if [ -L "$dest" ];then
+    printf 'Broken existing link requires review: %s\n' "$dest" >&2;bad=1;continue
+   fi
+   "$rescue" mkdir -p "${dest%/*}" && "$rescue" ln -s "$target" "$dest" || { bad=1;continue; }
+   printf 'Restored missing runtime link: %s\n' "$dest"
+  fi
+ done < "$run/rescue/applets.list"
+ hash -r
+ "$prefix/bin/sh" -c ':' || bad=1
+ require_commands mkdir rm readlink wc sleep pidof dirname cat date || bad=1
+ return "$bad"
+}
+upgrade_packages() {
+ local run=$1;shift
+ local package rc=0 index=0 total=$# upgrade_path=$PATH
+ [ ! -d "$run/rescue/bin" ] || upgrade_path="$run/rescue/bin:$PATH"
+ : > "$run/package-results.tsv"
+ # Short transactions identify the failing package and avoid one opaque bulk operation.
+ for package in "$@";do
+  index=$((index+1));log "[$index/$total] Upgrading $package"
+  printf '%s\n' "$package" > "$run/current-package"
+  PATH="$upgrade_path" "$OPKG" --cache "$run/cache" upgrade "$package";rc=$?
+  printf '%s\t%s\n' "$package" "$rc" >> "$run/package-results.tsv"
+  # opkg scripts can remove BusyBox links and invalidate Bash's command cache.
+  if ! repair_runtime "$run";then
+   printf 'Runtime recovery failed after %s; opkg exit %s\n' "$package" "$rc" >&2
+   [ "$rc" != 0 ] || rc=1
+   return "$rc"
+  fi
+  if [ "$rc" != 0 ];then log "Package upgrade failed: $package (exit $rc); remaining packages were not attempted";return "$rc";fi
+ done
+ return 0
+}
 restore_services() {
  local run=$1 p bad=0
  rm -f "$MAINT"
@@ -136,11 +207,12 @@ restore_services() {
 }
 worker() {
  local run=$1 expected=$2 rc=1 stopped=false p
+ require_commands cat cp mv rm rmdir date wc sort awk grep sha256sum mktemp timeout sleep pidof tee tar find df dirname ln || return 1
  acquire || return $?
  trap release EXIT
  cp "$SELF" "$run/worker-source.sh" 2>/dev/null || :
  echo 'preparing' > "$run/status"
- trap 'log "Signal received; restarting services"; if [ "$stopped" = true ];then restore_services "$run";fi;rm -f "$MAINT";echo interrupted > "$run/status";exit 1' INT TERM
+ trap 'repair_runtime "$run" || :;log "Signal received; restarting services"; if [ "$stopped" = true ];then restore_services "$run";fi;rm -f "$MAINT";echo interrupted > "$run/status";exit 1' INT TERM
  if [ -e "$MAINT" ];then log 'Previous maintenance unresolved';return 75;fi
  if ! get_list "$run/available.txt";then echo check-failed > "$run/status";return 1;fi
  [ "$(fingerprint "$run/available.txt")" = "$expected" ] || { log 'Package list changed since confirmation: review again';echo list-changed > "$run/status";return 1; }
@@ -155,6 +227,7 @@ worker() {
  echo downloading > "$run/status"
  log 'Downloading packages/dependencies BEFORE stopping services'
  if ! "$OPKG" --cache "$run/cache" --download-only upgrade "${packages[@]}";then echo download-failed > "$run/status";return 1;fi
+ prepare_runtime "$run" || { echo runtime-preflight-failed > "$run/status";return 1; }
  services > "$run/services.txt"
  if [ "${KT_ENTWARE_TEST:-false}" != true ] && command -v pidof >/dev/null;then
   : > "$run/daemons-before.txt"
@@ -182,11 +255,12 @@ worker() {
  echo upgrading > "$run/status"
  [ ! -x /opt/bin/firewall_security ] || /opt/bin/bash /opt/bin/firewall_security event entware 'upgrade started' || :
  log 'Starting confirmed Entware upgrade from package cache' 
- "$OPKG" --cache "$run/cache" upgrade "${packages[@]}";rc=$?
+ upgrade_packages "$run" "${packages[@]}";rc=$?
  printf '%s\n' "$rc" > "$run/opkg-exit-code"
  # Release pause before init starts, so own hook can restore saved sets normally.
  rm -f "$MAINT"
  echo restarting-services > "$run/status"
+ repair_runtime "$run" || log "Runtime still incomplete; service recovery will be attempted"
  if ! restore_services "$run";then echo "restart-failed (opkg exit $rc)" > "$run/status";return 1;fi
  stopped=false
  if [ "$rc" = 0 ];then echo completed > "$run/status";else echo "upgrade-errors (opkg exit $rc; services restarted)" > "$run/status";fi
@@ -251,6 +325,7 @@ launch_upgrade() {
  services
  echo 'Package scripts may themselves start services during upgrade. Native SSH may stay reachable; Entware SSH may disconnect.'
  echo 'Package/config backup is NOT an automatic downgrade of installed packages.'
+ echo 'Each package is logged separately. On an error, remaining packages are skipped and service recovery is attempted.'
  read -r -p 'Type UPGRADE to proceed: ' answer
  [ "$answer" = UPGRADE ] || return 0
  local run digest
@@ -279,8 +354,12 @@ resume_services() {
  [ -f "$run/services.txt" ] || { echo 'No saved service list';return 1; }
  local pid;pid=$(cat "$run/pid" 2>/dev/null || true)
  if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null;then echo 'Worker still running: do not resume';return 1;fi
+ repair_runtime "$run" || { log 'Runtime recovery incomplete; service resume aborted';return 1; }
  rm -f "$MAINT"
- restore_services "$run"
+ if restore_services "$run";then
+  printf '%s\n' "services-recovered (previous upgrade result retained in opkg-exit-code)" > "$run/status"
+  log 'Saved services recovered; package upgrade has not been retried'
+ else echo resume-failed > "$run/status";return 1;fi
 }
 NOTIFY=false
 case "${1:---menu}" in

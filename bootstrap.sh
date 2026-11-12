@@ -1,12 +1,12 @@
 #!/opt/bin/bash
-# KeenTool stable bootstrap 1.0.7. Downloaded over trusted GitHub HTTPS; verify its source before running.
+# KeenTool stable bootstrap 1.0.8. Downloaded over trusted GitHub HTTPS; verify its source before running.
 set -Eeuo pipefail
 umask 077
 # Recover a deleted working directory before starting child processes.
 if ! builtin pwd -P >/dev/null 2>&1; then
     builtin cd / 2>/dev/null || { echo "Cannot recover the working directory" >&2; exit 1; }
 fi
-export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 for essential in mktemp cat rm;do
  command -v "$essential" >/dev/null || { printf 'Missing bootstrap command: %s. Restore the router BusyBox utilities before migration.
 ' "$essential" >&2;exit 1; }
@@ -352,13 +352,13 @@ try{
 KT_BOOTSTRAP_PHP
 cat > "$work/keentool_update" <<'KT_BOOTSTRAP_SH'
 #!/opt/bin/bash
-# KeenTool remote release updater 1.0.7 — 2026-10-28.
+# KeenTool remote release updater 1.0.8 — 2026-11-12.
 set -Eeuo pipefail
 # Recover a deleted working directory before starting child processes.
 if ! builtin pwd -P >/dev/null 2>&1; then
     builtin cd / 2>/dev/null || { echo "Cannot recover the working directory" >&2; exit 1; }
 fi
-export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 umask 077
 check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false;backup_policy=ask
 kt_set_backup_policy() {

@@ -1,11 +1,11 @@
 {
   "suite": "KeenTool",
-  "version": "2.0.25",
-  "installer": "1.0.8",
-  "date": "2026-11-05",
+  "version": "2.0.26",
+  "installer": "1.0.9",
+  "date": "2026-11-12",
   "channel": "stable",
   "components": {
-    "KeenTool": "2.0.12",
+    "KeenTool": "2.0.13",
     "keenetic-pingtool": "2.0.2",
     "Traffic_manager": "2.0.1",
     "SMB_Backup_tool": "2.0.1",

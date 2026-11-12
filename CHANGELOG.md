@@ -1,11 +1,15 @@
 # Stable changelog — 2026-10-28
 
-## Unreleased — Entware upgrade progress
+## Coordinated package 2.0.26 / KeenTool 2.0.13 — 2026-11-12
 
-- Stream package-index refresh output to both the terminal and update.log, preserving opkg failures through the logging pipeline.
-- Automatically follow the detached upgrade log after confirmation and expose download, job-wait, service-stop, backup, installation and restart phases. Report the worker exit code and provide entware_manager --follow / menu option 4 to reconnect to the latest log.
-- Launch the worker in a separate process group using Bash job control, without adding nohup or setsid dependencies. Ctrl+C closes the log view; terminal interrupts and hangup must not cancel opkg or prevent service recovery.
-- Extend isolated regression coverage with the actual interactive launcher, progress before completion, Ctrl+C/hangup survival, failed index updates, partial lines and worker errors. No package-manager transaction is run against a router during tests.
+- Show package-index output and automatically follow Entware upgrade logs in the terminal. Report phases, per-package progress and final exit status. Add entware_manager --follow, keentool --entware-follow and menu option 4 for reconnecting.
+- Include /opt/usr/bin and /opt/usr/sbin in manager, Entware worker, installer and bootstrap/updater command paths. Fail with named missing commands before starting maintenance.
+- Prepare an independent BusyBox runtime and applet manifest before stopping services. Keep package-script commands available while BusyBox links change; clear Bash command hashes and recreate missing applet links before service restart. Existing files and symlinks are not overwritten.
+- Upgrade confirmed packages in individual logged transactions after predownload. Record package exit codes; stop on the first failure and recover services without automatically retrying or claiming a package rollback.
+- Isolate the worker process group from terminal Ctrl+C/hangup; closing the live view does not interrupt the upgrade. Record successful manual service recovery separately from the previous opkg result.
+- Add regressions reproducing lost sh/mkdir/rm links, opkg exit 134, interrupted terminal viewing, per-package error propagation and successful complete batches. Release CI repeats recovery with pinned BusyBox 1.37.
+
+Package 2.0.26; KeenTool manager 2.0.13; Entware manager 1.0.1; installer 1.0.9; updater/bootstrap 1.0.8. Firewall 4.0.14, Dashboard 2.0.4, Pingtool 2.0.2, Traffic 2.0.1 and SMB 2.0.1 are unchanged.
 
 ## Coordinated package 2.0.25 / Firewall 4.0.14 — 2026-11-05
 
