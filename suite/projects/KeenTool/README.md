@@ -2,7 +2,7 @@
 
 **A package manager and monitoring dashboard for Keenetic routers running Entware.** Manage the firewall, WAN/PPP connectivity, traffic history, SMB backups, notifications and Entware maintenance from a consistent CLI and web interface.
 
-Current coordinated package: **2.0.25**; KeenTool manager: **2.0.12**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
+Current coordinated package: **2.0.26**; KeenTool manager: **2.0.13**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
 
 ![System Dashboard: firewall, traffic, connection and security summaries](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/dashboard.png)
 
@@ -10,7 +10,7 @@ Current coordinated package: **2.0.25**; KeenTool manager: **2.0.12**. The Main 
 
 | Component | Version | Purpose |
 |---|---:|---|
-| KeenTool manager | 2.0.12 | Installation, configuration, verified updates and maintenance |
+| KeenTool manager | 2.0.13 | Installation, configuration, verified updates and maintenance |
 | Main Dashboard | 2.0.4 | Shared overview and readable system/application logs |
 | [Firewall](https://github.com/mattheweli/keenetic-firewall) | 4.0.14 | IPv4/IPv6 filtering, blocklists, diagnostics and history |
 | [Connection Monitor](https://github.com/mattheweli/keenetic-pingtool) | 2.0.2 | Latency, jitter, packet loss and PPP event correlation |
@@ -69,7 +69,7 @@ CLI **u** checks all components and offers one coordinated update after confirma
 
 ## Notifications and maintenance
 
-HTML/plain email layouts cover summaries, connection warnings, MTR and security state. PPP syslog events and sampled ping failures have distinct meanings: high latency/partial loss is not a measured WAN outage. Entware update checks can notify about available packages; an explicitly requested Entware upgrade uses its maintenance worker and service stop/restart lifecycle.
+HTML/plain email layouts cover summaries, connection warnings, MTR and security state. PPP syslog events and sampled ping failures have distinct meanings: high latency/partial loss is not a measured WAN outage. Entware update checks can notify about available packages; an explicitly requested Entware upgrade uses its maintenance worker and service stop/restart lifecycle. During an upgrade, the terminal follows the worker log automatically. Ctrl+C closes only the view. After reconnecting, use `keentool --entware-follow`, `entware_manager --follow` or Entware menu option 4; `keentool --entware-status` reports the worker state. Entware SSH can disconnect when its own service stops; use the native Keenetic SSH service when available. Configuration/database recovery copies do not provide an automatic package downgrade.
 
 Firewall historical aggregation keeps recent raw samples, then hourly/daily IP/list totals. It preserves hit totals while reducing older time precision. Read the [history policy](https://github.com/mattheweli/KeenTool/blob/main/suite/docs/FIREWALL_HISTORY.md) before enabling or changing it.
 

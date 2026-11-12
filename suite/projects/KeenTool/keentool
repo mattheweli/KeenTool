@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KEENTOOL MANAGER v2.0.12
+# KEENTOOL MANAGER v2.0.13
 # Release: 2026-10-29 | Stable. See CHANGELOG.md for release details.
 
 # Recover a deleted working directory before starting child processes.
@@ -9,7 +9,7 @@ fi
 
 # Author: MatthewEli
 
-export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 # BEGIN GENERATED LEGACY MIGRATION
 # Runtime detection happens before sourcing any coordinated-suite libraries.
 kt_runtime_ready() {
@@ -19,14 +19,14 @@ kt_runtime_ready() {
  [ -r "${KT_UPDATE_HELPER:-/opt/lib/keentool/release_update.php}" ]
 }
 kt_embedded_bootstrap() {
-# KeenTool stable bootstrap 1.0.7. Downloaded over trusted GitHub HTTPS; verify its source before running.
+# KeenTool stable bootstrap 1.0.8. Downloaded over trusted GitHub HTTPS; verify its source before running.
 set -Eeuo pipefail
 umask 077
 # Recover a deleted working directory before starting child processes.
 if ! builtin pwd -P >/dev/null 2>&1; then
     builtin cd / 2>/dev/null || { echo "Cannot recover the working directory" >&2; exit 1; }
 fi
-export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 for essential in mktemp cat rm;do
  command -v "$essential" >/dev/null || { printf 'Missing bootstrap command: %s. Restore the router BusyBox utilities before migration.
 ' "$essential" >&2;exit 1; }
@@ -372,13 +372,13 @@ try{
 KT_BOOTSTRAP_PHP
 cat > "$work/keentool_update" <<'KT_BOOTSTRAP_SH'
 #!/opt/bin/bash
-# KeenTool remote release updater 1.0.7 — 2026-10-28.
+# KeenTool remote release updater 1.0.8 — 2026-11-12.
 set -Eeuo pipefail
 # Recover a deleted working directory before starting child processes.
 if ! builtin pwd -P >/dev/null 2>&1; then
     builtin cd / 2>/dev/null || { echo "Cannot recover the working directory" >&2; exit 1; }
 fi
-export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
+export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 umask 077
 check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false;backup_policy=ask
 kt_set_backup_policy() {
@@ -573,7 +573,7 @@ if ! kt_runtime_ready;then
  exit 0
 fi
 # END GENERATED LEGACY MIGRATION
-# KeenTool 2.0.12
+# KeenTool 2.0.13
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 # Shared runtime and components are updated together through verified release packages.
 KT_MANAGED_PACKAGE=true
@@ -655,7 +655,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.12  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.13  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -1182,7 +1182,7 @@ EOF
 }
 
 doctor() {
-    echo 'KeenTool v2.0.12'
+    echo 'KeenTool v2.0.13'
     for cmd in bash curl sqlite3 ipset iptables smbclient vnstat tar timeout sha256sum; do
         command -v "$cmd" >/dev/null && printf 'OK %s\n' "$cmd" || printf 'MISSING %s\n' "$cmd"
     done
@@ -1195,6 +1195,7 @@ doctor() {
 }
 case "${1:-}" in
     --entware-check) shift; exec /opt/bin/entware_manager --check "$@" ;;
+    --entware-follow) exec /opt/bin/entware_manager --follow ;;
     --entware-status) exec /opt/bin/entware_manager --status ;;
     --entware-upgrade) exec /opt/bin/entware_manager --upgrade ;;
     --entware-resume) exec /opt/bin/entware_manager --resume ;;
