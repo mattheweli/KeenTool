@@ -1,5 +1,12 @@
 # Stable changelog — 2026-10-28
 
+## Unreleased — Entware upgrade progress
+
+- Stream package-index refresh output to both the terminal and update.log, preserving opkg failures through the logging pipeline.
+- Automatically follow the detached upgrade log after confirmation and expose download, job-wait, service-stop, backup, installation and restart phases. Report the worker exit code and provide entware_manager --follow / menu option 4 to reconnect to the latest log.
+- Launch the worker in a separate process group using Bash job control, without adding nohup or setsid dependencies. Ctrl+C closes the log view; terminal interrupts and hangup must not cancel opkg or prevent service recovery.
+- Extend isolated regression coverage with the actual interactive launcher, progress before completion, Ctrl+C/hangup survival, failed index updates, partial lines and worker errors. No package-manager transaction is run against a router during tests.
+
 ## Coordinated package 2.0.25 / Firewall 4.0.14 — 2026-11-05
 
 - Expose the Firewall IP/subnet input and Check button to read-only visitors. Support IPv4, IPv6 and CIDR queries, including Enter to submit, using the existing read-only diagnostics API.

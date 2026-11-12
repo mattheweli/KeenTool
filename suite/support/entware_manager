@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KEENTOOL ENTWARE MANAGER v1.0.0 — 2026-10-22
+# KEENTOOL ENTWARE MANAGER v1.0.1 — 2026-11-12
 # Check/notify, explicit upgrade, detached worker, service stop/start, logs and recovery.
 # No unattended upgrade; configurations and databases backed up, packages not rolled back.
 set -u
@@ -17,6 +17,15 @@ mkdir -p "$STATE" "$RUNS" || exit 1
 chmod 700 "$STATE" "$RUNS"
 umask 077
 log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
+worker_alive() {
+ local pid=$1 stat
+ [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null || return 1
+ if [ -r "/proc/$pid/stat" ];then
+  stat=$(cat "/proc/$pid/stat" 2>/dev/null || true)
+  case "$stat" in *') Z '*|*') X '*) return 1;;esac
+ fi
+ return 0
+}
 acquire() {
  if ! mkdir "$LOCK" 2>/dev/null;then
   local pid;pid=$(cat "$LOCK/pid" 2>/dev/null || true)
@@ -58,8 +67,8 @@ check_updates() {
  acquire || return $?
  trap release EXIT
  log 'Refreshing Entware package indexes'
- if ! "$OPKG" update > "$STATE/update.log" 2>&1;then
-  cat "$STATE/update.log";log 'Index update failed; previous available list retained';return 1
+ if ! (set -o pipefail; "$OPKG" update 2>&1 | tee "$STATE/update.log");then
+  log 'Index update failed; previous available list retained';return 1
  fi
  local tmp;tmp=$(mktemp "$STATE/.available.XXXXXX") || return 1
  if ! get_list "$tmp";then rm -f "$tmp";return 1;fi
@@ -71,7 +80,13 @@ check_updates() {
 status() {
  if [ -f "$STATE/available.txt" ];then printf 'Available packages: %s\n' "$(wc -l < "$STATE/available.txt")";cat "$STATE/available.txt";else echo 'No successful check yet';fi
  [ ! -f "$STATE/checked.at" ] || echo "Last check (Unix time): $(cat "$STATE/checked.at")"
- if [ -f "$STATE/latest-run" ];then local run;run=$(cat "$STATE/latest-run");echo "Run: $run";[ ! -f "$run/status" ] || cat "$run/status";fi
+ if [ -f "$STATE/latest-run" ];then
+  local run pid;run=$(cat "$STATE/latest-run");echo "Run: $run"
+  [ ! -f "$run/status" ] || printf 'Phase: %s\n' "$(cat "$run/status")"
+  pid=$(cat "$run/pid" 2>/dev/null || true)
+  if worker_alive "$pid";then echo "Worker running (PID $pid)";else echo 'Worker not running';fi
+  echo "Log: $run/upgrade.log"
+ fi
  [ ! -e "$MAINT" ] || echo 'Maintenance flag active: use --resume after inspecting upgrade log'
 }
 services() {
@@ -137,6 +152,7 @@ worker() {
   [[ "$free_kb" =~ ^[0-9]+$ ]] && [ "$free_kb" -ge 204800 ] || { log 'Need at least 200 MiB free on /opt';echo space-insufficient > "$run/status";return 1; }
  fi
  mkdir -p "$run/cache"
+ echo downloading > "$run/status"
  log 'Downloading packages/dependencies BEFORE stopping services'
  if ! "$OPKG" --cache "$run/cache" --download-only upgrade "${packages[@]}";then echo download-failed > "$run/status";return 1;fi
  services > "$run/services.txt"
@@ -146,6 +162,7 @@ worker() {
  fi
  if [ ! -s "$run/services.txt" ];then log 'No Entware init services found; abort';echo service-list-empty > "$run/status";return 1;fi
  printf '%s\n' "$$" > "$MAINT"
+ echo waiting-jobs > "$run/status"
  if ! wait_jobs;then rm -f "$MAINT";echo jobs-active > "$run/status";return 1;fi
  # Stop in reverse startup order. Detached worker survives SSH service stop.
  stopped=true;echo stopping-services > "$run/status"
@@ -157,6 +174,8 @@ worker() {
   fi
  done < <(sort -r "$run/services.txt")
  # Database snapshots are taken after daemons have stopped.
+ echo snapshotting > "$run/status"
+ log 'Backing up configuration and databases before package installation'
  if ! snapshot "$run";then
   restore_services "$run";rm -f "$MAINT";echo snapshot-failed > "$run/status";return 1
  fi
@@ -183,6 +202,46 @@ worker() {
  log "Finished: $(cat "$run/status")"
  return "$rc"
 }
+follow_run() (
+ local run=$1 pid state previous='' line rc
+ [ -f "$run/upgrade.log" ] || { echo 'No upgrade log is available';return 1; }
+ echo "Following upgrade log: $run/upgrade.log"
+ echo 'Ctrl+C stops this view only; the upgrade worker continues. Reconnect with entware_manager --follow.'
+ trap 'printf "\nLog view closed; the upgrade worker was not stopped.\n";exit 130' INT
+ trap 'exit 143' HUP TERM
+ exec 3< "$run/upgrade.log" || return 1
+ # Keep the file descriptor at the last byte read, including partial lines.
+ # No tail -f child or terminal connection is attached to the worker.
+ drain_log() {
+  while IFS= read -r line <&3;do printf '%s\n' "$line";done
+  [ -z "$line" ] || printf '%s' "$line"
+ }
+ while true;do
+  state=$(cat "$run/status" 2>/dev/null || true)
+  if [ -n "$state" ] && [ "$state" != "$previous" ];then
+   printf '\nPhase: %s\n' "$state";previous=$state
+  fi
+  drain_log
+  if [ -f "$run/worker-exit-code" ];then
+   drain_log;rc=$(cat "$run/worker-exit-code")
+   [[ "$rc" =~ ^[0-9]+$ ]] && [ "$rc" -le 255 ] || rc=1
+   printf '\nUpgrade status: %s (worker exit %s)\n' "$(cat "$run/status" 2>/dev/null || echo unknown)" "$rc"
+   return "$rc"
+  fi
+  pid=$(cat "$run/pid" 2>/dev/null || true)
+  if ! worker_alive "$pid";then
+   drain_log
+   echo 'Worker is no longer running. Check --status and the log before attempting service recovery.'
+   return 1
+  fi
+  sleep 1
+ done
+)
+follow_latest() {
+ local run;run=$(cat "$STATE/latest-run" 2>/dev/null || true)
+ [ -n "$run" ] || { echo 'No recorded Entware upgrade';return 1; }
+ follow_run "$run"
+}
 launch_upgrade() {
  [ -t 0 ] || { echo 'Start the upgrade from an interactive SSH terminal';return 1; }
  NOTIFY=false;check_updates || return $?
@@ -199,10 +258,20 @@ launch_upgrade() {
  run="$RUNS/$(date +%Y%m%d_%H%M%S)-$$";mkdir -p "$run";chmod 700 "$run"
  cp "$SELF" "$run/worker.sh";chmod 700 "$run/worker.sh"
  printf '%s\n' "$run" > "$STATE/latest-run"
- (trap '' HUP;exec /opt/bin/bash "$run/worker.sh" --worker "$run" "$digest") > "$run/upgrade.log" 2>&1 < /dev/null &
- echo "$!" > "$run/pid"
+ echo preparing > "$run/status"
+ : > "$run/upgrade.log"
+ # Bash job control gives the worker its own process group without requiring setsid.
+ # Terminal Ctrl+C must not reach opkg or init scripts in the background upgrade.
+ (
+  set -m
+  trap '' HUP
+  /opt/bin/bash "$run/worker.sh" --worker "$run" "$digest" > "$run/upgrade.log" 2>&1 < /dev/null &
+  echo "$!" > "$run/pid"
+ )
  echo "Upgrade worker launched. Log: $run/upgrade.log"
- echo 'After reconnecting: keentool --entware-status'
+ echo 'Entware SSH may disconnect while its service is stopped; the detached worker continues.'
+ echo 'After reconnecting: keentool --entware-status; entware_manager --follow'
+ follow_run "$run"
 }
 resume_services() {
  acquire || return $?;trap release EXIT
@@ -217,19 +286,20 @@ NOTIFY=false
 case "${1:---menu}" in
  --check) [ "${2:-}" != --notify ] || NOTIFY=true;check_updates;exit $?;;
  --status) status;;
+ --follow) follow_latest;exit $?;;
  --upgrade) launch_upgrade;exit $?;;
- --worker) worker "$2" "$3";exit $?;;
+ --worker) worker "$2" "$3";worker_rc=$?;printf '%s\n' "$worker_rc" > "$2/worker-exit-code.tmp";mv "$2/worker-exit-code.tmp" "$2/worker-exit-code";exit "$worker_rc";;
  --resume) resume_services;exit $?;;
  --menu)
   while true;do
-   status;printf '\n1. Check updates\n2. Check and notify by email\n3. Upgrade (confirmation required)\n4. Latest upgrade status/log\n5. Resume services after interruption\n0. Back\n'
+   status;printf '\n1. Check updates\n2. Check and notify by email\n3. Upgrade (confirmation required)\n4. Follow latest upgrade / log\n5. Resume services after interruption\n0. Back\n'
    read -r -p 'Select: ' answer
    case "$answer" in
     1) "$SELF" --check;;2) "$SELF" --check --notify;;3) "$SELF" --upgrade;;
-    4) if [ -f "$STATE/latest-run" ];then tail -n 60 "$(cat "$STATE/latest-run")/upgrade.log";fi;;
+    4) "$SELF" --follow;;
     5) read -r -p 'Restart saved services? Type RESUME: ' answer;[ "$answer" != RESUME ] || "$SELF" --resume;;
     0) exit 0;;
    esac
   done;;
- *) echo 'Usage: entware_manager --check [--notify] | --status | --upgrade | --resume | --menu';exit 1;;
+ *) echo 'Usage: entware_manager --check [--notify] | --status | --follow | --upgrade | --resume | --menu';exit 1;;
 esac

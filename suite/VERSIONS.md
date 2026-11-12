@@ -24,7 +24,7 @@ Suite/package release: **2.0.25** (manager **2.0.12**). Installer: **1.0.8**. Pa
 | `projects/keenetic-firewall/www/admin_auth.php` | 1.0.0 | `/opt/lib/keentool-admin/admin_auth.php` |
 | `support/set_password.php` | 1.0.1 | `/opt/lib/keentool-admin/set_password.php` |
 | `support/firewall_admin_password` | 1.0.1 | `/opt/bin/firewall_admin_password` |
-| `support/entware_manager` | 1.0.0 | `/opt/bin/entware_manager` |
+| `support/entware_manager` | 1.0.1 | `/opt/bin/entware_manager` |
 | `support/common.sh` | 1.0.0 | `/opt/lib/keentool/common.sh` |
 | `support/render_cache.sh` | 1.0.0 | `/opt/lib/keentool/render_cache.sh` |
 | `support/firewall_state.sh` | 1.0.0 | `/opt/lib/keentool/firewall_state.sh` |

@@ -69,7 +69,7 @@ CLI **u** checks all components and offers one coordinated update after confirma
 
 ## Notifications and maintenance
 
-HTML/plain email layouts cover summaries, connection warnings, MTR and security state. PPP syslog events and sampled ping failures have distinct meanings: high latency/partial loss is not a measured WAN outage. Entware update checks can notify about available packages; an explicitly requested Entware upgrade uses its maintenance worker and service stop/restart lifecycle.
+HTML/plain email layouts cover summaries, connection warnings, MTR and security state. PPP syslog events and sampled ping failures have distinct meanings: high latency/partial loss is not a measured WAN outage. Entware update checks can notify about available packages; an explicitly requested Entware upgrade uses its maintenance worker and service stop/restart lifecycle. During an upgrade, the terminal follows the worker log automatically. Ctrl+C closes only the view. After reconnecting, use `entware_manager --follow` or Entware menu option 4; `keentool --entware-status` reports the worker state. Entware SSH can disconnect when its own service stops; use the native Keenetic SSH service when available. Configuration/database recovery copies do not provide an automatic package downgrade.
 
 Firewall historical aggregation keeps recent raw samples, then hourly/daily IP/list totals. It preserves hit totals while reducing older time precision. Read the [history policy](https://github.com/mattheweli/KeenTool/blob/main/suite/docs/FIREWALL_HISTORY.md) before enabling or changing it.
 
