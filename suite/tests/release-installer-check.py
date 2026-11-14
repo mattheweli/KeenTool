@@ -198,4 +198,22 @@ with tempfile.TemporaryDirectory() as td:
  (saved/'files'/first.lstrip('/')).write_text('corrupt')
  r=subprocess.run([str(php),'-n',str(saved/'release_install.php'),'verify-backup',str(saved)],env=dict(env,KT_INSTALL_ROOT=str(upstream)),capture_output=True,text=True)
  assert r.returncode!=0 and 'checksum mismatch' in r.stderr
+ # Real successful/failed installer transactions, with a mock analytics endpoint.
+ mock=b/'analytics-curl';mock.write_text('#!/bin/bash\nprintf "%s\\n" "$*" >> "$KT_ANALYTICS_REQUESTS"\nprintf 204\n');mock.chmod(0o755)
+ tracked,env=fixture('analytics-fresh');env.update(KT_ANALYTICS_CURL=str(mock),KT_ANALYTICS_REQUESTS=str(tracked/'requests'))
+ r=call(env,'--plan','--mode','fresh','--interface','ppp0','--configure-web');assert r.returncode==0 and not (tracked/'requests').exists()
+ r=call(env,'--apply','--mode','fresh','--interface','ppp0','--configure-web','--no-backup');assert r.returncode==0,r.stdout+r.stderr
+ assert (tracked/'requests').read_text().count('/track/install?uid=')==1
+ uid=(tracked/'opt/etc/keentool.id').read_text()
+ r=call(env,'--apply','--no-backup');assert r.returncode==0,r.stdout+r.stderr
+ assert len((tracked/'requests').read_text().splitlines())==1 and (tracked/'opt/etc/keentool.id').read_text()==uid
+ legacy,env=fixture('analytics-legacy',True);(legacy/'opt/etc/keentool.id').write_text('legacy-router-12345678\n');env.update(KT_ANALYTICS_CURL=str(mock),KT_ANALYTICS_REQUESTS=str(legacy/'requests'))
+ r=call(env,'--apply','--no-backup');assert r.returncode==0,r.stdout+r.stderr
+ assert '/track/update?uid=legacy-router-12345678' in (legacy/'requests').read_text()
+ failed,env=fixture('analytics-rollback',True);env.update(KT_ANALYTICS_CURL=str(mock),KT_ANALYTICS_REQUESTS=str(failed/'requests'),KT_TEST_FAIL='keentool_security_service start')
+ r=call(env,'--apply','--no-backup');assert r.returncode!=0 and not (failed/'requests').exists(),r.stdout+r.stderr
+ disabled,env=fixture('analytics-optout',True);env.update(KT_ANALYTICS_CURL=str(mock),KT_ANALYTICS_REQUESTS=str(disabled/'requests'))
+ r=call(env,'--apply','--no-backup','--no-analytics');assert r.returncode==0 and not (disabled/'requests').exists(),r.stdout+r.stderr
+ assert json.loads((disabled/'opt/etc/keentool/analytics.json').read_text())['enabled'] is False
+ print('PASS: actual installer analytics only after success, fresh install and Legacy ID migration, same-version repair dedup, rollback/plan silence and persistent --no-analytics opt-out; endpoint mocked.')
 print('PASS: fresh install/TLS/default schedules, upstream inline settings + PCAP migration, alpha settings, database/credentials/schedule preservation, file-mode rollback, automatic rollback on service failure, symlink rejection and corrupt-backup refusal. Service lifecycle commands mocked; PHP/file/TLS transactions real.')

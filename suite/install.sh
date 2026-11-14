@@ -1,12 +1,12 @@
 #!/opt/bin/bash
-# KeenTool stable installer 1.0.9 — 2026-11-12.
+# KeenTool stable installer 1.0.10 — 2026-11-14.
 set -Eeuo pipefail
 export PATH="${KT_INSTALL_ROOT:-}/opt/bin:${KT_INSTALL_ROOT:-}/opt/sbin:${KT_INSTALL_ROOT:-}/opt/usr/bin:${KT_INSTALL_ROOT:-}/opt/usr/sbin:/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
 base=$(cd "$(dirname "$0")" && pwd)
 # KT_INSTALL_BACKUP_RETENTION_V1
 # KT_INSTALL_HTTPS_MIGRATION_V1
 # KT_INSTALL_FIREWALL_MIGRATION_V1
-action=plan;mode=auto;iface='';web=0;logging=0;start=true;deps=false;backup_policy=ask;apply_firewall=false;fw_auto_confirm=false;fw_deferred=false;fw_guard_prepared=false
+action=plan;mode=auto;iface='';web=0;logging=0;start=true;deps=false;backup_policy=ask;apply_firewall=false;fw_auto_confirm=false;fw_deferred=false;fw_guard_prepared=false;no_analytics=false
 kt_set_backup_policy() {
     local requested=$1
     [ "$backup_policy" = ask ] || [ "$backup_policy" = "$requested" ] || { echo 'Choose either --keep-backup or --no-backup' >&2; return 2; }
@@ -43,10 +43,11 @@ while [ "$#" -gt 0 ];do
  case "$1" in
   --plan)action=plan;; --apply)action=apply;; --apply-firewall)apply_firewall=true;;
   --keep-backup)kt_set_backup_policy keep;; --no-backup)kt_set_backup_policy discard;;
+  --no-analytics)no_analytics=true;export KT_INSTALL_NO_ANALYTICS=1;;
   --mode)[ "$#" -gt 1 ] || exit 2;mode=$2;shift;;
   --interface)[ "$#" -gt 1 ] || exit 2;iface=$2;shift;;
   --configure-web)[ "$web" = 0 ] || [ "$web" = 1 ] || exit 2;web=1;; --enable-https)[ "$web" = 0 ] || [ "$web" = 2 ] || exit 2;web=2;; --configure-logging)logging=1;; --no-start)start=false;; --install-deps)deps=true;;
-  --help)echo 'Usage: install.sh [--plan|--apply] [--mode auto|fresh|upgrade] [--interface ppp0] [--configure-web|--enable-https] [--configure-logging] [--no-start] [--install-deps] [--keep-backup|--no-backup] [--apply-firewall]';echo 'Backup options control retention after success; temporary rollback copies are always used.';exit 0;;
+  --help)echo 'Usage: install.sh [--plan|--apply] [--mode auto|fresh|upgrade] [--interface ppp0] [--configure-web|--enable-https] [--configure-logging] [--no-start] [--install-deps] [--keep-backup|--no-backup] [--apply-firewall] [--no-analytics]';echo 'Backup options control retention after success; temporary rollback copies are always used.';exit 0;;
   *)echo "Unknown option: $1" >&2;exit 2;;
  esac;shift
 done
@@ -184,6 +185,8 @@ if [ "$apply_firewall" = true ];then
  KT_FW_APPLY="$base/support/firewall_apply.sh" bash "$backup/firewall_upgrade" prepare "$backup" "$fw_token" "$fw_approval" "$base"
  fw_guard_prepared=true
 fi
+analytics_previous=$("$php_cli" -r '$p=$argv[1];$d=is_file($p)?json_decode(file_get_contents($p),true):[];echo $d["version"]??"";' "$runroot/etc/keentool/installed-release.json")
+analytics_event=update;[ "$(field mode)" != fresh ] || analytics_event=install
 "$php_cli" "$engine" commit "$backup"
 mkdir -p "$runroot/var/log/lighttpd" "$runroot/var/run" "$runroot/var/www/ping" "$runroot/var/www/vnstat"
 [ -d "$runroot/var/log/keentool-firewall" ] || mkdir -m 700 "$runroot/var/log/keentool-firewall"
@@ -234,4 +237,13 @@ echo 'Review web privilege separation: firewall_security harden-web --check (the
 if ! bash "$runroot/bin/firewall_admin_password" --setup-if-missing;then
  echo 'Package installation completed; administrator password setup needs attention.' >&2
  echo 'Use KeenTool option A or /opt/bin/bash /opt/bin/firewall_admin_password.' >&2
+fi
+
+# Best-effort analytics is strictly after commit, service/TLS checks and firewall confirmation.
+# It cannot trigger rollback, change the install result or run from plan/rollback paths.
+if [ -z "${KT_INSTALL_ROOT:-}" ] || [ -n "${KT_ANALYTICS_CURL:-}" ];then
+ if [ "$no_analytics" = true ];then "$php_cli" "$runroot/lib/keentool/analytics.php" off || :;fi
+ if [ "$no_analytics" != true ] && ! "$php_cli" "$runroot/lib/keentool/analytics.php" record "$analytics_event" "$installed_version" "$analytics_previous";then
+  echo 'Installation succeeded; analytics delivery/state needs attention (keentool --analytics status).' >&2
+ fi
 fi

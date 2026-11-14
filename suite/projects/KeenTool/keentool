@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KEENTOOL MANAGER v2.0.13
+# KEENTOOL MANAGER v2.0.14
 # Release: 2026-10-29 | Stable. See CHANGELOG.md for release details.
 
 # Recover a deleted working directory before starting child processes.
@@ -19,7 +19,7 @@ kt_runtime_ready() {
  [ -r "${KT_UPDATE_HELPER:-/opt/lib/keentool/release_update.php}" ]
 }
 kt_embedded_bootstrap() {
-# KeenTool stable bootstrap 1.0.8. Downloaded over trusted GitHub HTTPS; verify its source before running.
+# KeenTool stable bootstrap 1.0.9. Downloaded over trusted GitHub HTTPS; verify its source before running.
 set -Eeuo pipefail
 umask 077
 # Recover a deleted working directory before starting child processes.
@@ -372,7 +372,7 @@ try{
 KT_BOOTSTRAP_PHP
 cat > "$work/keentool_update" <<'KT_BOOTSTRAP_SH'
 #!/opt/bin/bash
-# KeenTool remote release updater 1.0.8 — 2026-11-12.
+# KeenTool remote release updater 1.0.9 — 2026-11-14.
 set -Eeuo pipefail
 # Recover a deleted working directory before starting child processes.
 if ! builtin pwd -P >/dev/null 2>&1; then
@@ -380,7 +380,7 @@ if ! builtin pwd -P >/dev/null 2>&1; then
 fi
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 umask 077
-check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false;backup_policy=ask
+check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false;backup_policy=ask;no_analytics=false
 kt_set_backup_policy() {
     local requested=$1
     [ "$backup_policy" = ask ] || [ "$backup_policy" = "$requested" ] || { echo 'Choose either --keep-backup or --no-backup' >&2; return 2; }
@@ -426,11 +426,12 @@ kt_installer_backup_policy() {
 
 enable_https=false;apply_firewall=false
 while [ "$#" -gt 0 ];do
- case "$1" in --apply-firewall)apply_firewall=true;; --enable-https)enable_https=true;; --keep-backup)kt_set_backup_policy keep;; --no-backup)kt_set_backup_policy discard;; --check)check=true;; --repair)repair=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--repair|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path] [--keep-backup|--no-backup] [--enable-https] [--apply-firewall]';echo 'Backup options control retention after success; temporary rollback copies are always used.';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
+ case "$1" in --apply-firewall)apply_firewall=true;; --enable-https)enable_https=true;; --keep-backup)kt_set_backup_policy keep;; --no-backup)kt_set_backup_policy discard;; --check)check=true;; --repair)repair=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --no-analytics)no_analytics=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--repair|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path] [--keep-backup|--no-backup] [--enable-https] [--apply-firewall] [--no-analytics]';echo 'Backup options control retention after success; temporary rollback copies are always used.';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
 done
 case "$component" in ''|KeenTool|Dashboard|keenetic-firewall|keenetic-pingtool|Traffic_manager|SMB_Backup_tool);;*)echo 'Unknown suite component' >&2;exit 2;;esac
 [ "$check" != true ] || [ "$install_deps" != true ] || { echo '--install-deps cannot be used with --check' >&2;exit 2; }
 web_args=();[ "$enable_https" != true ] || web_args+=(--enable-https);[ "$apply_firewall" != true ] || web_args+=(--apply-firewall)
+[ "$no_analytics" != true ] || web_args+=(--no-analytics)
 bash_bin=${KT_UPDATE_BASH:-/opt/bin/bash}
 if [ -n "$local_package" ];then
  [[ "$local_package" = /* ]] && [ -f "$local_package/RELEASE.json" ] && [ -f "$local_package/install.sh" ] || { echo 'Pass an extracted complete release directory' >&2;exit 1; }
@@ -573,7 +574,7 @@ if ! kt_runtime_ready;then
  exit 0
 fi
 # END GENERATED LEGACY MIGRATION
-# KeenTool 2.0.13
+# KeenTool 2.0.14
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 # Shared runtime and components are updated together through verified release packages.
 KT_MANAGED_PACKAGE=true
@@ -582,8 +583,6 @@ KT_MANAGED_PACKAGE=true
 # --- CONFIGURATION ---
 REPO_USER="mattheweli"
 BASE_URL="https://raw.githubusercontent.com/$REPO_USER"
-AS_URL="https://keentoolstats.laniakear.workers.dev"
-ID_FILE="/opt/etc/keentool.id"
 
 # DIRECTORIES
 BIN_DIR="/opt/bin"
@@ -655,7 +654,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.13  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.14  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -684,22 +683,21 @@ get_md5() {
     fi
 }
 
-get_device_id() {
-    if [ ! -s "$ID_FILE" ]; then
-        if [ -f /proc/sys/kernel/random/uuid ]; then
-            cat /proc/sys/kernel/random/uuid > "$ID_FILE"
-        else
-            echo "$(date +%s)$RANDOM" | md5sum | awk '{print $1}' > "$ID_FILE"
-        fi
-    fi
-    cat "$ID_FILE" | tr -d '[:space:]'
+kt_analytics() {
+ local php
+ for php in /opt/bin/php-cli /opt/bin/php8 /opt/bin/php;do
+  [ -x "$php" ] || continue
+  if "$php" -r 'exit(PHP_SAPI==="cli"?0:1);' >/dev/null 2>&1;then "$php" /opt/lib/keentool/analytics.php "${1:-status}";return $?;fi
+ done
+ echo 'PHP CLI is required';return 1
 }
-
-send_analytics() {
-    TYPE=$1
-    UUID=$(get_device_id)
-    if [ -z "$UUID" ]; then return; fi
-    curl -m 5 -s "${AS_URL}/track/${TYPE}?uid=${UUID}" >/dev/null 2>&1 &
+kt_analytics_menu() {
+ kt_analytics status
+ echo 'Sends install/update events and a random persistent ID to the KeenTool statistics endpoint.'
+ echo 'No passwords, configuration, firewall records or traffic history are sent. The server sees the request source IP.'
+ echo '1. Enable';echo '2. Disable and clear pending events';echo '3. Retry one pending event';echo '0. Back'
+ local answer;read -r -p 'Select: ' answer
+ case "$answer" in 1) kt_analytics on;;2) kt_analytics off;;3) kt_analytics retry;;esac
 }
 
 ver_compare() { 
@@ -1182,7 +1180,7 @@ EOF
 }
 
 doctor() {
-    echo 'KeenTool v2.0.13'
+    echo 'KeenTool v2.0.14'
     for cmd in bash curl sqlite3 ipset iptables smbclient vnstat tar timeout sha256sum; do
         command -v "$cmd" >/dev/null && printf 'OK %s\n' "$cmd" || printf 'MISSING %s\n' "$cmd"
     done
@@ -1194,6 +1192,7 @@ doctor() {
     echo 'Service states:'; ps | grep -E 'lighttpd|ulogd|crond|vnstatd' | grep -v grep || :
 }
 case "${1:-}" in
+    --analytics) kt_analytics "${2:-status}";exit $? ;;
     --entware-check) shift; exec /opt/bin/entware_manager --check "$@" ;;
     --entware-follow) exec /opt/bin/entware_manager --follow ;;
     --entware-status) exec /opt/bin/entware_manager --status ;;
@@ -1679,7 +1678,6 @@ setup_system() {
         echo -e "${RED}Stopped${RESET}"; echo -n " -> Start Cron? (y/n): "; read -r ans
         if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then /opt/etc/init.d/S10cron start; echo -e "    ${GREEN}Started.${RESET}"; fi
     fi
-	send_analytics "install"
     sanitize_and_reload_cron
     echo ""; echo -e "${BOLD}System Ready.${RESET}"; pause
 }
@@ -2141,10 +2139,6 @@ boot_check() {
         fi
     fi
 
-    if [ ! -s "$ID_FILE" ]; then
-        get_device_id >/dev/null
-        send_analytics "update"
-    fi
 
 	# --- LEGACY CLEANUP ---
     if grep -qF "firewall_stats.sh -report >" "$CRON_FILE"; then
@@ -2559,6 +2553,7 @@ EOF
     echo -e " P. Schedule Entware checks"
     echo -e " u. Check / install updates (KeenTool and tools)"
     echo " r. Verify / repair installed package files"
+    echo " i. Installation analytics"
     echo -e " a. ${CYAN}Auto-Update${RESET}          [$AU_STATUS]"
     echo -e " c. View Crontab"
     echo -e " v. ${CYAN}Verify/Fix Crontab${RESET}"
@@ -2606,6 +2601,7 @@ EOF
         P) manage_cron_menu "root /opt/bin/keentool --entware-check --notify >>/opt/var/log/entware-check.log 2>&1"; pause ;;
         u) perform_global_scan; pause ;;
         r) kt_managed_update --repair; pause ;;
+        i) kt_analytics_menu; pause ;;
         a) manage_cron_menu "$CMD_SELF_UPD"; pause ;;
         c) header; cat $CRON_FILE; pause ;;
         v) action_verify_cron ;;

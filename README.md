@@ -2,7 +2,7 @@
 
 **A package manager and monitoring dashboard for Keenetic routers running Entware.** Manage the firewall, WAN/PPP connectivity, traffic history, SMB backups, notifications and Entware maintenance from a consistent CLI and web interface.
 
-Current coordinated package: **2.0.26**; KeenTool manager: **2.0.13**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
+Current coordinated package: **2.0.27**; KeenTool manager: **2.0.14**. The Main Dashboard is independently versioned **2.0.4**, while remaining in this repository.
 
 ![System Dashboard: firewall, traffic, connection and security summaries](https://raw.githubusercontent.com/mattheweli/KeenTool/main/docs/screenshots/dashboard.png)
 
@@ -10,7 +10,7 @@ Current coordinated package: **2.0.26**; KeenTool manager: **2.0.13**. The Main 
 
 | Component | Version | Purpose |
 |---|---:|---|
-| KeenTool manager | 2.0.13 | Installation, configuration, verified updates and maintenance |
+| KeenTool manager | 2.0.14 | Installation, configuration, verified updates and maintenance |
 | Main Dashboard | 2.0.4 | Shared overview and readable system/application logs |
 | [Firewall](https://github.com/mattheweli/keenetic-firewall) | 4.0.14 | IPv4/IPv6 filtering, blocklists, diagnostics and history |
 | [Connection Monitor](https://github.com/mattheweli/keenetic-pingtool) | 2.0.2 | Latency, jitter, packet loss and PPP event correlation |
@@ -120,3 +120,7 @@ Balanced optimization is available in KeenTool → Firewall Suite → History ag
 Security & Health daily summaries can be disabled independently of immediate warnings. Recognized healthy managed firewall hooks update under the independent rollback guardian without a repeat activation challenge; initial legacy/custom migration still requires SSH confirmation.
 
 KeenTool H now shows a grouped Security Monitoring menu with current/effective email states, service and snapshot health, intervals, access controls and thresholds. W controls immediate warning email; D controls daily summaries. The main H entry shows a lightweight status without running live diagnostics.
+
+## Installation analytics
+
+Legacy-compatible install/update analytics are enabled by default after successful installation. The existing random installation ID is preserved. Requests contain the event and ID only; the statistics endpoint can see the source IP. Manage this in KeenTool menu **i** or `keentool --analytics status|on|off|retry`. Use `--no-analytics` during installation/update to persist opt-out. See [analytics details](https://github.com/mattheweli/KeenTool/blob/main/suite/docs/ANALYTICS.md).

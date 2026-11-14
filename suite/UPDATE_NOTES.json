@@ -1,7 +1,7 @@
 {
   "changes": [
-    "Entware upgrades now show live output, phases and per-package results. Reconnect with keentool --entware-follow.",
-    "Fix complete Entware PATH and keep an independent BusyBox recovery runtime for missing shell/utility links. On a package error, stop and recover services without automatic retry.",
-    "Package 2.0.26 / KeenTool 2.0.13. Install the suite update first; run Entware upgrade separately from menu p. Other tool versions are unchanged."
+    "Restore install/update analytics after successful coordinated installation, preserving the Legacy router ID and existing HTTPS endpoint.",
+    "Add local release deduplication, bounded retry queue, short timeouts and non-fatal delivery. No new event for same-version repair, plan, failed install or rollback.",
+    "Manage analytics in menu i or keentool --analytics status/on/off/retry; --no-analytics persists opt-out. Package 2.0.27 / manager 2.0.14. Other tools unchanged."
   ]
 }

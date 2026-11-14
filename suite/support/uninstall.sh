@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# uninstall v1.0.1 | 2026-10-23 | Stable release
+# uninstall v1.0.2 | 2026-11-14 | Stable release
 # Selective uninstaller: no shared packages, native router chains or unrelated files.
 set -e
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
@@ -28,7 +28,7 @@ for name in firewall-db firewall-hook firewall-update abuse-reporter firewall-en
 done
 paths=(); data=(); patterns=()
 selected() { [ "$tool" = all ] || [ "$tool" = "$1" ]; }
-if selected manager; then paths+=(/opt/bin/keentool);patterns+=(/opt/bin/keentool);data+=(/opt/etc/keentool.id);fi
+if selected manager; then paths+=(/opt/bin/keentool /opt/lib/keentool/analytics.php);patterns+=(/opt/bin/keentool);data+=(/opt/etc/keentool.id /opt/etc/keentool/analytics.json /opt/etc/keentool/analytics-state.json /opt/etc/keentool/analytics.lock);fi
 if selected ping;then paths+=(/opt/bin/wan_syslog_monitor /opt/bin/wan_syslog_service /opt/etc/init.d/S95keentool-wan);paths+=(/opt/bin/pingtool.sh /opt/var/www/ping/index.html /opt/var/www/ping/data.js /opt/var/www/ping/chart.js /opt/var/www/ping/chartjs-adapter-date-fns.js /opt/var/www/ping/chartjs-plugin-zoom.js);patterns+=(/opt/bin/pingtool.sh);data+=(/opt/etc/pingtool /opt/etc/pingtool.conf /opt/var/www/ping/incidents.txt);fi
 if selected traffic;then paths+=(/opt/bin/traffic_manager.sh /opt/var/www/vnstat);patterns+=(/opt/bin/traffic_manager.sh);data+=(/opt/var/lib/vnstat);fi
 if selected smb;then paths+=(/opt/bin/smb_backup_tool.sh);patterns+=(/opt/bin/smb_backup_tool.sh);data+=(/opt/etc/smb_backup.cfg /opt/var/log/smb_backup.log);fi
