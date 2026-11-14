@@ -1,5 +1,5 @@
 <?php
-// KeenTool release file transaction 1.0.6. CLI only; no database or firewall rewrites.
+// KeenTool release file transaction 1.0.7. CLI only; no database or firewall rewrites.
 if (PHP_SAPI !== 'cli') exit(1);
 umask(0077);
 
@@ -131,6 +131,9 @@ function showPlan($p){
  if($groups['Matching'])ktCliText('Already matching: '.count($groups['Matching']).' targets (included in the coordinated transaction).');
  ktCliSection('Configuration');ktCliText('HTTPS: '.($p['web']===2?'enable TLS on existing port '.$p['tls']['port']:($p['web']?'configure listener on 8080':'preserve existing listener')));
  if(getenv('KT_INSTALL_DEFER_FIREWALL')==='1')ktCliText('Firewall rules migration deferred: retain the previous hook until guarded apply is confirmed.');
+ $analyticsFile=rootpath('/opt/etc/keentool/analytics.json');$analytics=is_file($analyticsFile)&&!is_link($analyticsFile)?@json_decode((string)file_get_contents($analyticsFile),true):[];
+ $enabled=getenv('KT_INSTALL_NO_ANALYTICS')!=='1'&&($analytics['enabled']??true)!==false;
+ ktCliText('Installation analytics: '.($enabled?'enabled (install/update event and persistent random ID; use --no-analytics to disable)':'disabled').'.');
  ktCliText('Existing credentials, databases and upgrade schedules are preserved.');
 }
 function removeRecoveryTree($path){

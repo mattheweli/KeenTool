@@ -58,5 +58,6 @@
   "support/db_storage.php": "shared",
   "support/database_engine.php": "shared",
   "support/keentool_db": "shared",
-  "support/security_menu.php": "keenetic-firewall"
+  "support/security_menu.php": "keenetic-firewall",
+  "support/analytics.php": "KeenTool"
 }

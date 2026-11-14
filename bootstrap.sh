@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KeenTool stable bootstrap 1.0.8. Downloaded over trusted GitHub HTTPS; verify its source before running.
+# KeenTool stable bootstrap 1.0.9. Downloaded over trusted GitHub HTTPS; verify its source before running.
 set -Eeuo pipefail
 umask 077
 # Recover a deleted working directory before starting child processes.
@@ -352,7 +352,7 @@ try{
 KT_BOOTSTRAP_PHP
 cat > "$work/keentool_update" <<'KT_BOOTSTRAP_SH'
 #!/opt/bin/bash
-# KeenTool remote release updater 1.0.8 — 2026-11-12.
+# KeenTool remote release updater 1.0.9 — 2026-11-14.
 set -Eeuo pipefail
 # Recover a deleted working directory before starting child processes.
 if ! builtin pwd -P >/dev/null 2>&1; then
@@ -360,7 +360,7 @@ if ! builtin pwd -P >/dev/null 2>&1; then
 fi
 export PATH=${KT_PATH:-/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 umask 077
-check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false;backup_policy=ask
+check=false;yes=false;reinstall=false;install_deps=false;component='';local_package='';repair=false;backup_policy=ask;no_analytics=false
 kt_set_backup_policy() {
     local requested=$1
     [ "$backup_policy" = ask ] || [ "$backup_policy" = "$requested" ] || { echo 'Choose either --keep-backup or --no-backup' >&2; return 2; }
@@ -406,11 +406,12 @@ kt_installer_backup_policy() {
 
 enable_https=false;apply_firewall=false
 while [ "$#" -gt 0 ];do
- case "$1" in --apply-firewall)apply_firewall=true;; --enable-https)enable_https=true;; --keep-backup)kt_set_backup_policy keep;; --no-backup)kt_set_backup_policy discard;; --check)check=true;; --repair)repair=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--repair|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path] [--keep-backup|--no-backup] [--enable-https] [--apply-firewall]';echo 'Backup options control retention after success; temporary rollback copies are always used.';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
+ case "$1" in --apply-firewall)apply_firewall=true;; --enable-https)enable_https=true;; --keep-backup)kt_set_backup_policy keep;; --no-backup)kt_set_backup_policy discard;; --check)check=true;; --repair)repair=true;; --yes)yes=true;; --reinstall)reinstall=true;; --install-deps)install_deps=true;; --no-analytics)no_analytics=true;; --component)[ "$#" -gt 1 ] || { echo '--component requires a name' >&2;exit 2; };shift;component=$1;; --local)shift;local_package=${1:-};; /*)local_package=$1;; --help)echo 'Usage: keentool --update [--check|--repair|--yes|--reinstall|--install-deps|--component NAME|--local /absolute/package/path] [--keep-backup|--no-backup] [--enable-https] [--apply-firewall] [--no-analytics]';echo 'Backup options control retention after success; temporary rollback copies are always used.';exit 0;; *)echo "Unknown update option: $1" >&2;exit 2;;esac;shift
 done
 case "$component" in ''|KeenTool|Dashboard|keenetic-firewall|keenetic-pingtool|Traffic_manager|SMB_Backup_tool);;*)echo 'Unknown suite component' >&2;exit 2;;esac
 [ "$check" != true ] || [ "$install_deps" != true ] || { echo '--install-deps cannot be used with --check' >&2;exit 2; }
 web_args=();[ "$enable_https" != true ] || web_args+=(--enable-https);[ "$apply_firewall" != true ] || web_args+=(--apply-firewall)
+[ "$no_analytics" != true ] || web_args+=(--no-analytics)
 bash_bin=${KT_UPDATE_BASH:-/opt/bin/bash}
 if [ -n "$local_package" ];then
  [[ "$local_package" = /* ]] && [ -f "$local_package/RELEASE.json" ] && [ -f "$local_package/install.sh" ] || { echo 'Pass an extracted complete release directory' >&2;exit 1; }

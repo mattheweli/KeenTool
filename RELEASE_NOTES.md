@@ -1,14 +1,13 @@
-# KeenTool coordinated package 2.0.26
+# KeenTool coordinated package 2.0.27
 
-## Coordinated package 2.0.26 / KeenTool 2.0.13 — 2026-11-12
+## Coordinated package 2.0.27 / KeenTool 2.0.14 — 2026-11-14
 
-- Show package-index output and automatically follow Entware upgrade logs in the terminal. Report phases, per-package progress and final exit status. Add entware_manager --follow, keentool --entware-follow and menu option 4 for reconnecting.
-- Include /opt/usr/bin and /opt/usr/sbin in manager, Entware worker, installer and bootstrap/updater command paths. Fail with named missing commands before starting maintenance.
-- Prepare an independent BusyBox runtime and applet manifest before stopping services. Keep package-script commands available while BusyBox links change; clear Bash command hashes and recreate missing applet links before service restart. Existing files and symlinks are not overwritten.
-- Upgrade confirmed packages in individual logged transactions after predownload. Record package exit codes; stop on the first failure and recover services without automatically retrying or claiming a package rollback.
-- Isolate the worker process group from terminal Ctrl+C/hangup; closing the live view does not interrupt the upgrade. Record successful manual service recovery separately from the previous opkg result.
-- Add regressions reproducing lost sh/mkdir/rm links, opkg exit 134, interrupted terminal viewing, per-package error propagation and successful complete batches. Release CI repeats recovery with pinned BusyBox 1.37.
+- Restore Legacy-compatible installation analytics from the coordinated installer, strictly after successful commit, service/TLS checks and any required firewall confirmation. Plans, failed installs and rollbacks do not send events.
+- Preserve /opt/etc/keentool.id; new IDs are random and independent of hardware identifiers. Send only the existing install/update event and UID query to the existing HTTPS endpoint. No configuration, credentials, traffic history or firewall records are included; the server can observe the source IP.
+- Suppress acknowledged duplicate events per release and skip new events for same-version repairs. Persist a bounded private queue after network/HTTP failure; retry one event on the next successful installation or explicit retry. Each curl attempt has a 2-second connection / 3-second total timeout, requires a 2xx response and does not follow redirects. Analytics failure cannot fail installation.
+- Add KeenTool menu i and --analytics status/on/off/retry. Disabling clears pending events; --no-analytics persists opt-out during installation/update. Document default enablement, state files and the limitation that exactly-once delivery cannot be guaranteed without server-side idempotency.
+- Remove unreachable Legacy analytics senders and integrate selective uninstall data retention. Add mocked endpoint tests and actual installer regressions for success, Legacy migration, repairs, failures, rollback, opt-out and retry.
 
-Package 2.0.26; KeenTool manager 2.0.13; Entware manager 1.0.1; installer 1.0.9; updater/bootstrap 1.0.8. Firewall 4.0.14, Dashboard 2.0.4, Pingtool 2.0.2, Traffic 2.0.1 and SMB 2.0.1 are unchanged.
+Package 2.0.27; KeenTool manager 2.0.14; installer 1.0.10; updater/bootstrap 1.0.9; transaction engine 1.0.7; analytics helper 1.0.0. Firewall and other tool versions are unchanged. No live analytics endpoint is contacted by tests.
 
-Update KeenTool using u. Then open p → Upgrade to update Entware; the suite release does not run opkg upgrade automatically. Review and explicitly confirm the Entware package list. Physical-router package upgrades are not independently performed by release CI.
+Update with KeenTool u. Installation analytics defaults to enabled, preserving the Legacy behavior. Use menu i or keentool --analytics off to disable; use --no-analytics during installation/update to opt out before the first event. Physical router upgrades and production endpoint delivery are not independently verified by CI.
