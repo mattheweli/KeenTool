@@ -1,5 +1,9 @@
 # Stable changelog — 2026-10-28
 
+## Unreleased
+
+- Number Backup Manager entries for individual removal. Add confirmed bulk deletion and allow manual removal of incomplete or unrecognized local copies while preserving active recovery references. Automatic purge rules are unchanged.
+
 ## Coordinated package 2.0.28 / KeenTool 2.0.15 — 2026-11-19
 
 - Show the last successful Entware index refresh in router-local time in menu p and CLI status. The stored timestamp remains numeric.

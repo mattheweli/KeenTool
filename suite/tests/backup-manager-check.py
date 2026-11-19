@@ -72,26 +72,48 @@ with tempfile.TemporaryDirectory() as td:
     assert run('--auto').returncode == 75 and old.exists()
     lock.rmdir()
 
-    def manual(key, confirmation):
+    def manual(command, inputs):
         master, slave = pty.openpty()
         try:
-            with subprocess.Popen(['bash', script, '--delete', key], env=env, stdin=slave,
+            with subprocess.Popen(['bash', script, command], env=env, stdin=slave,
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as proc:
-                os.write(master, (confirmation + '\n').encode())
+                os.write(master, inputs.encode())
                 output, _ = proc.communicate(timeout=10)
                 return proc.returncode, output
         finally:
             os.close(master)
             os.close(slave)
 
-    key = 'release/' + release_old.name
-    assert manual(key, 'cancel')[0] == 0 and release_old.exists()
-    assert manual(key, key)[0] == 0 and not release_old.exists()
-    key = 'entware/' + valid_newest.name
-    assert manual(key, key)[0] != 0 and valid_newest.exists()
+    web = backup('web', 'active-web-config', 70)
+    (state / 'security').mkdir()
+    (state / 'security/web-hardened').write_text(str(web) + '\n')
+    unknown_file = unknown.parent / 'unknown file.tar.gz'
+    unknown_file.touch()
+
+    def entry_id(path):
+        group = path.parent.name.removeprefix('keentool-')
+        listing = run('--list').stdout
+        return next(line.split()[0] for line in listing.splitlines()
+                    if f'{group}/{path.name}' in line)
+
+    assert run('--delete-all').returncode != 0
+    assert manual('--delete', '99999\nDELETE\n')[0] != 0
+    assert manual('--delete', entry_id(release_old) + '\ncancel\n')[0] == 0 and release_old.exists()
+    assert manual('--delete', entry_id(release_old) + '\nDELETE\n')[0] == 0 and not release_old.exists()
+    assert manual('--delete', entry_id(failed) + '\nDELETE\n')[0] == 0 and not failed.exists()
+    assert manual('--delete', entry_id(unknown) + '\nDELETE\n')[0] == 0 and not unknown.exists()
+    assert manual('--delete-all', 'cancel\n')[0] == 0 and old.exists()
     result = run('--auto')
     assert result.returncode == 0, result.stdout + result.stderr
     assert not old.exists() and not release_new.exists()
-    assert all(p.exists() for p in [retained, failed, valid_newest, release_fresh, db, alias, unknown, external / 'keep'])
+    assert all(p.exists() for p in [retained, valid_newest, release_fresh, db, alias, web, unknown_file, external / 'keep'])
+    (state / 'firewall-upgrade.pending').touch()
+    assert manual('--delete-all', 'DELETE ALL\n')[0] == 75 and retained.exists()
+    (state / 'firewall-upgrade.pending').unlink()
+    rc, output = manual('--delete-all', 'DELETE ALL\n')
+    assert rc == 1 and 'Active web rollback copy' in output, output
+    assert all(not p.exists() for p in [retained, valid_newest, release_fresh, db, unknown_file])
+    assert all(p.exists() for p in [alias, web, external / 'keep'])
+    assert not (entware_state / 'latest-run').exists()
     assert not lock.exists() and not (root / 'opt/tmp/keentool-install.lockdir').exists()
-print('PASS: backup inventory and dry run, disabled defaults, interactive confirmation, retention with protected copies, lock/recovery deferral, and no traversal of backup symlinks.')
+print('PASS: numeric selection, confirmation, manual cleanup of unrecognized and incomplete backups, bulk deletion and recovery protections. Automatic retention is unchanged.')

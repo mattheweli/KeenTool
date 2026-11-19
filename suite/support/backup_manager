@@ -1,8 +1,10 @@
 #!/opt/bin/bash
-# KeenTool Backup Manager v1.0.0
+# KeenTool Backup Manager v1.0.1
 set -u
 export PATH=/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 umask 077
+shopt -s dotglob nullglob
+entries=()
 root=${KT_BACKUP_ROOT:-}
 base=$root/opt/var/backups
 state=$root/opt/etc/keentool
@@ -81,23 +83,46 @@ protected_reason() {
   [ "${latest##*/}" != "$name" ] || { echo 'Latest Entware run';return; }
  fi
 }
+manual_protection() {
+ local g=$1 p=$2 ref marker
+ case "$g" in
+  web) marker=$state/security/web-hardened;;
+  entware) marker=$state/entware/latest-run;;
+  *) return 0;;
+ esac
+ if [ -e "$marker" ] || [ -L "$marker" ];then
+  [ ! -L "$marker" ] && [ -f "$marker" ] &&
+    IFS= read -r ref < "$marker" && [[ "$ref" = /* ]] ||
+    { echo 'Invalid recovery reference';return; }
+  if [ "${ref##*/}" = "${p##*/}" ];then
+   if [ "$g" = web ];then echo 'Active web rollback copy'
+   elif ! recognized_backup "$g" "$p";then echo 'Latest Entware run still needs recovery review';fi
+  fi
+ fi
+}
 list_backups() {
- local g dir p t keep reason size days selected=${1:-0}
- printf '%-48s %8s %10s  %s\n' 'Backup (group/name)' 'Age' 'Size KiB' 'Status'
+ local g dir p t keep reason size days label manual selected=${1:-0} limit=${2:-0}
+ entries=()
+ printf '%4s  %-48s %8s %10s  %s\n' 'ID' 'Backup (group/name)' 'Age' 'Size KiB' 'Status'
  for g in "${groups[@]}";do
   dir=$(group_path "$g") || continue
   keep=$(newest "$dir" "$g")
   for p in "$dir"/*;do
    [ ! -L "$p" ] && { [ -d "$p" ] || [ -f "$p" ]; } || continue
-   t=$(timestamp "$p") || continue
-   days=$(( (now-t)/86400 ))
+   t=$(timestamp "$p") || t=''
+   days=?;[ -z "$t" ] || days=$(( (now-t)/86400 ))
    reason=$(protected_reason "$g" "$p" "$keep")
    if [ "$selected" = 1 ];then
-    local limit=${2:-0}
-    [ "$limit" -gt 0 ] && [ "$days" -ge "$limit" ] && [ -z "$reason" ] || continue
+    [ "$limit" -gt 0 ] && [ "$days" != '?' ] && [ "$days" -ge "$limit" ] && [ -z "$reason" ] || continue
    fi
+   manual=$(manual_protection "$g" "$p")
+   if [ -n "$manual" ];then reason=$manual
+   elif [ -n "$reason" ];then reason="$reason (manual only)"
+   else reason='Eligible';fi
+   entries+=("$g/${p##*/}")
+   printf -v label '%q' "$g/${p##*/}"
    size=$(du -sk "$p" 2>/dev/null) || size='?'
-   printf '%-48s %6s d %10s  %s\n' "$g/${p##*/}" "$days" "${size%%[[:space:]]*}" "${reason:-Eligible}"
+   printf '%4d  %-48s %6s d %10s  %s\n' "${#entries[@]}" "$label" "$days" "${size%%[[:space:]]*}" "$reason"
   done
  done
 }
@@ -114,21 +139,36 @@ take_locks() {
  done
 }
 remove_backup() {
- local g=$1 n=$2 min_days=${3:-0} dir p t reason
- candidate_name "$g" "$n" || return 1
+ local g=$1 n=$2 mode=$3 min_days=${4:-0} dir p t reason escaped ref latest=$state/entware/latest-run
+ # A manual entry is an immediate child of a fixed backup root.
+ [[ -n "$n" && "$n" != */* && "$n" != . && "$n" != .. ]] || return 1
  dir=$(group_path "$g") || return 1
  p=$dir/$n
- [ -d "$p" ] && [ ! -L "$p" ] && [ "$(readlink -f "$p")" = "$p" ] || return 1
- t=$(timestamp "$p") || return 1
- (( (now-t)/86400 >= min_days )) || return 1
- reason=$(protected_reason "$g" "$p" "$(newest "$dir" "$g")")
- [ -z "$reason" ] || { printf 'Kept %s/%s: %s\n' "$g" "$n" "$reason" >&2;return 1; }
- # Reject bind mounts and other mounts, including nested mounts on the same filesystem.
- if ! awk -v p="$p" 'BEGIN{ok=0} NF>=10{ok=1} $5==p || index($5,p "/")==1{exit 1} END{if(!ok)exit 1}' /proc/self/mountinfo;then
-  echo "Cannot verify a mount-free backup: $g/$n" >&2;return 1
+ [ ! -L "$p" ] && { [ -f "$p" ] || [ -d "$p" ]; } &&
+   [ "$(readlink -f "$p")" = "$p" ] || return 1
+ if [ "$mode" = auto ];then
+  t=$(timestamp "$p") || return 1
+  (( (now-t)/86400 >= min_days )) || return 1
+  reason=$(protected_reason "$g" "$p" "$(newest "$dir" "$g")")
+ else
+  reason=$(manual_protection "$g" "$p")
+ fi
+ [ -z "$reason" ] || { printf 'Kept %q: %s\n' "$g/$n" "$reason" >&2;return 1; }
+ # Mountinfo escapes path separators in its whitespace-delimited fields.
+ escaped=${p//\\/\\134}
+ escaped=${escaped// /\\040}
+ escaped=${escaped//$'\t'/\\011}
+ escaped=${escaped//$'\n'/\\012}
+ if ! KT_MOUNT_PATH="$escaped" awk 'BEGIN{p=ENVIRON["KT_MOUNT_PATH"]} NF>=10{ok=1} $5==p || index($5,p "/")==1{exit 1} END{if(!ok)exit 1}' /proc/self/mountinfo;then
+  printf 'Cannot verify a mount-free backup: %q\n' "$g/$n" >&2;return 1
  fi
  rm -rf -- "$p" || return 1
- printf 'Deleted %s/%s\n' "$g" "$n"
+ # Do not leave the status menu pointing to a deleted completed run.
+ if [ "$mode" = manual ] && [ "$g" = entware ] && [ -f "$latest" ] && [ ! -L "$latest" ] &&
+    IFS= read -r ref < "$latest" && [ "${ref##*/}" = "$n" ];then
+  rm -f -- "$latest" || return 1
+ fi
+ printf 'Deleted %q\n' "$g/$n"
 }
 auto_purge() {
  local limit=$1 g dir p keep reason t bad=0
@@ -145,26 +185,47 @@ auto_purge() {
    (( (now-t)/86400 >= limit )) || continue
    reason=$(protected_reason "$g" "$p" "$keep")
    [ -z "$reason" ] || continue
-   remove_backup "$g" "${p##*/}" "$limit" || bad=1
+   remove_backup "$g" "${p##*/}" auto "$limit" || bad=1
   done
  done
  return "$bad"
 }
 manual_delete() {
- local key=$1 g=${1%%/*} n=${1#*/} answer
- candidate_name "$g" "$n" && [[ "$key" = */* ]] || { echo 'Invalid or inventory-only backup.' >&2;return 1; }
+ local mode=$1 id key answer bad=0
  [ -t 0 ] || { echo 'Manual deletion requires an interactive terminal.' >&2;return 1; }
- printf 'Type the full backup identifier (%s) to permanently delete it: ' "$key"
- IFS= read -r answer && [ "$answer" = "$key" ] || { echo 'Canceled.';return 0; }
+ list_backups
+ [ "${#entries[@]}" -gt 0 ] || { echo 'No backups found.';return 0; }
+ if [ "$mode" = one ];then
+  printf 'Backup ID (0 to cancel): '
+  IFS= read -r id || return 0
+  [ "$id" != 0 ] || return 0
+  [[ "$id" =~ ^[1-9][0-9]{0,8}$ ]] && (( id <= ${#entries[@]} )) ||
+   { echo 'Invalid backup ID.' >&2;return 1; }
+  key=${entries[id-1]}
+  entries=("$key")
+  printf 'Permanently delete %q? Type DELETE to confirm: ' "$key"
+  answer=DELETE
+ else
+  echo 'This deletes every displayed backup that is not needed for active recovery, including the newest and incomplete copies.'
+  printf 'Type DELETE ALL to confirm: '
+  answer='DELETE ALL'
+ fi
+ local typed
+ IFS= read -r typed && [ "$typed" = "$answer" ] || { echo 'Canceled.';return 0; }
  take_locks || { echo 'Backup deletion deferred: maintenance or recovery is active.' >&2;return 75; }
- remove_backup "$g" "$n"
+ for key in "${entries[@]}";do
+  remove_backup "${key%%/*}" "${key#*/}" manual || bad=1
+ done
+ [ "$bad" = 0 ] || echo 'Some backups were kept; see the messages above.' >&2
+ return "$bad"
 }
 case "${1:---list}" in
  --list) list_backups;;
  --preview) list_backups 1 "$(retention)";;
  --retention) retention;;
  --set-retention) set_retention "${2:-}";;
- --delete) manual_delete "${2:-}";;
+ --delete) [ "$#" = 1 ] && manual_delete one;;
+ --delete-all) [ "$#" = 1 ] && manual_delete all;;
  --auto) auto_purge "$(retention)";;
- *) echo 'Usage: backup_manager --list | --preview | --retention | --set-retention DAYS | --delete GROUP/NAME | --auto' >&2;exit 2;;
+ *) echo 'Usage: backup_manager --list | --preview | --retention | --set-retention DAYS | --delete | --delete-all | --auto' >&2;exit 2;;
 esac

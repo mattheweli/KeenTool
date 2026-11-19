@@ -75,4 +75,4 @@ Dashboard component: 2.0.4, independently tracked in RELEASE.json while staying 
 | `support/security_menu.php` | 1.0.0 | `/opt/lib/keentool-security/security_menu.php` |
 
 | `support/analytics.php` | 1.0.0 | `/opt/lib/keentool/analytics.php` |
-| `support/backup_manager` | 1.0.0 | `/opt/bin/keentool_backup_manager` |
+| `support/backup_manager` | 1.0.1 | `/opt/bin/keentool_backup_manager` |
