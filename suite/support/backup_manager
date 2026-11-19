@@ -1,0 +1,170 @@
+#!/opt/bin/bash
+# KeenTool Backup Manager v1.0.0
+set -u
+export PATH=/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+umask 077
+root=${KT_BACKUP_ROOT:-}
+base=$root/opt/var/backups
+state=$root/opt/etc/keentool
+policy=$state/backup-retention-days
+install_lock=$root/opt/tmp/keentool-install.lockdir
+entware_lock=$root/tmp/keentool-entware.lockdir
+groups=(entware release db web alpha test history-config)
+now=$(date +%s) || exit 1
+
+valid_days() { [[ "$1" =~ ^[1-9][0-9]{0,3}$ ]] && [ "$1" -le 3650 ]; }
+retention() {
+ local n=''
+ [ ! -L "$policy" ] && [ -f "$policy" ] && IFS= read -r n < "$policy" && valid_days "$n" || n=0
+ printf '%s\n' "$n"
+}
+set_retention() {
+ local n=$1 tmp
+ { [ "$n" = 0 ] || valid_days "$n"; } || { echo 'Enter 0 (off), or 1 to 3650 days.' >&2;return 1; }
+ take_locks || { echo 'Policy change deferred: maintenance or recovery is active.' >&2;return 75; }
+ mkdir -p "$state" || return 1
+ tmp=$(mktemp "$state/.backup-retention.XXXXXX") || return 1
+ if ! { printf '%s\n' "$n" > "$tmp" && mv -f "$tmp" "$policy"; };then rm -f "$tmp";return 1;fi
+ if [ "$n" = 0 ];then echo 'Automatic purge disabled.';else echo "Retention: $n days. Set or check the schedule in KeenTool.";fi
+}
+group_path() {
+ local g=$1 opt physical
+ opt=$(readlink -f "$root/opt") || return 1
+ physical=$(readlink -f "$base/keentool-$g") || return 1
+ [[ "$physical" =~ ^/[a-zA-Z0-9_./-]+$ ]] || return 1
+ [ "$physical" = "$opt/var/backups/keentool-$g" ] && [ -d "$physical" ] || return 1
+ printf '%s\n' "$physical"
+}
+timestamp() {
+ local n;n=$(date -r "$1" +%s 2>/dev/null) || return 1
+ [[ "$n" =~ ^[0-9]{1,12}$ ]] && [ "$n" -le "$now" ] || return 1
+ printf '%s\n' "$n"
+}
+candidate_name() {
+ case "$1" in
+  entware) [[ "$2" =~ ^[0-9]{8}_[0-9]{6}-[0-9]+$ ]];;
+  release) [[ "$2" =~ ^[0-9]{8}_[0-9]{6}-[0-9]+-[a-f0-9]{6}$ ]];;
+  *) return 1;;
+ esac
+}
+recognized_backup() {
+ local g=$1 p=$2
+ candidate_name "$g" "${p##*/}" && [ -d "$p" ] && [ ! -L "$p" ] || return 1
+ case "$g" in
+  entware)
+   [ -f "$p/worker-exit-code" ] && [ ! -L "$p/worker-exit-code" ] &&
+    [ -f "$p/status" ] && [ ! -L "$p/status" ] &&
+    [ "$(cat "$p/worker-exit-code")" = 0 ] && [ "$(cat "$p/status")" = completed ];;
+  release)
+   [ -s "$p/transaction.json" ] && [ ! -L "$p/transaction.json" ] &&
+    [ -s "$p/rollback.sh" ] && [ ! -L "$p/rollback.sh" ];;
+ esac
+}
+newest() {
+ local dir=$1 g=$2 p n t best='' high=-1
+ for p in "$dir"/*;do
+  n=${p##*/};recognized_backup "$g" "$p" || continue
+  t=$(timestamp "$p") || continue
+  if (( t >= high ));then best=$n;high=$t;fi
+ done
+ printf '%s\n' "$best"
+}
+protected_reason() {
+ local g=$1 p=$2 keep=$3 latest='' name=${2##*/}
+ candidate_name "$g" "$name" || { echo 'Inventory only';return; }
+ [ "$name" != "$keep" ] && [ -n "$keep" ] || { echo 'Newest backup';return; }
+ if ! recognized_backup "$g" "$p";then echo 'Incomplete or unrecognized backup';return;fi
+ if [ "$g" = entware ] && { [ -e "$state/entware/latest-run" ] || [ -L "$state/entware/latest-run" ]; };then
+  [ ! -L "$state/entware/latest-run" ] &&
+   IFS= read -r latest < "$state/entware/latest-run" &&
+   [[ "$latest" = /* ]] || { echo 'Invalid latest-run record';return; }
+  [ "${latest##*/}" != "$name" ] || { echo 'Latest Entware run';return; }
+ fi
+}
+list_backups() {
+ local g dir p t keep reason size days selected=${1:-0}
+ printf '%-48s %8s %10s  %s\n' 'Backup (group/name)' 'Age' 'Size KiB' 'Status'
+ for g in "${groups[@]}";do
+  dir=$(group_path "$g") || continue
+  keep=$(newest "$dir" "$g")
+  for p in "$dir"/*;do
+   [ ! -L "$p" ] && { [ -d "$p" ] || [ -f "$p" ]; } || continue
+   t=$(timestamp "$p") || continue
+   days=$(( (now-t)/86400 ))
+   reason=$(protected_reason "$g" "$p" "$keep")
+   if [ "$selected" = 1 ];then
+    local limit=${2:-0}
+    [ "$limit" -gt 0 ] && [ "$days" -ge "$limit" ] && [ -z "$reason" ] || continue
+   fi
+   size=$(du -sk "$p" 2>/dev/null) || size='?'
+   printf '%-48s %6s d %10s  %s\n' "$g/${p##*/}" "$days" "${size%%[[:space:]]*}" "${reason:-Eligible}"
+  done
+ done
+}
+take_locks() {
+ mkdir "$install_lock" 2>/dev/null || return 1
+ trap 'rmdir "$install_lock" 2>/dev/null || :' EXIT
+ mkdir "$entware_lock" 2>/dev/null || return 1
+ trap 'rm -f "$entware_lock/pid";rmdir "$entware_lock" "$install_lock" 2>/dev/null || :' EXIT
+ trap 'exit 1' INT TERM HUP
+ printf '%s\n' "$$" > "$entware_lock/pid" || return 1
+ local n
+ for n in maintenance firewall-upgrade.pending security/pending.json;do
+  [ ! -e "$state/$n" ] && [ ! -L "$state/$n" ] || return 1
+ done
+}
+remove_backup() {
+ local g=$1 n=$2 min_days=${3:-0} dir p t reason
+ candidate_name "$g" "$n" || return 1
+ dir=$(group_path "$g") || return 1
+ p=$dir/$n
+ [ -d "$p" ] && [ ! -L "$p" ] && [ "$(readlink -f "$p")" = "$p" ] || return 1
+ t=$(timestamp "$p") || return 1
+ (( (now-t)/86400 >= min_days )) || return 1
+ reason=$(protected_reason "$g" "$p" "$(newest "$dir" "$g")")
+ [ -z "$reason" ] || { printf 'Kept %s/%s: %s\n' "$g" "$n" "$reason" >&2;return 1; }
+ # Reject bind mounts and other mounts, including nested mounts on the same filesystem.
+ if ! awk -v p="$p" 'BEGIN{ok=0} NF>=10{ok=1} $5==p || index($5,p "/")==1{exit 1} END{if(!ok)exit 1}' /proc/self/mountinfo;then
+  echo "Cannot verify a mount-free backup: $g/$n" >&2;return 1
+ fi
+ rm -rf -- "$p" || return 1
+ printf 'Deleted %s/%s\n' "$g" "$n"
+}
+auto_purge() {
+ local limit=$1 g dir p keep reason t bad=0
+ [ "$limit" -gt 0 ] || return 0
+ take_locks || { echo 'Backup purge deferred: maintenance or recovery is active.' >&2;return 75; }
+ limit=$(retention)
+ [ "$limit" -gt 0 ] || return 0
+ for g in entware release;do
+  dir=$(group_path "$g") || continue
+  keep=$(newest "$dir" "$g")
+  for p in "$dir"/*;do
+   [ -d "$p" ] && [ ! -L "$p" ] || continue
+   t=$(timestamp "$p") || continue
+   (( (now-t)/86400 >= limit )) || continue
+   reason=$(protected_reason "$g" "$p" "$keep")
+   [ -z "$reason" ] || continue
+   remove_backup "$g" "${p##*/}" "$limit" || bad=1
+  done
+ done
+ return "$bad"
+}
+manual_delete() {
+ local key=$1 g=${1%%/*} n=${1#*/} answer
+ candidate_name "$g" "$n" && [[ "$key" = */* ]] || { echo 'Invalid or inventory-only backup.' >&2;return 1; }
+ [ -t 0 ] || { echo 'Manual deletion requires an interactive terminal.' >&2;return 1; }
+ printf 'Type the full backup identifier (%s) to permanently delete it: ' "$key"
+ IFS= read -r answer && [ "$answer" = "$key" ] || { echo 'Canceled.';return 0; }
+ take_locks || { echo 'Backup deletion deferred: maintenance or recovery is active.' >&2;return 75; }
+ remove_backup "$g" "$n"
+}
+case "${1:---list}" in
+ --list) list_backups;;
+ --preview) list_backups 1 "$(retention)";;
+ --retention) retention;;
+ --set-retention) set_retention "${2:-}";;
+ --delete) manual_delete "${2:-}";;
+ --auto) auto_purge "$(retention)";;
+ *) echo 'Usage: backup_manager --list | --preview | --retention | --set-retention DAYS | --delete GROUP/NAME | --auto' >&2;exit 2;;
+esac

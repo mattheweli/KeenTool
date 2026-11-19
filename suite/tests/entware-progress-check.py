@@ -30,6 +30,7 @@ from pathlib import Path
 b=Path(os.environ['FIXTURE']);args=sys.argv[1:]
 if args==['--help']:print('--download-only');sys.exit(0)
 if args==['update']:
+ with (b/'index-calls').open('a') as f:f.write('update\\n')
  print('Refreshing fixture index',flush=True)
  time.sleep(.3)
  sys.exit(7 if (b/'fail-index').exists() else 0)
@@ -59,6 +60,27 @@ sys.exit(9)
     assert 'Index update failed' in failed.stdout
     assert 'Refreshing fixture index' in (b/'state/update.log').read_text()
     (b/'fail-index').unlink()
+    assert not (b/'state/indexes-refreshed.at').exists()
+    def cancel_upgrade():
+        master, slave = pty.openpty()
+        try:
+            with subprocess.Popen(['bash',str(script),'--upgrade'],env=env,stdin=slave,
+                                  stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True) as proc:
+                os.close(slave); slave = None
+                os.write(master,b'\nCANCEL\n')
+                output, _ = proc.communicate(timeout=8)
+                assert proc.returncode == 0 and 'Refreshing fixture index' in output, output
+        finally:
+            os.close(master)
+            if slave is not None: os.close(slave)
+        assert not (b/'state/latest-run').exists()
+
+    cancel_upgrade()  # A missing freshness marker must refresh the indexes.
+    (b/'state/indexes-refreshed.at').write_text(str(int(time.time()) - 86401) + '\n')
+    cancel_upgrade()  # Stale indexes must refresh even if a package list exists.
+    index_calls = ['update', 'update', 'update']
+    assert (b/'index-calls').read_text().splitlines() == index_calls
+    checked_at = (b/'state/checked.at').read_bytes()
     master,slave=pty.openpty()
     lines=[]
     launcher=subprocess.Popen(['bash',str(script),'--upgrade'],env=env,stdin=slave,
@@ -68,10 +90,14 @@ sys.exit(9)
     reader.start()
     worker_pid=None
     try:
-        os.write(master,b'UPGRADE\n')
+        os.write(master,b'n\nUPGRADE\n')
         wait_for(lambda:(b/'installing').exists(),'detached worker did not reach installation')
         latest=Path((b/'state/latest-run').read_text().strip())
         worker_pid=int((latest/'pid').read_text())
+        assert (b/'index-calls').read_text().splitlines() == index_calls
+        assert any('Using Entware package indexes' in line for line in lines)
+        assert any('Packages to upgrade:' in line for line in lines)
+        assert 'Configuration and database backup skipped by request' in (latest/'upgrade.log').read_text()
         assert os.getpgid(worker_pid)!=os.getpgid(launcher.pid)
         wait_for(lambda:any('Installing fixture package: live output' in l for l in lines),'no live output before worker completion')
         assert not (latest/'worker-exit-code').exists()
@@ -95,6 +121,7 @@ sys.exit(9)
         assert replay.returncode==0 and replay.stdout.count('Installing fixture package: live output')==1,replay.stdout+replay.stderr
         assert 'Upgrade status: completed (worker exit 0)' in replay.stdout
         assert not (b/'maintenance').exists()
+        assert (b/'state/checked.at').read_bytes() == checked_at
         # The viewer reports the actual worker error, including a final partial log line.
         (latest/'worker-exit-code').write_text('2\n')
         (latest/'status').write_text('upgrade-errors (opkg exit 2; services restarted)\n')
