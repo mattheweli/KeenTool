@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KEENTOOL ENTWARE MANAGER v1.0.1 — 2026-11-12
+# KEENTOOL ENTWARE MANAGER v1.0.2 — 2026-11-19
 # Check/notify, explicit upgrade, detached worker, service stop/start, logs and recovery.
 # No unattended upgrade; configurations and databases backed up, packages not rolled back.
 set -u
@@ -88,7 +88,17 @@ check_updates() {
 }
 status() {
  if [ -f "$STATE/available.txt" ];then printf 'Available packages: %s\n' "$(wc -l < "$STATE/available.txt")";cat "$STATE/available.txt";else echo 'No successful check yet';fi
- [ ! -f "$STATE/checked.at" ] || echo "Last check (Unix time): $(cat "$STATE/checked.at")"
+ local checked='' formatted
+ if [ ! -f "$STATE/checked.at" ];then
+  echo 'Last check: Not yet recorded'
+ elif { IFS= read -r checked || [ -n "$checked" ]; } 2>/dev/null < "$STATE/checked.at" &&
+      [[ "$checked" =~ ^[0-9]{1,12}$ ]] &&
+      formatted=$(date -d "@$checked" '+%d/%m/%Y %H:%M:%S %Z' 2>/dev/null) &&
+      [ -n "$formatted" ];then
+  printf 'Last check: %s (router time)\n' "$formatted"
+ else
+  echo 'Last check: Unavailable'
+ fi
  if [ -f "$STATE/latest-run" ];then
   local run pid;run=$(cat "$STATE/latest-run");echo "Run: $run"
   [ ! -f "$run/status" ] || printf 'Phase: %s\n' "$(cat "$run/status")"

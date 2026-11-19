@@ -1,5 +1,9 @@
 # Stable changelog — 2026-10-28
 
+## Unreleased
+
+- Show the last successful Entware check in router-local time in the KeenTool Entware menu and CLI status. Keep the stored timestamp unchanged.
+
 ## Coordinated package 2.0.27 / KeenTool 2.0.14 — 2026-11-14
 
 - Restore Legacy-compatible installation analytics from the coordinated installer, strictly after successful commit, service/TLS checks and any required firewall confirmation. Plans, failed installs and rollbacks do not send events.
