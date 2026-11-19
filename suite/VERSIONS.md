@@ -1,6 +1,6 @@
 # Stable component versions — 2026-10-23
 
-Suite/package release: **2.0.27** (manager **2.0.14**). Installer: **1.0.10**. Package manifest: **61 targets**.
+Suite/package release: **2.0.27** (manager **2.0.14**). Installer: **1.0.10**. Package manifest: **62 targets**.
 
 | Source | Stable version | Installed path |
 |---|---|---|
@@ -75,3 +75,4 @@ Dashboard component: 2.0.4, independently tracked in RELEASE.json while staying 
 | `support/security_menu.php` | 1.0.0 | `/opt/lib/keentool-security/security_menu.php` |
 
 | `support/analytics.php` | 1.0.0 | `/opt/lib/keentool/analytics.php` |
+| `support/backup_manager` | 1.0.0 | `/opt/bin/keentool_backup_manager` |

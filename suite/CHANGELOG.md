@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add Backup Manager to inventory local backups, delete individual eligible copies, and schedule a retention purge with a preview. Preserve the latest eligible backup in each managed category and defer removal during maintenance or recovery.
 - Reuse Entware indexes refreshed by KeenTool within 24 hours. Preview the current local package list and verify it again before upgrading.
 - Offer a per-upgrade choice to skip Entware configuration and SQLite backups. Retain worker logs and the recovery runtime regardless of that choice.
 - Show the last successful Entware check in router-local time in the KeenTool Entware menu and CLI status. Keep the stored timestamp unchanged.

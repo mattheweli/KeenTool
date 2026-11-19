@@ -683,6 +683,33 @@ get_md5() {
     fi
 }
 
+kt_backup_menu() {
+    local helper=/opt/bin/keentool_backup_manager choice days key cmd
+    cmd='root /opt/bin/keentool --backup-auto >>/opt/var/log/keentool-backup-purge.log 2>&1'
+    if [ ! -x "$helper" ];then echo 'Backup manager missing. Use package repair.';return 1;fi
+    while true;do
+        days=$("$helper" --retention)
+        echo 'Backup Manager'
+        if [ "$days" = 0 ];then
+            echo 'Automatic purge: Off'
+        elif cron_cmd_active "$cmd";then
+            echo "Automatic purge: $days days (scheduled)"
+        else
+            echo "Automatic purge: $days days (schedule not set)"
+        fi
+        printf '1. List backups\n2. Delete one backup\n3. Set retention (0 disables purge)\n4. Preview automatic purge\n5. Set or remove purge schedule\n0. Back\n'
+        read -r -p 'Select: ' choice || return 0
+        case "$choice" in
+            1) "$helper" --list;pause;;
+            2) "$helper" --list;read -r -p 'Backup identifier (group/name): ' key && "$helper" --delete "$key";pause;;
+            3) read -r -p 'Retention in days (0 = off, 1–3650): ' days && "$helper" --set-retention "$days";pause;;
+            4) "$helper" --preview;pause;;
+            5) manage_cron_menu "$cmd";;
+            0) return 0;;
+        esac
+    done
+}
+
 kt_analytics() {
  local php
  for php in /opt/bin/php-cli /opt/bin/php8 /opt/bin/php;do
@@ -1192,6 +1219,7 @@ doctor() {
     echo 'Service states:'; ps | grep -E 'lighttpd|ulogd|crond|vnstatd' | grep -v grep || :
 }
 case "${1:-}" in
+    --backup-auto) exec /opt/bin/keentool_backup_manager --auto ;;
     --analytics) kt_analytics "${2:-status}";exit $? ;;
     --entware-check) shift; exec /opt/bin/entware_manager --check "$@" ;;
     --entware-follow) exec /opt/bin/entware_manager --follow ;;
@@ -2554,6 +2582,7 @@ EOF
     echo -e " u. Check / install updates (KeenTool and tools)"
     echo " r. Verify / repair installed package files"
     echo " i. Installation analytics"
+    echo " B. Backup Manager"
     echo -e " a. ${CYAN}Auto-Update${RESET}          [$AU_STATUS]"
     echo -e " c. View Crontab"
     echo -e " v. ${CYAN}Verify/Fix Crontab${RESET}"
@@ -2602,6 +2631,7 @@ EOF
         u) perform_global_scan; pause ;;
         r) kt_managed_update --repair; pause ;;
         i) kt_analytics_menu; pause ;;
+        B) kt_backup_menu ;;
         a) manage_cron_menu "$CMD_SELF_UPD"; pause ;;
         c) header; cat $CRON_FILE; pause ;;
         v) action_verify_cron ;;
