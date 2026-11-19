@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# KEENTOOL MANAGER v2.0.15
+# KEENTOOL MANAGER v2.0.16
 # Release: 2026-10-29 | Stable. See CHANGELOG.md for release details.
 
 # Recover a deleted working directory before starting child processes.
@@ -574,7 +574,7 @@ if ! kt_runtime_ready;then
  exit 0
 fi
 # END GENERATED LEGACY MIGRATION
-# KeenTool 2.0.15
+# KeenTool 2.0.16
 . "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
 # Shared runtime and components are updated together through verified release packages.
 KT_MANAGED_PACKAGE=true
@@ -654,7 +654,7 @@ UPD_DASH=""; UPD_VNSTAT=""; UPD_PING=""; UPD_FW=""; UPD_SMB=""; UPD_SELF=""; UPD
 header() { 
     clear
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
-    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.15  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
+    echo -e "${BOLD}${BLUE}   KEENTOOL v2.0.16  ${RESET}${BOLD}${BLUE}  |  Package Manager${RESET}"
     echo -e "${BOLD}${BLUE}======================================================${RESET}"
     echo "" 
 }
@@ -684,7 +684,7 @@ get_md5() {
 }
 
 kt_backup_menu() {
-    local helper=/opt/bin/keentool_backup_manager choice days key cmd
+    local helper=/opt/bin/keentool_backup_manager choice days cmd
     cmd='root /opt/bin/keentool --backup-auto >>/opt/var/log/keentool-backup-purge.log 2>&1'
     if [ ! -x "$helper" ];then echo 'Backup manager missing. Use package repair.';return 1;fi
     while true;do
@@ -697,14 +697,15 @@ kt_backup_menu() {
         else
             echo "Automatic purge: $days days (schedule not set)"
         fi
-        printf '1. List backups\n2. Delete one backup\n3. Set retention (0 disables purge)\n4. Preview automatic purge\n5. Set or remove purge schedule\n0. Back\n'
+        printf '1. List backups\n2. Delete one backup\n3. Set retention (0 disables purge)\n4. Preview automatic purge\n5. Set or remove purge schedule\n6. Delete all backups\n0. Back\n'
         read -r -p 'Select: ' choice || return 0
         case "$choice" in
             1) "$helper" --list;pause;;
-            2) "$helper" --list;read -r -p 'Backup identifier (group/name): ' key && "$helper" --delete "$key";pause;;
+            2) "$helper" --delete;pause;;
             3) read -r -p 'Retention in days (0 = off, 1–3650): ' days && "$helper" --set-retention "$days";pause;;
             4) "$helper" --preview;pause;;
             5) manage_cron_menu "$cmd";;
+            6) "$helper" --delete-all;pause;;
             0) return 0;;
         esac
     done
@@ -1207,7 +1208,7 @@ EOF
 }
 
 doctor() {
-    echo 'KeenTool v2.0.15'
+    echo 'KeenTool v2.0.16'
     for cmd in bash curl sqlite3 ipset iptables smbclient vnstat tar timeout sha256sum; do
         command -v "$cmd" >/dev/null && printf 'OK %s\n' "$cmd" || printf 'MISSING %s\n' "$cmd"
     done
@@ -1220,6 +1221,7 @@ doctor() {
 }
 case "${1:-}" in
     --backup-auto) exec /opt/bin/keentool_backup_manager --auto ;;
+    --backup-delete-all) exec /opt/bin/keentool_backup_manager --delete-all ;;
     --analytics) kt_analytics "${2:-status}";exit $? ;;
     --entware-check) shift; exec /opt/bin/entware_manager --check "$@" ;;
     --entware-follow) exec /opt/bin/entware_manager --follow ;;
