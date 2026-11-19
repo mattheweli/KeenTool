@@ -1,5 +1,5 @@
 #!/opt/bin/bash
-# uninstall v1.0.2 | 2026-11-14 | Stable release
+# uninstall v1.0.3 | 2026-11-19 | Stable release
 # Selective uninstaller: no shared packages, native router chains or unrelated files.
 set -e
 export PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin

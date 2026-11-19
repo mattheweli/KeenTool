@@ -1,10 +1,10 @@
 # Stable component versions — 2026-10-23
 
-Suite/package release: **2.0.27** (manager **2.0.14**). Installer: **1.0.10**. Package manifest: **62 targets**.
+Suite/package release: **2.0.28** (manager **2.0.15**). Installer: **1.0.10**. Package manifest: **62 targets**.
 
 | Source | Stable version | Installed path |
 |---|---|---|
-| `projects/KeenTool/keentool` | 2.0.14 | `/opt/bin/keentool` |
+| `projects/KeenTool/keentool` | 2.0.15 | `/opt/bin/keentool` |
 | `projects/KeenTool/index.html` | 2.0.4 | `/opt/var/www/index.html` |
 | `projects/KeenTool/email_sender.mod` | 2.0.0 | `/opt/bin/email_sender.mod` |
 | `projects/KeenTool/telegram_sender.mod` | 2.0.0 | `/opt/bin/telegram_sender.mod` |
@@ -44,7 +44,7 @@ Suite/package release: **2.0.27** (manager **2.0.14**). Installer: **1.0.10**. P
 | `support/harden_web.sh` | 1.0.1 | `/opt/lib/keentool-security/harden_web.sh` |
 | `assets/keentool-security.js` | 1.0.3 | `/opt/var/www/assets/keentool-security.js` |
 | `support/S01keentool-web-user` | 1.0.0 | `/opt/etc/init.d/S01keentool-web-user` |
-| `support/uninstall.sh` | 1.0.2 | `/opt/bin/keentool_uninstall` |
+| `support/uninstall.sh` | 1.0.3 | `/opt/bin/keentool_uninstall` |
 | `projects/security/index.html` | 1.0.3 | `/opt/var/www/security/index.html` |
 | `assets/keentool-security-page.js` | 1.0.0 | `/opt/var/www/assets/keentool-security-page.js` |
 | `support/settings_engine.php` | 1.0.4 | `/opt/lib/keentool-security/settings_engine.php` |
@@ -62,7 +62,7 @@ Suite/package release: **2.0.27** (manager **2.0.14**). Installer: **1.0.10**. P
 
 | `support/dependencies.sh` | 1.0.0 | `/opt/lib/keentool/dependencies.sh` |
 
-Standalone bootstrap: 1.0.9. Installer entry: 1.0.10. Repository tags: KeenTool package v2.0.27 (manager 2.0.14); keenetic-firewall v4.0.14. Pingtool v2.0.2; Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
+Standalone bootstrap: 1.0.9. Installer entry: 1.0.10. Repository tags: KeenTool package v2.0.28 (manager 2.0.15); keenetic-firewall v4.0.14. Pingtool v2.0.2; Traffic v2.0.1; SMB v2.0.1. Each changed component advances its patch digit; the dependency helper remains at 1.0.0.
 
 Dashboard component: 2.0.4, independently tracked in RELEASE.json while staying in mattheweli/KeenTool. FILE_SCOPES.json assigns every install target to one component or the shared runtime. Selected component checks include shared dependencies; global checks cover all targets.
 
