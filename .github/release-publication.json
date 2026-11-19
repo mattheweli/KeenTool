@@ -1,0 +1,46 @@
+{
+  "repository": "mattheweli/KeenTool",
+  "release_id": 451140220,
+  "tag": "v2.0.28",
+  "target": "2a530a15af8aa3c5a13853e142637fef3e8721a3",
+  "validated_run": 44498325547,
+  "pr": 29,
+  "operation_ref": "refs/heads/operations/publish-entware-backup-20261119",
+  "merge": true,
+  "base_commit": "b23c65d4dee9ae62965c935db72f098eb10d3c70",
+  "source_tree": "c0ad5d842c6d483969eaa81d6300ffb5af753ec9",
+  "assets": {
+    "keentool-2.0.28-manifest.json": {
+      "size": 18252,
+      "digest": "sha256:be2ab3a392ead99fea3f18bc9c47df734ebcdf19b660ae364816013c1688a4fe"
+    },
+    "keentool-2.0.28-manifest.json.sha256": {
+      "size": 96,
+      "digest": "sha256:fc232f31c9d9bb56453b7fbbbd0f74b4c26d78cedf5acea30bfa8a739217a334"
+    },
+    "KeenTool-2.0.28-sources.tar.gz": {
+      "size": 1233788,
+      "digest": "sha256:00faa0d1c8a7e09b7ed53c7f62bd56f2bb3d6d1945964e37408f55b5eee2a4d9"
+    },
+    "KeenTool-2.0.28-sources.tar.gz.sha256": {
+      "size": 97,
+      "digest": "sha256:3429022617b45df873bad60503a8cb8e41d46b9227d29948afe3d8026cbb660f"
+    },
+    "keentool-2.0.28.tar.gz": {
+      "size": 872317,
+      "digest": "sha256:95bc63a6be4d31c0a12d42291d9eef9154cac959c6ec27526aa59a5990d2775a"
+    },
+    "keentool-2.0.28.tar.gz.sha256": {
+      "size": 89,
+      "digest": "sha256:4e85da24d6f7726e97fdd16b802818b08c08f78422cf70343700c899a35c6c86"
+    },
+    "recover-firewall-upgrade.sh": {
+      "size": 6873,
+      "digest": "sha256:f786bf1397dd37faf6f20575bc34ccd52469f3e1e498e9768ab8f09593704388"
+    },
+    "recover-firewall-upgrade.sh.sha256": {
+      "size": 94,
+      "digest": "sha256:f35153f77cb08dec9cd2134fd6628ef5da1372125f3c1001b8e71dce1d521457"
+    }
+  }
+}
