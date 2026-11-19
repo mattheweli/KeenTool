@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reuse Entware indexes refreshed by KeenTool within 24 hours. Preview the current local package list and verify it again before upgrading.
+- Offer a per-upgrade choice to skip Entware configuration and SQLite backups. Retain worker logs and the recovery runtime regardless of that choice.
 - Show the last successful Entware check in router-local time in the KeenTool Entware menu and CLI status. Keep the stored timestamp unchanged.
 
 ## Coordinated package 2.0.27 / KeenTool 2.0.14 — 2026-11-14

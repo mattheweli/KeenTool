@@ -1,7 +1,7 @@
 #!/opt/bin/bash
 # KEENTOOL ENTWARE MANAGER v1.0.2 — 2026-11-19
 # Check/notify, explicit upgrade, detached worker, service stop/start, logs and recovery.
-# No unattended upgrade; configurations and databases backed up, packages not rolled back.
+# No unattended upgrade; optional configuration and database snapshots, no package rollback.
 set -u
 export PATH=${KT_ENTWARE_PATH:-/opt/bin:/opt/sbin:/opt/usr/bin:/opt/usr/sbin:/usr/bin:/usr/sbin:/bin:/sbin}
 STATE=${KT_ENTWARE_STATE:-/opt/etc/keentool/entware}
@@ -82,7 +82,9 @@ check_updates() {
  local tmp;tmp=$(mktemp "$STATE/.available.XXXXXX") || return 1
  if ! get_list "$tmp";then rm -f "$tmp";return 1;fi
  mv "$tmp" "$STATE/available.txt"
- date +%s > "$STATE/checked.at"
+ local checked_at;checked_at=$(date +%s) || return 1
+ printf '%s\n' "$checked_at" > "$STATE/checked.at" || return 1
+ printf '%s\n' "$checked_at" > "$STATE/indexes-refreshed.at" || return 1
  printf '%s\n' "$(wc -l < "$STATE/available.txt") available updates";cat "$STATE/available.txt"
  [ "$NOTIFY" != true ] || notify_updates
 }
@@ -216,8 +218,13 @@ restore_services() {
  return "$bad"
 }
 worker() {
- local run=$1 expected=$2 rc=1 stopped=false p
- require_commands cat cp mv rm rmdir date wc sort awk grep sha256sum mktemp timeout sleep pidof tee tar find df dirname ln || return 1
+ local run=$1 expected=$2 backup=${3:-yes} rc=1 stopped=false p
+ require_commands cat cp mv rm rmdir date wc sort awk grep sha256sum mktemp timeout sleep pidof tee df dirname ln || return 1
+ case "$backup" in
+  yes) [ "${KT_ENTWARE_TEST:-false}" = true ] || require_commands tar find sqlite3 || return 1;;
+  no) ;;
+  *) echo 'Invalid backup choice';return 1;;
+ esac
  acquire || return $?
  trap release EXIT
  cp "$SELF" "$run/worker-source.sh" 2>/dev/null || :
@@ -256,11 +263,15 @@ worker() {
    restore_services "$run";rm -f "$MAINT";echo stop-failed > "$run/status";return 1
   fi
  done < <(sort -r "$run/services.txt")
- # Database snapshots are taken after daemons have stopped.
- echo snapshotting > "$run/status"
- log 'Backing up configuration and databases before package installation'
- if ! snapshot "$run";then
-  restore_services "$run";rm -f "$MAINT";echo snapshot-failed > "$run/status";return 1
+ # Optional database snapshots are taken after daemons have stopped.
+ if [ "$backup" = yes ];then
+  echo snapshotting > "$run/status"
+  log 'Backing up configuration and databases before package installation'
+  if ! snapshot "$run";then
+   restore_services "$run";rm -f "$MAINT";echo snapshot-failed > "$run/status";return 1
+  fi
+ else
+  log 'Configuration and database backup skipped by request'
  fi
  echo upgrading > "$run/status"
  [ ! -x /opt/bin/firewall_security ] || /opt/bin/bash /opt/bin/firewall_security event entware 'upgrade started' || :
@@ -276,7 +287,7 @@ worker() {
  if [ "$rc" = 0 ];then echo completed > "$run/status";else echo "upgrade-errors (opkg exit $rc; services restarted)" > "$run/status";fi
  "$OPKG" list-installed > "$run/packages-after.txt" 2>&1 || :
  # Report outstanding upgrades even if opkg returned conffile warnings.
- if get_list "$STATE/available.txt.tmp";then mv "$STATE/available.txt.tmp" "$STATE/available.txt";date +%s > "$STATE/checked.at";fi
+ if get_list "$STATE/available.txt.tmp";then mv "$STATE/available.txt.tmp" "$STATE/available.txt";fi
  if [ -x "$EMAIL" ];then
   if [ "${KT_ENTWARE_TEST:-false}" = true ] || { [ -s /opt/etc/keentool/mail/email.conf ] && [ -s /opt/etc/keentool/mail/emailpw.enc ]; };then
    "$EMAIL" 'Entware: upgrade result' "$(cat "$run/status"). Log: $run/upgrade.log. Configuration files ending in -opkg require manual review." || log 'Result email failed'
@@ -326,20 +337,43 @@ follow_latest() {
  [ -n "$run" ] || { echo 'No recorded Entware upgrade';return 1; }
  follow_run "$run"
 }
+indexes_recent() {
+ local refreshed='' now
+ { IFS= read -r refreshed; } 2>/dev/null < "$STATE/indexes-refreshed.at" || return 1
+ now=$(date +%s) || return 1
+ [[ "$refreshed" =~ ^[0-9]{1,12}$ && "$now" =~ ^[0-9]{1,12}$ ]] || return 1
+ (( 10#$now >= 10#$refreshed && 10#$now - 10#$refreshed < 86400 ))
+}
 launch_upgrade() {
  [ -t 0 ] || { echo 'Start the upgrade from an interactive SSH terminal';return 1; }
- NOTIFY=false;check_updates || return $?
- release;trap - EXIT
- [ -s "$STATE/available.txt" ] || return 0
+ require_commands date mktemp sha256sum awk cat sort rm || return 1
+ [ ! -e "$MAINT" ] || { log 'Previous maintenance unresolved';return 75; }
+ local run digest preview answer backup=yes
+ if indexes_recent;then
+  echo 'Using Entware package indexes refreshed less than 24 hours ago.'
+  echo 'To refresh now, return to the Entware menu and select Check updates.'
+ else
+  NOTIFY=false;check_updates || return $?
+  release;trap - EXIT
+ fi
+ preview=$(mktemp "$STATE/.review.XXXXXX") || return 1
+ if ! get_list "$preview";then rm -f "$preview";return 1;fi
+ if [ ! -s "$preview" ];then rm -f "$preview";echo 'No Entware updates available.';return 0;fi
+ printf '\nPackages to upgrade:\n';cat "$preview"
+ digest=$(fingerprint "$preview");rm -f "$preview"
+ [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
  echo 'Entware services (including its SSH, web and DNS services, if installed) will be stopped and restarted.'
  services
  echo 'Package scripts may themselves start services during upgrade. Native SSH may stay reachable; Entware SSH may disconnect.'
- echo 'Package/config backup is NOT an automatic downgrade of installed packages.'
- echo 'Each package is logged separately. On an error, remaining packages are skipped and service recovery is attempted.'
- read -r -p 'Type UPGRADE to proceed: ' answer
+ echo 'Logs and the service recovery runtime are always kept. Package downgrades are not automatic.'
+ read -r -p 'Back up Entware configurations and SQLite databases before upgrading? [Y/n] ' answer || return 1
+ case "$answer" in
+  ''|[yY]|[yY][eE][sS]) ;;
+  [nN]|[nN][oO]) backup=no;;
+  *) echo 'Backup choice not recognized; upgrade canceled.';return 1;;
+ esac
+ read -r -p 'Type UPGRADE to proceed: ' answer || return 1
  [ "$answer" = UPGRADE ] || return 0
- local run digest
- digest=$(fingerprint "$STATE/available.txt")
  run="$RUNS/$(date +%Y%m%d_%H%M%S)-$$";mkdir -p "$run";chmod 700 "$run"
  cp "$SELF" "$run/worker.sh";chmod 700 "$run/worker.sh"
  printf '%s\n' "$run" > "$STATE/latest-run"
@@ -350,7 +384,7 @@ launch_upgrade() {
  (
   set -m
   trap '' HUP
-  /opt/bin/bash "$run/worker.sh" --worker "$run" "$digest" > "$run/upgrade.log" 2>&1 < /dev/null &
+  /opt/bin/bash "$run/worker.sh" --worker "$run" "$digest" "$backup" > "$run/upgrade.log" 2>&1 < /dev/null &
   echo "$!" > "$run/pid"
  )
  echo "Upgrade worker launched. Log: $run/upgrade.log"
@@ -377,7 +411,7 @@ case "${1:---menu}" in
  --status) status;;
  --follow) follow_latest;exit $?;;
  --upgrade) launch_upgrade;exit $?;;
- --worker) worker "$2" "$3";worker_rc=$?;printf '%s\n' "$worker_rc" > "$2/worker-exit-code.tmp";mv "$2/worker-exit-code.tmp" "$2/worker-exit-code";exit "$worker_rc";;
+ --worker) worker "$2" "$3" "${4:-yes}";worker_rc=$?;printf '%s\n' "$worker_rc" > "$2/worker-exit-code.tmp";mv "$2/worker-exit-code.tmp" "$2/worker-exit-code";exit "$worker_rc";;
  --resume) resume_services;exit $?;;
  --menu)
   while true;do
